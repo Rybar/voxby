@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+  The SoundBox wordmark, from Marcus Geelnard's SoundBox (gui/original/
+  soundbox.svg in the vendored upstream tree, GPLv3; see gpl.txt),
+  recoloured white for this editor's dark startup panel (index.html's
+  #audio-gate). Everything here is upstream geometry. What changed:
+
+  1. Only the two drawn layers are kept, the isometric box between SOUND
+     and BOX and the wordmark's outline path, and every Inkscape editor
+     artefact (138 KB of unused gradients, path effects, perspective and
+     RDF metadata) is dropped.
+  2. The outline path's gold gradient fill is now plain white.
+  3. Upstream filled the letter bodies with a text element set in Waree
+     Bold Oblique, a font nobody outside that machine has; without it the
+     fallback ran about 20% wide and spilled past the outline (checked in
+     Chromium). It is still a text element, since the glyphs were never
+     available as paths, but it now asks for a common bold oblique sans
+     and is pinned to the outline's own width with textLength plus
+     lengthAdjust, so a substituted font lands inside the letterforms
+     rather than beside them. The thin white stroke fattens the body just
+     enough to close the seam a substituted glyph leaves against the
+     outline. The outline path is painted last, so it, not the text,
+     defines every visible edge.
+
+  (No double hyphens anywhere above: XML comments cannot contain them, and
+  a malformed comment makes the whole file fail to parse as an image.)
+-->
+
+<svg
+   viewBox="0 0 130 32"
+   width="130"
+   height="32"
+   version="1.1"
+   id="svg236"
+   sodipodi:docname="logo.svg"
+   inkscape:version="1.2.2 (b0a8486541, 2022-12-01)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs240" />
+  <sodipodi:namedview
+     id="namedview238"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showgrid="false"
+     inkscape:zoom="10.030769"
+     inkscape:cx="65.049847"
+     inkscape:cy="16.000767"
+     inkscape:window-width="1920"
+     inkscape:window-height="1014"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="g234" />
+  <g
+     transform="translate(0,-1020.3622)"
+     id="g234">
+    <g
+       style="fill:none;stroke:#000000;stroke-width:1;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
+       id="g228">
+      <path
+         style="fill:#afafde;fill-rule:evenodd;stroke:#000000;stroke-width:1.25900769;stroke-linejoin:round;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
+         d="m 65.629855,1043.0603 14.036218,7.5344 13.079165,-6.3789 -15.614483,-2.951 z"
+         id="path216" />
+      <path
+         style="fill:#353564;fill-rule:evenodd;stroke:#000000;stroke-width:1.25900769;stroke-linejoin:round;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
+         d="m 65.629855,1030.4716 0,12.5887 11.5009,-1.7955 0,-9.2501 z"
+         id="path218" />
+      <path
+         style="fill:#e9e9ff;fill-rule:evenodd;stroke:#000000;stroke-width:1.25900769;stroke-linejoin:round;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
+         d="m 77.130755,1032.0147 15.614483,-3.3526 0,15.5537 -15.614483,-2.951 z"
+         id="path220" />
+      <path
+         style="fill:#4d4d9f;fill-rule:evenodd;stroke:#000000;stroke-width:1.25900769;stroke-linejoin:round;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
+         d="m 65.629855,1030.4716 14.036218,-7.949 13.079165,6.1395 -15.614483,3.3526 z"
+         id="path222" />
+      <path
+         style="fill:#d7d7ff;fill-rule:evenodd;stroke:#000000;stroke-width:1.25900769;stroke-linejoin:round;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
+         d="m 79.666073,1022.5226 0,28.0721 13.079165,-6.3789 0,-15.5537 z"
+         id="path224" />
+      <path
+         style="fill:#8686bf;fill-rule:evenodd;stroke:#000000;stroke-width:1.25900769;stroke-linejoin:round;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
+         d="m 65.629855,1030.4716 14.036218,-7.949 0,28.0721 -14.036218,-7.5344 z"
+         id="path226" />
+    </g>
+    <text
+       x="-0.61996174"
+       y="889.39105"
+       transform="scale(0.85017069,1.1762344)"
+       textLength="153"
+       lengthAdjust="spacingAndGlyphs"
+       style="font-size:22px;font-style:oblique;font-weight:bold;font-family:'DejaVu Sans','Bitstream Vera Sans',sans-serif;fill:#ffffff;stroke:#ffffff;stroke-width:1.2;paint-order:stroke fill"
+       id="text230">SOUND BOX</text>
+  </g>
+</svg>

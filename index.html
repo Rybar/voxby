@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>soundbox</title>
+<link rel="shortcut icon" href="favicon.ico">
+<link rel="stylesheet" href="screen.css">
+</head>
+<body>
+  <!-- Stage E.5: shown immediately at boot, blocking the rest of the UI
+       until Start is clicked -- that click is the one required user
+       gesture that resumes tools/soundbox/audio.js's shared AudioContext
+       (see main.js's #audio-gate-start handler), which both the jammer and
+       rendered song playback play through. Deliberately not dismissible
+       via Escape or a backdrop click like the generic #picker modal below,
+       since only an actual click counts for the browser's autoplay
+       policy. -->
+  <div id="audio-gate">
+    <div id="audio-gate-panel">
+      <!-- Stage E.12: upstream SoundBox's own wordmark, recoloured white
+           for this panel — see logo.svg's own header comment. It replaces
+           the "soundbox" text title that used to sit here rather than
+           doubling it up. Stage E.16 added the credit line under it: the
+           logo is upstream's, and this panel is the first thing anyone
+           opening the editor sees, so it's where the attribution belongs. -->
+      <img id="audio-gate-logo" src="logo.svg" width="130" height="32" alt="soundbox">
+      <p class="gate-sub">A synth music tracker built on
+        <a href="https://gitlab.com/mbitsnbites/soundbox" target="_blank" rel="noopener noreferrer">SoundBox</a>
+        · <a href="gpl.txt" target="_blank" rel="noopener noreferrer">GPL&nbsp;v3</a></p>
+      <p>Click Start to enable audio.</p>
+      <button id="audio-gate-start" type="button">Start</button>
+    </div>
+  </div>
+
+  <div id="top">
+    <h3 class="title">soundbox</h3>
+
+    <div class="row">
+      <button id="new-song" title="New song">New</button>
+      <button id="open-song" title="Open a song file: a .js exported from soundbox or the old sonant-x editor, or a legacy binary .snd">Open</button>
+      <button id="export-js" title="Export song as an ES module (import-ready for src/js/sounds/, and re-importable here)">Export JS</button>
+      <button id="export-wav" title="Export song as a WAV file">Export WAV</button>
+      <button id="share-song" title="Get a link with the whole song packed into it, for pasting somewhere">Share</button>
+    </div>
+
+    <div class="row">
+      <button id="play-song" title="Play song">Play</button>
+      <button id="play-selected" title="Play the sequence editor's selection, or solo-play the pattern being edited (same as Space)">Play selected</button>
+      <button id="stop-song" title="Stop playing">Stop</button>
+      <label><input id="loop-playback" type="checkbox"> loop</label>
+    </div>
+
+    <div id="status" class="mono"></div>
+
+    <div class="spacer"></div>
+    <label class="theme-picker" title="Adjust the UI accent color">Theme <input id="theme-accent" type="color"></label>
+    <button id="about-btn" title="About soundbox">About</button>
+  </div>
+
+  <!-- Stage E.1: promoted to its own full-width row (was squeezed into
+       #bottom next to the instrument panel) so the piano is usable at a
+       glance without competing for space -- see screen.css's #keyboard-row
+       rule. Stage E.2 added #scope-panel as a second column in this row;
+       Stage E.8 moved it back into #bottom (next to the instrument panel)
+       and enlarged it -- Ryan wanted it bigger than the compact keyboard
+       row's fixed piano height allowed. -->
+  <div id="keyboard-row">
+    <div class="panel wip" id="keyboard-panel"><h3>Keyboard</h3><div class="wip-note">on-screen piano — lands in Stage E</div></div>
+  </div>
+
+  <div id="tracks">
+    <div class="panel wip" id="sequencer-panel"><h3>Sequencer</h3><div class="wip-note">tracker grid — lands in Stage D</div></div>
+    <div class="panel wip" id="patterns-panel"><h3>Patterns</h3><div class="wip-note">multiple pattern columns side by side, each with its own inline FX column — lands in Stage D</div></div>
+  </div>
+
+  <div id="bottom">
+    <div class="panel wip" id="instrument-panel"><h3>Instrument</h3><div class="wip-note">oscillator/envelope/FX controls — land in Stage C</div></div>
+    <div class="panel wip" id="scope-panel"><h3>Scope</h3><div class="wip-note">oscilloscope — lands in Stage E.2</div></div>
+  </div>
+  <!-- #instrument-panel/#keyboard-panel/#scope-panel's placeholder markup
+       above is replaced wholesale by panels/instrument.js's
+       initInstrumentPanel(), panels/keyboard.js's initKeyboardPanel(), and
+       panels/scope.js's initScopePanel() at boot (Stage C/E/E.2); left here
+       only as the honest fallback if a module ever fails to load. -->
+
+  <!-- Phase 4: shown while a file is dragged over the window (main.js's
+       dragenter/dragleave refcount), since nothing else in the UI hints
+       that the page accepts dropped songs. -->
+  <div id="drop-hint">
+    <div id="drop-hint-panel">
+      <h3 class="title">Drop a song file to open it</h3>
+      <p>.js exported from soundbox or the old sonant-x editor, or a legacy binary .snd song.</p>
+      <p>Imports run as code — only open files you trust.</p>
+    </div>
+  </div>
+
+  <!-- Generic modal shell, reused by main.js for the open-song picker and
+       the about dialog (and, from Stage F on, new/save). -->
+  <div id="picker">
+    <div id="picker-panel">
+      <div id="picker-body"></div>
+    </div>
+  </div>
+
+  <!-- Vendored SoundBox data/audio engine (GPLv3, tools/soundbox/gpl.txt).
+       Loaded as classic scripts so they define plain globals main.js reads
+       off `window` — the same bridge direction engine.js itself documents
+       (there it's a module reached from a classic script; here it's
+       classic scripts reached from a module). None of these files are
+       edited by this rewrite:
+       presets.js (instrument presets, read by engine.js's makeNewSong),
+       player.js (CPlayer, off-thread synth via player-worker.js), jammer.js
+       (CJammer, live note preview for panels/keyboard.js — Stage E) plus
+       its own dependency common.js (deepCopy, called from
+       CJammer.updateInstr — the only remaining consumer now that
+       state.js's markClean/isDirty use plain JSON.stringify instead), and
+       rle.js + third_party/inflate.js + third_party/deflate.js (binary song
+       (de)compression: inflate for importing legacy .snd songs, deflate for
+       packing a song into a Share link — see engine.js's uncompress()/
+       compress(). deflate.js was unloaded between Stage B and Stage E.14,
+       when nothing called songToBin() any more; Share brought it back).
+       demo-songs.js is no longer loaded at all: Stage E.12 removed the
+       built-in demo list from the open dialog (see main.js's #open-song
+       handler); the file stays on disk only because the not-yet-deleted
+       legacy gui.js still include()s it. third_party/
+       Blob.js is a polyfill for browsers with no native Blob and isn't
+       needed by this repo's "current Chrome/Firefox" target; third_party/
+       WebMIDIAPI.js is dropped, not ported (MIDI input is optional/best-
+       effort per the plan and was never DOM-free to begin with — see
+       panels/keyboard.js's top comment). -->
+  <script src="presets.js"></script>
+  <script src="rle.js"></script>
+  <script src="third_party/inflate.js"></script>
+  <script src="third_party/deflate.js"></script>
+  <script src="player.js"></script>
+  <script src="common.js"></script>
+  <script src="jammer.js"></script>
+  <script src="third_party/FileSaver.js"></script>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>
