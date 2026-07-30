@@ -1,63 +1,44 @@
-// Keyboard panel (plans/soundbox-revamp.md Phase 3 Stage E, reworked by
-// Stage E.1 and E.2's re-scopes): on-screen piano + live audio preview,
-// replacing gui.js's keyboard.jpg bitmap (pixel hit-region math in
-// mBlackKeyPos/getCellCoord) with a real DOM keyboard -- one element per
-// key, data-octave/data-offset attributes, CSS-drawn black/white keys laid
-// out as percentages of the panel's width so they always fill it.
+// Keyboard panel: an on-screen piano plus live audio preview. One element per
+// key with data-octave/data-offset attributes, black and white keys drawn in CSS
+// and laid out as percentages of the panel's width so they always fill it.
 //
-// Stage E.1 widened the piano from a 2-octave slice (whatever state.octave
-// currently pointed at) to the engine's entire playable range at once --
-// octaves 1-8, 56 white + 40 black keys -- so every note is one click away
-// without twiddling the octave selector first. Each key's note is therefore
-// absolute (its position already encodes its octave), not relative to
-// state.octave; the octave selector's only remaining job is re-anchoring
-// the small per-key .kb-label spans that show which physical keyboard key
-// (tracker.js's NOTE_KEYS) plays that note right now, since the physical
-// keyboard only ever covers ~2.4 octaves at a time.
+// The piano spans the engine's entire playable range at once -- octaves 1-8, 56
+// white + 40 black keys -- so every note is one click away without touching the
+// octave selector. Each key's note is therefore absolute (its position already
+// encodes its octave), not relative to state.octave; the octave selector's only
+// job is re-anchoring the small per-key .kb-label spans that say which physical
+// keyboard key plays that note right now, since the physical keyboard only
+// covers ~2.4 octaves at a time. A key can show two labels when two physical
+// keys reach the same note (see BOTTOM_ROW below).
 //
-// Stage E.2 added: both physical-key labels on a key when two keys share it
-// (see BOTTOM_ROW below), highlighting a key when its physical-keyboard
-// key is actually pressed (not just on-screen clicks), and highlighting
-// keys currently sounding during song playback (state.highlightNotes,
-// driven by tracker.js's followPlayback -- see that file). All three
-// sources (mouse, physical key, playback) can light the same key at once
-// without one clearing another's highlight -- see litBy/setLit below.
+// Keys light up from three independent sources -- mouse, physical key, song
+// playback -- and any of them can claim the same key at once without one
+// clearing another's still-held highlight; see litBy/setLit below.
 //
-// Owns the CJammer instance (tools/soundbox/jammer.js, a vendored classic
-// script/global -- same bridge direction as player.js's CPlayer in
-// main.js) used for live note preview: clicking an on-screen key, or
-// pressing one of tracker.js's NOTE_KEYS while the pattern/fx grid has
-// focus, plays a note immediately instead of only writing it silently into
-// the pattern. syncJammer() is called from main.js's refresh() so the
-// jammer always hears the currently *previewed* instrument
-// (panels/instrument.js's previewInstrI() -- the live instrument, or an FX
-// cell's stored value while one is selected) and the current tempo,
-// mirroring gui.js's updateInstrument()/updateSongSpeed() calling
-// mJammer.updateInstr/updateRowLen inline on every relevant change.
-// getJammer() exposes the instance itself (Stage E.4) so main.js's scope
-// loop can read its live waveform (jammer.js's own getData(t, n), added for
-// this) the same way it already reads player.js's rendered song audio.
+// Owns the CJammer instance (jammer.js, a vendored classic script/global, same
+// bridge direction as player.js's CPlayer in main.js) used for live note
+// preview: clicking an on-screen key, or pressing one of tracker.js's NOTE_KEYS
+// while the pattern/fx grid has focus, plays the note immediately instead of
+// only writing it silently into the pattern. syncJammer() is called from
+// main.js's refresh() so the jammer never goes stale on the currently *previewed*
+// instrument (panels/instrument.js's previewInstrI() -- the live instrument, or
+// an FX cell's stored value while one is selected) or the current tempo.
+// getJammer() exposes the instance so main.js's scope loop can read its live
+// waveform.
 //
-// Imports flow one way (keyboard -> instrument -> tracker, plus a direct
-// keyboard -> tracker edge added by Stage E.1 below): tracker.js still
-// reaches this module's relative-offset preview through state.previewNote
-// (a callback field, the same pattern state.notify/state.requestStop
-// already use) rather than importing this module, since tracker.js ->
-// keyboard.js would close a cycle. But keyboard.js importing tracker.js
-// directly is fine -- tracker.js doesn't import keyboard.js, so there's no
-// cycle -- which is what lets Stage E.1 restore gui.js's keyboardMouseDown
-// behavior of writing into the pattern grid on an on-screen click, not just
-// playing a preview (Stage E had dropped that write to avoid needing this
-// exact import; turns out the import isn't actually the problem, only the
-// *reverse* one is). Stage E.2's playback highlighting reuses the same
-// callback-field pattern in the other direction (state.highlightNotes, set
-// by main.js) since tracker.js can't import this module either.
+// Imports flow one way: keyboard -> instrument -> tracker, plus a direct
+// keyboard -> tracker edge. tracker.js reaches this module's relative-offset
+// preview through state.previewNote -- a callback field, like
+// state.notify/state.requestStop -- rather than importing it, since tracker.js ->
+// keyboard.js would close a cycle. keyboard.js importing tracker.js is fine
+// (tracker.js imports nothing from here), and that is what lets an on-screen key
+// click write into the pattern grid and not merely preview. The playback
+// highlighting and the pie's chord shadow use the same callback-field trick in
+// the other direction (state.highlightNotes, state.shadowNotes, both set by
+// main.js).
 //
-// MIDI input (gui.js's initMIDI/mSelectMIDI, third_party/WebMIDIAPI.js) is
-// not ported: it was never actually extracted into engine.js (still lives
-// in gui.js, DOM/UI-entangled, same as Stage A found for the rest of
-// playback), and the plan calls it optional/best-effort/not a priority --
-// dropped, not deferred, since nothing else in this rewrite depends on it.
+// There is no MIDI input: SoundBox's was never separable from its old UI, and
+// nothing else here depends on it.
 
 import * as engine from '../engine.js';
 import { state, savePrefs } from '../state.js';
@@ -66,12 +47,12 @@ import { previewInstrI } from './instrument.js';
 import { noteKeys, enterNoteAtCursor, chordNotesFor } from './tracker.js';
 import { SCALES, PITCH_NAMES, degreeOfPitch } from '../scales.js';
 import { LAYOUTS, LAYOUT_TABLES, charFor, detectLayout } from '../layouts.js';
+import { typingInField } from '../focus.js';
 
 const $ = id => document.getElementById(id);
 
-// The engine's playable octave range (state.octave's own clamp bounds,
-// ported from gui.js's mKeyboardOctave 1-8 limit) -- 8 octaves * (7 white +
-// 5 black) = 96 keys, the "full piano" Stage E.1 asked for.
+// The engine's playable octave range, and state.octave's own clamp bounds:
+// 8 octaves * (7 white + 5 black) = 96 keys.
 const OCTAVE_MIN = 1, OCTAVE_MAX = 8;
 const WHITE_OFFSETS = [0, 2, 4, 5, 7, 9, 11];
 // [index into WHITE_OFFSETS the black key sits after, semitone offset], one
@@ -83,32 +64,28 @@ const WHITE_COUNT = WHITE_PER_OCTAVE * OCTAVES;
 const WHITE_W = 100 / WHITE_COUNT; // percent of .kb-piano's width
 const BLACK_W = WHITE_W * 0.62;
 
-// Stage E.13 (plans/soundbox-scale-chord-input.md) added the scale/chord
-// controls to this panel's header -- everything there answers "what does a
-// keypress play", which is this panel's job, and the octave selector it now
-// sits beside is the other half of the same question. The mapping itself
-// lives in scales.js and is reached through tracker.js's noteKeys(); because
-// refreshKeyboardPanel() has always derived its on-screen key labels *from*
-// that map rather than from a hardcoded table, the piano relabels itself for
-// free when the scale or its root changes.
+// The scale/chord controls live in this panel's header because everything there
+// answers "what does a keypress play", which is this panel's job, and the octave
+// selector beside them is the other half of the same question. The mapping itself
+// lives in scales.js and is reached through tracker.js's noteKeys(); since
+// refreshKeyboardPanel() derives its key labels *from* that map rather than a
+// hardcoded table, the piano relabels itself when the scale or its root changes.
 //
-// tracker.js's chromatic NOTE_KEYS has two overlapping physical-key rows (ported from
-// gui.js's keyDown): a bottom row (ZXCVB... + a few punctuation "bonus"
-// keys) and a QWERTY row one octave up, and the two overlap across a 5-note
-// span (offsets 12-16) where *both* a bottom-row and a QWERTY-row key play
-// the same note -- e.g. Comma and KeyQ are both offset 12. Picking only one
-// to label was hiding Q/W/E/etc entirely; this set says which codes belong
-// to the bottom row so both can be shown (see refreshKeyboardPanel).
+// tracker.js's chromatic NOTE_KEYS has two overlapping physical-key rows: a
+// bottom row (ZXCVB... plus a few punctuation keys) and a QWERTY row one octave
+// up. They overlap across a 5-note span (offsets 12-16) where both a bottom-row
+// and a QWERTY-row key play the same note -- Comma and KeyQ are both offset 12.
+// This set says which codes belong to the bottom row, so a shared key can show
+// both labels instead of one hiding the other (see refreshKeyboardPanel).
 const BOTTOM_ROW = new Set([
   'KeyZ', 'KeyS', 'KeyX', 'KeyD', 'KeyC', 'KeyV', 'KeyG', 'KeyB', 'KeyH', 'KeyN', 'KeyJ', 'KeyM',
   'Comma', 'KeyL', 'Period', 'Semicolon', 'Slash',
 ]);
 
-// Stage E.15: which characters the physical note keys actually print, for the
-// on-screen .kb-label hints. Note entry itself is unchanged and stays keyed by
-// KeyboardEvent.code -- a physical position, so the fingering is identical on
-// every layout (see layouts.js for why that's the right way round). Only the
-// labels were wrong, and only off QWERTY.
+// Which characters the physical note keys actually print, for the .kb-label
+// hints. Note entry is keyed by KeyboardEvent.code -- a physical position, so
+// the fingering is identical on every layout (see layouts.js) -- and only the
+// printed labels need translating.
 //
 // `detected` is the browser's own report of the live layout (async, so a first
 // paint can happen before it lands -- hence the refresh when it resolves in
@@ -119,11 +96,10 @@ function layoutTable() {
 }
 const codeChar = code => charFor(code, layoutTable());
 
-// Stage E.2 re-scope: keyed by octaveK*12+offsetInOctave, populated once in
-// initKeyboardPanel. highlightPlaybackNotes runs on every animation-frame
-// tick while a song plays (see main.js) -- a querySelector per note per
-// frame was the actual cost worth cutting, not the highlighting logic
-// itself; an O(1) Map lookup replaces it. labelSpans (each key's two
+// Keyed by octaveK*12+offsetInOctave, populated once in initKeyboardPanel.
+// highlightPlaybackNotes runs on every animation-frame tick while a song plays
+// (see main.js), and a querySelector per note per frame is the one cost here
+// worth cutting -- this makes it an O(1) Map lookup. labelSpans (each key's two
 // .kb-label <span>s) is cached the same way for refreshKeyboardPanel.
 const keyIndex = new Map();
 const labelSpans = new Map();
@@ -157,11 +133,10 @@ function ensureJammer() {
   return jammer;
 }
 
-// Stage E.4: exposes the jammer instance (once one exists -- i.e. after the
-// first note preview) to main.js's scope loop, so panels/scope.js can
-// visualize live keyboard preview the same way it already visualizes song
-// playback. Doesn't force-create one; before any note has been played,
-// there's nothing to visualize.
+// Exposes the jammer instance, once one exists (i.e. after the first note
+// preview), to main.js's scope loop so panels/scope.js can visualize live
+// keyboard preview alongside song playback. Deliberately doesn't force-create
+// one: before a note has been played there is nothing to visualize.
 export function getJammer() {
   return jammer;
 }
@@ -173,12 +148,11 @@ export function syncJammer() {
   jammer.updateRowLen(state.song.rowLen);
 }
 
-// Ported from gui.js's playNote(): takes a raw key/piano offset *relative
-// to the selected octave* (0 = state.octave's first key), returns the
-// actual note number in SoundBox's note space. Registered on
-// state.previewNote by main.js so tracker.js's physical-keyboard note entry
-// can call it (and reuse the returned note for a pattern-grid write)
-// without importing this module.
+// Takes a raw key/piano offset *relative to the selected octave* (0 =
+// state.octave's first key) and returns the actual note number in SoundBox's
+// note space. Registered on state.previewNote by main.js so tracker.js's
+// physical-keyboard entry can call it -- and reuse the returned note for its
+// pattern-grid write -- without importing this module.
 export function previewNote(offset) {
   const note = offset + state.octave * 12 + engine.NOTE_OFFSET;
   ensureJammer().addNote(note);
@@ -194,8 +168,8 @@ function previewAndEnter(octaveK, offsetInOctave) {
   enterNoteAtCursor(note);
 }
 
-// Stage E.2: light up the on-screen key(s) for whatever notes tracker.js's
-// followPlayback says are currently sounding. Registered on
+// Light up the on-screen key(s) for whatever notes tracker.js's followPlayback
+// says are currently sounding. Registered on
 // state.highlightNotes by main.js. Diffs against the previous call's set so
 // a note that's still sounding doesn't flicker off and back on.
 let playbackLit = new Set();
@@ -213,7 +187,7 @@ export function highlightPlaybackNotes(notes) {
   playbackLit = next;
 }
 
-// --- chord shadow (Stage E.13): hovering a key in chord mode outlines every
+// --- chord shadow: hovering a key in chord mode outlines every
 // key that keypress would actually write, so a chord can be read off the
 // piano before committing to it. Deliberately *not* routed through setLit
 // above -- a shadow is a different statement than "this key is sounding",
@@ -243,29 +217,27 @@ function showShadow(octaveK, offsetInOctave) {
   setShadow(notes);
 }
 
-// Stage E.14: the same outline, driven by an explicit note list instead of a
-// hovered key -- registered on state.shadowNotes by main.js so the entry pie
-// (panels/pie.js) can show what the wedge under the cursor would write. No
-// `length < 2` guard here, unlike the hover path above: a single note is a
-// deliberate pick in the pie (and worth showing, since it says which octave
-// you're about to land in), whereas on hover it would mean shadowing every key
-// the mouse crosses in chromatic mode.
+// The same outline, driven by an explicit note list instead of a hovered key --
+// registered on state.shadowNotes by main.js so the entry pie (panels/pie.js)
+// can show what the wedge under the cursor would write. No `length < 2` guard
+// here, unlike the hover path above: a single note is a deliberate pick in the
+// pie, and worth showing since it says which octave you are about to land in,
+// whereas on hover it would shadow every key the mouse crossed in chromatic
+// mode.
 export function shadowNotes(notes) {
   setShadow(notes);
 }
 
+// Matches the guard tracker.js's onKeyDown uses (see focus.js): a focused
+// instrument slider or checkbox must not stop the physical keyboard from playing
+// and highlighting notes -- only a field you are actually typing into does.
 function isNoteEntryActive() {
-  const ae = document.activeElement;
-  if (ae && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) return false;
-  return state.editMode === 'pattern' || state.editMode === 'fx';
+  return !typingInField() && (state.editMode === 'pattern' || state.editMode === 'fx');
 }
 
-// Stage E.2: physical-keyboard presses light up the on-screen key they
-// play, same guard tracker.js's onKeyDown uses (only in pattern/fx mode,
-// not while a text field has focus) so a Z typed into, say, the BPM field
-// doesn't light anything. Tracked per e.code (not per note) so held chords
-// each get their own key lit and release the right one on keyup regardless
-// of octave changes in between.
+// Physical-keyboard presses light up the on-screen key they play. Tracked per
+// e.code rather than per note, so held chords each get their own key lit and
+// release the right one on keyup even if the octave changed in between.
 const physicalLitByCode = new Map();
 function onPhysicalKeyDown(e) {
   if (physicalLitByCode.has(e.code) || !isNoteEntryActive()) return;
@@ -306,9 +278,9 @@ export function initKeyboardPanel() {
       <span class="mono" id="kb-octave" title="Octave the bottom-left computer key (Z) currently plays"></span>
       <button id="kb-oct-up" type="button" title="Move the playable key range up an octave (&gt; or =)">+</button>
     </div>
-    <!-- Stage E.18: one tip on the piano rather than 96 on the individual
-         keys -- each key already labels itself with its note and computer
-         key, so a per-key tooltip would repeat what is printed on it. -->
+    <!-- One tip on the piano rather than 96 on the individual keys: each key
+         already labels itself with its note and computer key, so a per-key
+         tooltip would only repeat what is printed on it. -->
     <div class="kb-piano" id="kb-piano" title="Click a key to hear it and write it at the tracker cursor. The labels on each key are the computer key that plays it. Hovering outlines the chord that key would write; the lit keys during playback are the notes currently sounding."></div>`;
 
   let html = '';
@@ -360,17 +332,17 @@ export function initKeyboardPanel() {
   $('kb-oct-down').onclick = () => { state.octave = Math.max(1, state.octave - 1); refreshKeyboardPanel(); state.notify && state.notify(); };
   $('kb-oct-up').onclick = () => { state.octave = Math.min(8, state.octave + 1); refreshKeyboardPanel(); state.notify && state.notify(); };
 
-  // Stage E.13's note-input controls. All four write to state (persisted as
-  // preferences, not song data -- see state.js) and re-derive the piano;
-  // nothing here touches the song, so none of it marks it dirty.
+  // The note-input controls. All four write to state (persisted as preferences,
+  // not song data -- see state.js) and re-derive the piano; nothing here touches
+  // the song, so none of it marks it dirty.
   const changed = () => { clearShadow(); savePrefs(); refreshKeyboardPanel(); state.notify && state.notify(); };
   $('kb-layout').onchange = () => { state.kbLayout = $('kb-layout').value; changed(); };
   $('kb-scale').onchange = () => { state.scaleMode = +$('kb-scale').value; changed(); };
   $('kb-root-down').onclick = () => { state.scaleRoot = (state.scaleRoot + 11) % 12; changed(); };
   $('kb-root-up').onclick = () => { state.scaleRoot = (state.scaleRoot + 1) % 12; changed(); };
   $('kb-chord').onchange = () => { state.chordOn = $('kb-chord').checked; changed(); };
-  // Stage E.14's edit step. Nothing visible depends on it, so it just persists
-  // -- no re-derive, and no notify() that would fight the field for focus.
+  // The edit step. Nothing visible depends on it, so it just persists -- no
+  // re-derive, and no notify() that would fight the field for focus.
   $('kb-step').oninput = () => {
     const n = +$('kb-step').value;
     if (n >= 0 && n <= 16) { state.editStep = n; savePrefs(); }
@@ -395,9 +367,8 @@ export function initKeyboardPanel() {
 export function refreshKeyboardPanel() {
   $('kb-octave').textContent = state.octave;
 
-  // Stage E.13 controls. The scale's own intervals drive both the key tint
-  // below and whether the root transpose means anything, so they're read
-  // once here rather than per key.
+  // The scale's intervals drive both the key tint below and whether the root
+  // transpose means anything, so they're read once here rather than per key.
   const intervals = SCALES[state.scaleMode][1];
   $('kb-layout').value = state.kbLayout;
   $('kb-scale').value = state.scaleMode;
@@ -436,11 +407,10 @@ export function refreshKeyboardPanel() {
     const spans = labelSpans.get(el);
     spans[0].textContent = a;
     spans[1].textContent = b;
-    // Stage E.13: tint every key of the active scale, whatever octave it's
-    // in -- the shape of the scale is then visible across the whole piano
-    // instead of only discoverable by playing the ~3 octaves the physical
-    // key rows currently reach. keyIndex's key is octave*12 + offset, so
-    // % 12 is the pitch class (offset 0 is C, per engine.NOTE_OFFSET).
+    // Tint every key of the active scale, whatever octave it's in, so the shape
+    // of the scale is visible across the whole piano instead of only where the
+    // physical key rows currently reach. keyIndex's key is octave*12 + offset,
+    // so % 12 is the pitch class (offset 0 is C, per engine.NOTE_OFFSET).
     el.classList.toggle('kb-in-scale', !!intervals && degreeOfPitch(intervals, state.scaleRoot, key % 12) >= 0);
   }
 }

@@ -1,14 +1,11 @@
-/* Voxby manual (help.html) — written from scratch for this editor
-   (plans/soundbox-revamp.md's last stage). It replaces upstream SoundBox's
-   help.css, which was a light-background Audiowide-headings page pulling a
-   webfont off fonts.googleapis.com: a jarring flip from the dark editor, and a
-   network request in a page that has to work offline from a checkout.
-
-   Deliberately standalone rather than importing screen.css: the manual is one
-   long document, not an application shell, and screen.css is a flexbox layout
-   for a fixed-height window. The palette below is the same set of values,
+/* Voxby manual (help.html). Standalone rather than importing screen.css: the
+   manual is one long document, and screen.css is a flexbox layout for a
+   fixed-height application window. The palette below is the same set of values,
    copied, so the two pages look like one product — keep them in sync by eye if
-   screen.css's :root block ever changes. */
+   screen.css's :root block ever changes.
+
+   No webfonts: this page has to work offline from a checkout, so it must make no
+   network requests of its own. */
 
 :root {
   --bg0: #0d0e11;
@@ -116,8 +113,7 @@ figure.wide img { margin: 0 auto; max-width: min(1600px, calc(100vw - 40px)); }
 figure.wide figcaption { max-width: 72ch; margin-inline: auto; }
 
 /* The instrument signal chain is inline SVG rather than a bitmap, so it stays
-   sharp and picks up the palette above (upstream's equivalent was a 41 KB PNG
-   of the same boxes). */
+   sharp and picks up the palette above. */
 figure svg { display: block; max-width: 100%; height: auto; margin: 0 auto; }
 
 /* --- keys, code, tables -------------------------------------------------- */

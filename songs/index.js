@@ -1,18 +1,14 @@
-// The open dialog's built-in song library (plans/soundbox-revamp.md Stage
-// E.12). Replaces SoundBox's vendored demo-songs.js -- a handful of the
-// upstream project's own tunes, stored as compressed binary blobs -- with
-// Ryan's own back catalogue: every legacy sonant-x / old-SoundBox / hand-
-// minified song in this repo's history, converted to the modern format with
-// `npm run convert-song` (scripts/convert-song.mjs) and dropped in this
-// directory verbatim, one `export default {...}` module each. They're the
-// same shape the editor's own Export JS produces, so a song opened from
-// here, edited, and re-exported round-trips through exactly the code path
-// tests/soundbox/test-import.mjs covers.
+// The open dialog's built-in song library: one `export default {...}` module
+// per song, the same shape the editor's own Export JS produces, so a song
+// opened here, edited and re-exported round-trips through the ordinary import
+// path (tests/soundbox/test-import.mjs covers it). Legacy sonant-x / old-
+// SoundBox / hand-minified songs are converted in with `npm run convert-song`
+// (scripts/convert-song.mjs).
 //
-// Two sections, per Ryan's ask: full songs (multi-channel, multi-step
-// sequences) and one-shot SFX (a single sequencer step). `desc` is the
-// rendered channel count and length, measured rather than described, so
-// nothing here claims a character the file might not have.
+// Two sections: full songs (multi-channel, multi-step sequences) and one-shot
+// SFX (a single sequencer step). `desc` is the rendered channel count and
+// length, measured rather than described, so nothing here claims a character
+// the file might not have.
 //
 // Loading is a dynamic import() per card rather than 32 static imports at
 // boot: this is ~176 KB of song data and the editor opens with none of it

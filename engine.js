@@ -21,26 +21,23 @@
 
 //------------------------------------------------------------------------------
 // Song/instrument data model: binary (de)serialization for the SoundBox and
-// Sonant formats, plus the JS export used by src/js/sounds/. Extracted
-// behavior-preserving from gui.js (plans/soundbox-revamp.md Phase 3 Stage A)
-// -- no DOM references, pure functions over plain song/instrument objects.
-// gui.js's UI chrome still owns mSong and every DOM-facing concern; it now
-// calls into this module instead of defining these functions itself.
+// Sonant formats, plus the JS export used by src/js/sounds/. No DOM
+// references -- pure functions over plain song/instrument objects, so the UI
+// owns every DOM-facing concern and calls in here for the data.
 //
-// Depends on three globals still supplied by their own (still-classic-script)
-// files, exactly as gui.js relied on them before: gInstrumentPresets
-// (presets.js), rle_encode/rle_decode (rle.js), RawDeflate (third_party/
-// deflate.js + inflate.js).
+// Depends on three globals supplied by classic scripts index.html loads ahead
+// of the modules: gInstrumentPresets (presets.js), rle_encode/rle_decode
+// (rle.js), RawDeflate (third_party/deflate.js + inflate.js).
 //------------------------------------------------------------------------------
 
 export const MAX_SONG_ROWS = 500;
 export const MAX_PATTERNS = 36;
 export const MAX_CHANNELS = 16;
 
-// gui.js's playNote() (piano-key/on-screen-keyboard note entry) offsets its
-// 0-based key/octave arithmetic by this to land in SoundBox's actual note
-// number space. Shared by panels/tracker.js's pattern note entry and
-// panels/keyboard.js's live preview so the two stay in exact agreement.
+// Note entry works in 0-based key/octave arithmetic and adds this to land in
+// SoundBox's actual note-number space. Shared by panels/tracker.js's pattern
+// entry and panels/keyboard.js's live preview so the two stay in exact
+// agreement.
 export const NOTE_OFFSET = 87;
 
 // Instrument property indices
@@ -197,12 +194,8 @@ export const calcSamplesPerRow = function (bpm) {
 };
 
 export const makeEmptyChannel = function (patternLen) {
-  // NOTE: gui.js's original version of this function left these five as
-  // implicit globals -- harmless there only because a stray `"use strict"`
-  // after the leading include() calls never actually took effect (it's not
-  // first in the file, so it's not a directive prologue and the whole
-  // script stayed sloppy-mode). An ES module is always strict, so these
-  // need real declarations here.
+  // Real declarations because an ES module is always strict -- the SoundBox
+  // original left these as implicit globals.
   var instr, i, j, k, col;
   instr = {};
   instr.i = [];
@@ -272,12 +265,9 @@ export const makeNewSong = function () {
 
 // Scans every channel/row for the highest non-empty sequencer row and
 // channel, and updates song.endPattern/song.numChannels to match -- these
-// two fields are otherwise-derived metadata (not something a UI control
-// sets directly), same as gui.js's updateSongRanges(), minus that
-// function's updateSongSpeed() call (a UI-side BPM-field refresh with
-// nothing to do with the song data itself; tools/soundbox/panels/tracker.js,
-// Stage D, calls this after every sequencer edit and callers needing the
-// BPM field refreshed do that themselves).
+// two fields are otherwise-derived metadata, not something a UI control sets
+// directly. Data only: panels/tracker.js calls this after every sequencer edit,
+// and a caller that also wants its BPM field refreshed does that itself.
 export const recalcSongRanges = function (song) {
   var maxRow = 0, maxCol = 0;
   for (var i = 0; i < MAX_SONG_ROWS; i++) {
@@ -293,10 +283,9 @@ export const recalcSongRanges = function (song) {
 };
 
 // Truncates/extends every channel's patterns to a new row count, preserving
-// existing note/fx data -- ported from gui.js's setPatternLength() (Stage D
-// tracker.js's Rows-per-pattern control), minus that function's leading
-// stopAudio() call (playing audio would desync from the changed pattern
-// length; that's a UI/player concern the caller handles, not song data).
+// existing note/fx data. Behind tracker.js's rows-per-pattern control. Playing
+// audio would desync from the changed length, but stopping it is the caller's
+// concern -- this touches song data only.
 export const setPatternLength = function (song, length) {
   if (song.patternLen === length) return;
   for (var i = 0; i < MAX_CHANNELS; i++) {
@@ -957,9 +946,8 @@ export const binToSong = function (d) {
   return song;
 };
 
-// Stage E.14: the song as a URL-safe string, for the Share link (see main.js).
-// Same base64url encoding gui.js's makeURLSongData/getURLSongData used -- '+'
-// and '/' swapped for '-'/'_' and the padding dropped, so the whole payload
+// The song as a URL-safe string, for the Share link (see main.js). base64url:
+// '+' and '/' swapped for '-'/'_' and the padding dropped, so the whole payload
 // survives being pasted into a chat client untouched. The compressed binary
 // format is what goes in rather than the JS export: it's several times shorter,
 // and this direction never needs to be human-readable.
@@ -1096,7 +1084,7 @@ export const songToJS = function (song) {
 };
 
 //------------------------------------------------------------------------------
-// JS import (plans/soundbox-revamp.md Phase 4) -- the inverse of songToJS().
+// JS import -- the inverse of songToJS().
 //
 // The exported literal is (modulo the `export default` wrapper) the internal
 // song object, but *trimmed*: trailing zero notes/fx/sequencer rows are cut,

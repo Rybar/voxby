@@ -1,16 +1,14 @@
-// Physical-keyboard layouts (plans/soundbox-revamp.md Stage E.15). Pure data
-// and one detection call -- no DOM, no state, same shape as scales.js.
+// Physical-keyboard layouts. Pure data and one detection call -- no DOM, no
+// state, same shape as scales.js.
 //
-// What this does and doesn't change is the whole design decision, so: note
-// entry stays keyed by `KeyboardEvent.code` (see panels/tracker.js's NOTE_KEYS
-// and scales.js's ROW_BOTTOM/ROW_TOP), which is a *physical* key position on a
-// US-QWERTY reference layout no matter what layout the OS has active. That is
-// exactly what a music keyboard wants: playing is positional, so the two note
-// rows stay in the same two physical rows and the same fingering works on
-// every layout. What breaks on a non-QWERTY layout is only the little
-// .kb-label hints on the on-screen piano, which used to derive the printed
-// character straight from the code ('KeyZ' -> "Z") and so lied to anyone whose
-// Z key isn't where QWERTY's is. These tables fix the labels, nothing else.
+// These tables affect *labels only*. Note entry is keyed by
+// `KeyboardEvent.code` (see panels/tracker.js's NOTE_KEYS and scales.js's
+// ROW_BOTTOM/ROW_TOP), which is a physical key position on a US-QWERTY
+// reference layout whatever layout the OS has active -- which is what a music
+// keyboard wants, since playing is positional and the same fingering then works
+// everywhere. What does need translating is the .kb-label hints printed on the
+// on-screen piano: derived from the code alone ('KeyZ' -> "Z") they lie to
+// anyone whose Z key isn't where QWERTY's is.
 //
 // Only the codes note entry can reach need entries; anything missing falls
 // back to the US-QWERTY reading of the code itself (see charFor).

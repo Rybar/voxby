@@ -1,64 +1,52 @@
-// Tracker panel (plans/soundbox-revamp.md Phase 3 Stage D): sequencer +
-// multi-column pattern/fx grids, rendered into Stage B's
-// #sequencer-panel/#patterns-panel placeholders.
+// Tracker panel: the sequencer and the multi-column pattern/fx grids.
 //
-// Layout differs from gui.js's single-pattern-plus-one-fx-track view (see
-// Stage B's writeup in the plan): every channel's pattern gets its own
-// column, shown side by side in #patterns-panel, each with its own narrow
-// inline FX column -- not a separate shared FX panel. Which pattern each
-// column shows is driven by state.selRow (the sequencer's current song
-// row): songData[channel].p[state.selRow] is "the pattern this channel
-// plays at the currently selected row" for every channel at once, so
-// moving the sequencer row cursor repaints every pattern column together.
-// All MAX_CHANNELS=16 sequencer/pattern columns are always rendered (not
-// just song.numChannels), mirroring gui.js's buildSequencerTable -- a
-// channel only "activates" (bumps numChannels via engine.recalcSongRanges)
-// once it has a non-zero sequence entry, so the extra columns are exactly
-// how a song grows past its current channel count. Stage C's instrument
-// panel channel <select> was widened to match (see panels/instrument.js).
+// Every channel's pattern gets its own column, shown side by side in
+// #patterns-panel, each with its own narrow inline FX column rather than one
+// shared FX panel. Which pattern a column shows is driven by state.selRow (the
+// sequencer's current song row): songData[channel].p[state.selRow] is "the
+// pattern this channel plays at the selected row" for every channel at once, so
+// moving the sequencer cursor repaints every pattern column together.
 //
-// One channel is "focused" at a time (state.selInstrument, shared with the
-// instrument panel per Stage C's design note) -- clicking any cell in any
-// grid moves focus to that cell's channel. Only the focused channel's
-// pattern/fx column shows a live cursor/selection; the others are still
-// clickable (that's how you move focus to them).
+// All MAX_CHANNELS=16 sequencer/pattern columns are always rendered, not just
+// song.numChannels: a channel only activates (bumping numChannels via
+// engine.recalcSongRanges) once it has a non-zero sequence entry, so the extra
+// columns are exactly how a song grows past its current channel count. The
+// instrument panel's channel <select> lists all 16 for the same reason.
 //
-// FX cells don't take typed values -- exactly like gui.js, a selected FX
-// cell instead captures whatever instrument slider/icon you touch next
-// (panels/instrument.js's setInstrProp/bindIconGroup/bindArpNotes check
-// activeFxCell() and route there instead of/in addition to the live
-// instrument). Selecting an FX cell that already holds a value previews it
-// in the instrument sliders too (previewInstrI() in instrument.js).
+// One channel is focused at a time (state.selInstrument, shared with the
+// instrument panel); clicking any cell in any grid moves focus to that cell's
+// channel. Only the focused channel's pattern/fx column draws a cursor and
+// selection, but the others stay clickable -- that is how focus moves.
 //
-// Scope cut vs. gui.js: no fillSequenceRange/fillPatternRange/fillFxRange
-// (the Enter-key auto-extrapolate/loop-fill helpers) -- an editing
-// convenience, not core grid functionality. Enter in a note/fx column does
-// do something as of Stage E.7, but a different something: insertRowAtCursor()
-// pushes the current row and everything below it down one, rather than
-// extrapolating/looping existing data. Piano-key note entry (pattern or fx
-// mode, physical keyboard or panels/keyboard.js's on-screen piano)
-// live-previews through the jammer (state.previewNote / keyboard.js's own
-// preview) and, in pattern mode, writes via enterNoteAtCursor() below.
-// Playback row-following (curRow highlighting that tracks the playing row
-// in both the sequencer and pattern view) is back as of Stage E.1 -- see
-// followPlayback(); Stage E.7's getPlayRange()/setFollowRange() extend it to
-// follow a restricted sequence-row/channel range instead of always the
-// whole song, for "play selected"/solo-pattern playback (see main.js).
+// FX cells take no typed values. A selected FX cell captures whatever instrument
+// slider or icon you touch next (panels/instrument.js's
+// setInstrProp/bindIconGroup/bindArpNotes check activeFxCell() and route there
+// as well as to the live instrument), and selecting a cell that already holds a
+// value previews it in the sliders (instrument.js's previewInstrI()).
+//
+// Note entry -- physical keyboard or panels/keyboard.js's on-screen piano --
+// live-previews through the jammer (state.previewNote) in either mode, and in
+// pattern mode writes through enterNoteAtCursor() below. Playback row-following
+// (curRow highlighting that tracks the playing row in both views) is
+// followPlayback(); getPlayRange()/setFollowRange() restrict it to a
+// sequence-row/channel range for "play selected" and solo-pattern playback (see
+// main.js).
 
 import * as engine from '../engine.js';
 import { state, savePrefs } from '../state.js';
 import { SCALES, PITCH_NAMES, CHORD_QUALITIES, scaleKeys, harmonyOf, diatonicChord, nameChord } from '../scales.js';
 import { openPie } from './pie.js';
 import { openMenu } from '../menu.js';
+import { keyHandledByFocus } from '../focus.js';
 
 const $ = id => document.getElementById(id);
 const NOTE_NAMES = ['C-', 'C#', 'D-', 'D#', 'E-', 'F-', 'F#', 'G-', 'G#', 'A-', 'A#', 'B-'];
 const EDIT_MODES = ['sequence', 'pattern', 'fx'];
 
-// Physical piano-key layout ported from gui.js's keyDown keyCode switch,
-// rekeyed to KeyboardEvent.code (locale-independent, not deprecated).
-// Bottom row = first octave, QWERTY row = second octave, a few keys extend
-// each row a couple of notes into the next octave ("bonus keys").
+// Physical piano-key layout, keyed by KeyboardEvent.code (locale-independent,
+// and not deprecated the way keyCode is). Bottom row = first octave, QWERTY row
+// = second octave, with a few keys extending each row a couple of notes into the
+// next octave.
 export const NOTE_KEYS = {
   KeyZ: 0, KeyS: 1, KeyX: 2, KeyD: 3, KeyC: 4, KeyV: 5, KeyG: 6, KeyB: 7,
   KeyH: 8, KeyN: 9, KeyJ: 10, KeyM: 11,
@@ -85,12 +73,11 @@ function toHex(n, count) {
   return n.toString(16).toUpperCase().padStart(count, '0');
 }
 
-// --- cursor/selection: one plain object per grid (sequencer/pattern/fx),
-// a trimmed port of gui.js's CTableEditor -- col/row is the single active
-// cell (what typing/paste targets); col1/row1 and col2/row2 are the two
-// corners of the selection rectangle (both collapse onto col/row on a
-// plain click; dragging or shift+arrow moves col1/row1 while col2/row2
-// stays pinned at the click/paste anchor, same as the original). ---
+// --- cursor/selection: one plain object per grid (sequencer/pattern/fx).
+// col/row is the single active cell, which typing and paste target; col1/row1
+// and col2/row2 are the two corners of the selection rectangle. Both corners
+// collapse onto col/row on a plain click; dragging or shift+arrow moves
+// col1/row1 while col2/row2 stays pinned at the click/paste anchor. ---
 function makeCursor() {
   return { col: 0, row: 0, col1: 0, row1: 0, col2: 0, row2: 0, copyBuf: null };
 }
@@ -106,7 +93,7 @@ function setCursor(c, col, row, keepSelection) {
   if (!keepSelection) { c.col1 = c.col2 = col; c.row1 = c.row2 = row; }
 }
 function extendSelection(c, col, row) { c.col1 = col; c.row1 = row; }
-// Stage E.16: Ctrl+A. "All" is the whole active grid -- for the pattern that's
+// Ctrl+A. "All" is the whole active grid -- for the pattern that's
 // every row of all 4 note columns, i.e. every note in the pattern. The active
 // cell deliberately stays where it is: it's the paste anchor (pasteSelection
 // writes from c.row/c.col down), so dragging it to a corner would move where a
@@ -123,8 +110,9 @@ function forSelection(c, cb) {
 function cursorFor(mode) { return mode === 'sequence' ? seq : mode === 'pattern' ? pat : fx; }
 function gridFor(mode) { return mode === 'sequence' ? seqGrid : mode === 'pattern' ? patGrid : fxGrid; }
 
-// --- data access per grid: engine.js's plain song-object shape, addressed
-// exactly like gui.js's mSeq/mPattern/mFxTrack bindings. ---
+// --- data access per grid, over engine.js's plain song-object shape. Each grid
+// exposes the same tiny interface (numcols/numrows/get/set/clear), which is what
+// lets the navigation, selection and clipboard code below be written once. ---
 function focusedPatternNum() {
   return patternNumFor(state.selInstrument);
 }
@@ -171,10 +159,9 @@ const fxGrid = {
 };
 
 // Read by panels/instrument.js: when an FX cell is selected, instrument
-// sliders/icons preview and write that cell's stored value instead of (as
-// well as) the live instrument property -- gui.js's updateInstrument()/
-// mouseMove EDIT_FXTRACK branches, ported as a small pull-based API so
-// instrument.js doesn't need to know tracker.js's internal cursor shape.
+// sliders/icons preview and write that cell's stored value as well as the live
+// instrument property. A small pull-based API on purpose, so instrument.js needs
+// to know nothing about this module's cursor shape.
 export function activeFxCell() {
   if (state.editMode !== 'fx') return null;
   const pn = focusedPatternNum();
@@ -186,14 +173,12 @@ export function activeFxCell() {
   };
 }
 
-// Writes a note (an already-computed SoundBox note number, from either
-// tracker.js's own physical-keyboard handling below or panels/keyboard.js's
-// on-screen piano -- Stage E.1 restored the write gui.js's
-// keyboardMouseDown always did for the latter) at the pattern cursor and
-// advances it, exactly like typing a note on the physical keyboard. A no-op
-// outside pattern edit mode or with no pattern focused (fx mode still plays
-// the note through the caller's jammer trigger, it just doesn't get stored
-// anywhere -- same restriction as before).
+// Writes an already-computed SoundBox note number at the pattern cursor and
+// advances it. Both entry paths come through here -- this file's physical-keyboard
+// handling below and panels/keyboard.js's on-screen piano -- so they can't drift
+// apart. A no-op outside pattern edit mode or with no pattern focused; in fx mode
+// the note still sounds (the caller triggered the jammer before calling) but is
+// stored nowhere.
 export function enterNoteAtCursor(note) {
   if (state.editMode !== 'pattern' || !focusedPatternNum()) return;
   const row = pat.row;
@@ -220,19 +205,17 @@ export function enterNoteAtCursor(note) {
   render(); notify();
 }
 
-// Stage E.14: how far an entry moves the cursor is state.editStep now (a
-// tracker's edit step -- see state.js), not the hardcoded 1 this always was.
-// 0 leaves the cursor put, which is why the modulo is guarded: `% n` of a step
-// of 0 is fine, but a step that lands exactly on numrows must still wrap.
+// How far an entry moves the cursor is state.editStep, a tracker's edit step
+// (see state.js). 0 leaves the cursor put; the modulo still has to wrap a step
+// that lands exactly on numrows.
 function advanceCursor(row) {
   setCursor(pat, pat.col, (row + Math.max(0, state.editStep | 0)) % patGrid.numrows());
 }
 
-// --- chord entry (plans/soundbox-scale-chord-input.md). The data model has
-// always held 4 notes per row (n[row + col*patternLen], columns 0-3) and the
-// grid has always rendered them; this is the input half. Chords are always
-// root/3rd/5th/7th -- at most 4 tones, exactly the 4 columns available --
-// and only where those intervals come from differs between the two modes.
+// --- chord entry. The data model holds 4 notes per row (n[row + col*patternLen],
+// columns 0-3), so a chord is always root/3rd/5th/7th: at most 4 tones, exactly
+// the 4 columns available. Only where those intervals come from differs between
+// the two modes.
 //
 // `lastEntry` is what makes the two-keypress flow work without a mode
 // switch: a note key writes and advances as always, and a digit pressed
@@ -278,8 +261,7 @@ function chordAt(note) {
   return state.chordOn ? diatonicAt(note) : bareNote(note);
 }
 
-// Stage E.14: the one place a (note, quality) pair becomes actual notes plus a
-// name, shared by the digit row and the pie's quality ring so the two can't
+// The one place a (note, quality) pair becomes actual notes plus a name, shared by the digit row and the pie's quality ring so the two can't
 // spell the same chord differently. `quality` is 'auto' for whatever the scale
 // harmonizes the note to, a CHORD_QUALITIES key ('Digit1'...) for a named one,
 // or anything else (null) for the bare note.
@@ -331,7 +313,7 @@ function applyChordQuality(code) {
   return true;
 }
 
-// --- entry pie menu (Stage E.14, see panels/pie.js). Everything musical the
+// --- entry pie menu (see panels/pie.js). Everything musical the
 // pie asks for is answered from the functions above, so a pie pick and a
 // keypress cannot write different things. The voicing toggles apply here even
 // with chord mode off: opening the pie and choosing a quality is an explicit
@@ -363,7 +345,7 @@ function openEntryPie(x, y) {
   });
 }
 
-// Stage E.7: Enter in a note/fx column inserts an empty row at the cursor,
+// Enter in a note/fx column inserts an empty row at the cursor,
 // pushing that row and everything below it down one -- the whole pattern
 // row across all 4 note columns and the fx column together (not just the
 // column the cursor happens to be in), since a "row" is the musical unit
@@ -385,7 +367,7 @@ function insertRowAtCursor(row) {
   }
 }
 
-// --- transpose (Stage E.15). Acts on the pattern selection exactly as drawn:
+// --- transpose. Acts on the pattern selection exactly as drawn:
 // one cell, a column, or a block dragged across all 4 note columns. Empty cells
 // stay empty -- transposing a rest would invent a note.
 //
@@ -415,8 +397,8 @@ function transposeSelection(delta) {
 // the current one moves the cursor there first (and into that cell's channel) --
 // otherwise the menu would silently act somewhere the user isn't pointing.
 // Inside it, the selection is left alone, which is the whole point of having
-// dragged one (and as of Stage E.16 the right-click's own mousedown no longer
-// wipes it on the way here -- see primary() below).
+// dragged one -- primary() below keeps the right-click's own mousedown from
+// wiping it on the way here.
 function patternsContextMenu(e) {
   const t = cellTarget(e);
   // fx cells hold command/value pairs, not notes -- nothing here applies, so
@@ -444,15 +426,12 @@ function patternsContextMenu(e) {
   ]);
 }
 
-// Stage E.7: "hitting space should play either the selection from the
-// sequence editor if a selection has been made or the sequence editor is in
-// focus, or solo-play the current pattern being edited." Mirrors gui.js's
-// playRange() shape (engine's player-worker.js opts: firstRow/lastRow are
-// sequence steps, firstCol/lastCol are channels) but adds the solo-pattern
-// fallback, which the original interface didn't have -- gui.js's Space
-// always played the sequence editor's selection regardless of which panel
-// had focus. Solo-play uses a single sequence row (state.selRow) so
-// player-worker.js's numSamples works out to exactly one pattern's length.
+// What Space and "Play selected" play: the sequencer's selection when that is
+// the grid being worked in, otherwise the one pattern being edited. The shape is
+// player-worker.js's own opts -- firstRow/lastRow are sequence steps,
+// firstCol/lastCol are channels. Solo-play passes a single sequence row
+// (state.selRow) so player-worker.js's numSamples works out to exactly one
+// pattern's length.
 export function getPlayRange() {
   if (state.editMode === 'sequence') {
     return { firstRow: selTop(seq), lastRow: selBottom(seq), firstCol: selLeft(seq), lastCol: selRight(seq) };
@@ -460,7 +439,7 @@ export function getPlayRange() {
   return { firstRow: state.selRow, lastRow: state.selRow, firstCol: state.selInstrument, lastCol: state.selInstrument };
 }
 
-// --- copy/paste (generic across grids, ported from CTableEditor.copy/paste) ---
+// --- copy/paste, generic across all three grids ---
 function copySelection(mode) {
   const grid = gridFor(mode), c = cursorFor(mode);
   c.copyBuf = [];
@@ -477,8 +456,8 @@ function pasteSelection(mode) {
     for (let col = c.col, j = 0; col < grid.numcols() && j < c.copyBuf[i].length; col++, j++)
       grid.set(col, row, c.copyBuf[i][j]);
 }
-// The whole paste, shared by Ctrl+V and the right-click menu (Stage E.16) so
-// the two can't drift. lastEntry goes because the row a digit would requalify
+// The whole paste, shared by Ctrl+V and the right-click menu so the two can't
+// drift. lastEntry goes because the row a digit would requalify
 // has just been overwritten by something else.
 function doPaste(mode) {
   pasteSelection(mode);
@@ -487,8 +466,8 @@ function doPaste(mode) {
   render(); notify();
 }
 
-// --- keyboard navigation (arrows/home/end/backspace/delete), ported from
-// gui.js's keyDown table-editor block. Returns true if it handled the key. ---
+// --- keyboard navigation (arrows/home/end/backspace/delete), generic across the
+// three grids. Returns true if it handled the key. ---
 function handleNav(e, mode) {
   const grid = gridFor(mode), c = cursorFor(mode);
   let col = e.shiftKey ? c.col1 : c.col, row = e.shiftKey ? c.row1 : c.row;
@@ -503,9 +482,9 @@ function handleNav(e, mode) {
     case 'End': row = numrows - 1; break;
     case 'Backspace': case 'Delete':
       forSelection(c, (col, row) => grid.clear(col, row));
-      // Single cell: advance the cursor past it, matching gui.js. A range
-      // stays selected/highlighted (still-empty, freshly-cleared cells)
-      // rather than collapsing to one corner.
+      // Single cell: advance the cursor past it. A range stays selected --
+      // freshly-cleared cells, still highlighted -- rather than collapsing onto
+      // one corner.
       if (c.col1 === c.col2 && c.row1 === c.row2) row = row + 1;
       break;
     default: return false;
@@ -529,14 +508,15 @@ export function shiftOctave(d) {
 }
 
 function onKeyDown(e) {
-  const ae = document.activeElement;
-  if (ae && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) return;
+  // Only the keys the focused control genuinely uses are given up (see
+  // focus.js): a focused slider keeps its arrows, and everything else -- notes,
+  // octave, clipboard -- still reaches the grids.
+  if (keyHandledByFocus(e)) return;
 
-  // Octave: gui.js's original < and >, plus - and = as of Stage E.15 (the
-  // unshifted keys in the same place, which is what a hand reaching for the
-  // octave actually finds). Matched on e.key rather than e.code so it's the
-  // printed character that counts -- unlike note entry, which is positional
-  // (see layouts.js).
+  // Octave: < and >, plus - and = -- the unshifted keys in the same place, which
+  // is what a hand reaching for the octave actually finds. Matched on e.key
+  // rather than e.code so the printed character is what counts, unlike note
+  // entry, which is positional (see layouts.js).
   if (e.key === '<' || e.key === '-') { shiftOctave(-1); return; }
   if (e.key === '>' || e.key === '=') { shiftOctave(1); return; }
 
@@ -549,7 +529,6 @@ function onKeyDown(e) {
     return;
   }
 
-  // Stage E.16: select-all alongside the copy/paste that were already here.
   // KeyA is never a note key in either layout (the chromatic table above and
   // scales.js's two straight rows both start at KeyZ/KeyQ), so this needs no
   // window or mode guard of its own.
@@ -582,7 +561,7 @@ function onKeyDown(e) {
       e.preventDefault();
       return;
     }
-    // Stage E.14: shift+Delete/Backspace clears the whole row -- all 4 note
+    // Shift+Delete/Backspace clears the whole row -- all 4 note
     // columns at once, since a chord is entered as a row and wants deleting as
     // one too (plain Delete still clears just the cell/selection below). Notes
     // only, not the row's fx cell: this is a note-column gesture, and fx
@@ -597,7 +576,7 @@ function onKeyDown(e) {
       e.preventDefault();
       return;
     }
-    // Stage E.15's transpose shortcuts, matching the right-click menu. Alt is
+    // Transpose shortcuts, matching the right-click menu. Alt is
     // the one free modifier here: ctrl+arrows already jump to the end of a grid
     // and shift+arrows extend the selection (both in handleNav), and this has
     // to be checked before it for the shift+alt pair to mean an octave rather
@@ -616,13 +595,12 @@ function onKeyDown(e) {
       e.preventDefault();
       return;
     }
-    // Piano-key emulation, ported from gui.js's keyDown: live-plays through
-    // panels/keyboard.js (state.previewNote, the same callback-field
-    // pattern as state.notify/state.requestStop -- keeps this module from
-    // needing to import keyboard.js) in either mode, but only *writes* into
-    // the pattern grid when a pattern is actually focused. previewNote does
-    // the raw-key-offset -> actual-note-number math (octave + NOTE_OFFSET)
-    // and hands the result back so both sides agree on the exact value.
+    // Piano-key emulation: live-plays through panels/keyboard.js in either mode
+    // (state.previewNote, a callback field like state.notify/state.requestStop,
+    // so this module needn't import keyboard.js), but only *writes* into the
+    // pattern grid when a pattern is actually focused. previewNote does the raw-
+    // key-offset -> note-number math (octave + NOTE_OFFSET) and hands the result
+    // back, so both sides agree on the exact value.
     const n = noteKeys()[e.code];
     if (n !== undefined) {
       const note = state.previewNote ? state.previewNote(n) : n + state.octave * 12 + engine.NOTE_OFFSET;
@@ -654,10 +632,9 @@ function cellTarget(e) {
   return el && { channel: el.dataset.channel !== undefined ? +el.dataset.channel : null, col: +el.dataset.col, row: +el.dataset.row };
 }
 
-// Stage E.16: only the left button places the cursor. mousedown fires for a
-// right-click too, and it used to collapse the selection an instant before
-// `contextmenu` opened the menu on it -- so right-clicking a range you had just
-// dragged always ended up transposing a single cell.
+// Only the left button places the cursor. mousedown fires for a right-click too,
+// and collapsing the selection an instant before `contextmenu` opens a menu on
+// it would make right-clicking a dragged range act on a single cell.
 const primary = e => e.button === 0;
 
 function seqMouseDown(e) {
@@ -675,7 +652,7 @@ function patternsMouseDown(e) {
   const t = cellTarget(e);
   if (!t || !primary(e)) return;
   lastEntry = null;
-  // Stage E.16: shift+click extends the selection from its anchor to the clicked
+  // Shift+click extends the selection from its anchor to the clicked
   // cell -- the mouse equivalent of shift+arrow, which likewise moves only the
   // col1/row1 corner and leaves the active cell where it is. Restricted to the
   // focused channel: one pattern cursor is shared by all of them, so an anchor in
@@ -695,7 +672,7 @@ function patternsMouseDown(e) {
     dragMode = 'pattern';
   }
   render(); notify();
-  // Stage E.14: the second press of a double-click on a note cell opens the
+  // The second press of a double-click on a note cell opens the
   // entry pie. Bound to mousedown rather than dblclick deliberately -- dblclick
   // only fires after the second release, by which point a drag-out-and-release
   // pick is impossible; here the button is still down, so the whole pick can be
@@ -709,7 +686,7 @@ function patternsMouseDown(e) {
 }
 function onMouseOver(e) {
   if (!dragMode) return;
-  // Stage E.16: a drag is only live while the button is genuinely still down.
+  // A drag is only live while the button is genuinely still down.
   // Releasing outside the window never fires our mouseup, and without this the
   // selection would go on following the pointer with nothing held -- as would a
   // mouseover fired merely because render() replaced the element under a
@@ -725,10 +702,10 @@ function onMouseOver(e) {
 }
 function onMouseUp() { dragMode = null; }
 
-// --- rendering: full innerHTML rebuild on every change. Simpler and safer
-// than surgical per-cell diffing (gui.js's approach) for a dev-only tool at
-// this grid size (a few thousand cells at most); BPM/rows inputs live
-// outside the rebuilt containers so typing in them doesn't lose focus. ---
+// --- rendering: full innerHTML rebuild on every change. Simpler and safer than
+// surgical per-cell diffing at this grid size (a few thousand cells at most).
+// The BPM/rows inputs live outside the rebuilt containers, so typing in them
+// doesn't lose focus. ---
 function seqCellHTML(col, row) {
   const cls = state.editMode !== 'sequence' ? ''
     : col === seq.col && row === seq.row ? 'cursor'
@@ -736,9 +713,9 @@ function seqCellHTML(col, row) {
   return `<td class="${cls}" data-col="${col}" data-row="${row}">${seqGrid.toHTML(seqGrid.get(col, row))}</td>`;
 }
 
-// Which rows get the beat highlight -- every 4th until Stage E.13 made it a
-// control (state.beatRows, persisted); a 3/4 or 6/8 loop wants 3 or 6, and a
-// 32nd-note pattern wants 8. Guarded against 0 since the input is typed into.
+// Which rows get the beat highlight. A control rather than a fixed 4
+// (state.beatRows, persisted): a 3/4 or 6/8 loop wants 3 or 6, a 32nd-note
+// pattern wants 8. Guarded against 0 since the input is typed into.
 const isBeatRow = row => row % Math.max(1, state.beatRows | 0) === 0;
 
 function renderSequencer() {
@@ -802,12 +779,11 @@ function renderPatterns() {
     html += '</tbody></table></div>';
   }
   $('pat-scroll').innerHTML = html;
-  // Stage E.5: cached per-channel row <tr> lists, indexed to match `row`
-  // exactly (rendered 0..patternLen-1 in order above) -- lets
-  // followPlayback's per-row-tick fast path move the curRow/cursor classes
-  // with plain classList calls instead of rebuilding this whole grid on
-  // every playback row (see followPlayback's comment on why that rebuild
-  // was the actual framerate cost, not the scope's own drawing).
+  // Cached per-channel row <tr> lists, indexed to match `row` exactly (rendered
+  // 0..patternLen-1 in order above). This is what lets followPlayback's per-row
+  // fast path move the curRow/cursor classes with plain classList calls instead
+  // of rebuilding the whole grid on every playback row -- that rebuild is the
+  // real framerate cost during playback.
   patRowEls = [...$('pat-scroll').querySelectorAll('.pat-col')].map(col => [...col.querySelectorAll('tbody tr')]);
 }
 
@@ -818,12 +794,11 @@ function refreshSongControls() {
   if (document.activeElement !== beatEl) beatEl.value = state.beatRows;
 }
 
-// Stage E.13: arrowing the cursor below the fold used to do nothing visible.
-// Two causes, one fix -- render() replaces each grid's innerHTML wholesale,
-// which resets its scroller to the top on *every* render, and nothing ever
-// scrolled the cursor back into view afterwards. block/inline 'nearest' both
-// restores the position after that rebuild and follows the cursor off-screen,
-// while staying a no-op whenever the cursor is already visible.
+// render() replaces each grid's innerHTML wholesale, which resets its scroller to
+// the top, so the cursor has to be put back in view afterwards or arrowing below
+// the fold does nothing visible. block/inline 'nearest' restores the position
+// after that rebuild and follows the cursor off-screen, while staying a no-op
+// whenever the cursor is already visible.
 function scrollCursorIntoView() {
   const el = state.editMode === 'sequence'
     ? $('seq-tbody').querySelector('td.cursor')
@@ -838,18 +813,15 @@ function render() {
   scrollCursorIntoView();
 }
 
-// --- playback row-following (Stage E.1, ported from gui.js's
-// updateFollower/startFollower): main.js polls this with the playing
-// <audio> element's currentTime while a song plays. Moves the sequencer and
-// pattern/fx cursors along with the song -- same as gui.js, which reused
-// its real editing cursors for this rather than a separate marker -- so the
-// pattern view naturally switches to whatever pattern the playing row is
-// on, and the existing cursor/curRow highlighting doubles as the "follow"
-// indicator with no new CSS. The grid re-render only happens on an actual
-// row change (not every ~50ms poll tick); the per-channel note highlight
-// below runs every tick since a note's envelope can end mid-row. ---
+// --- playback row-following: main.js calls this every frame with the elapsed
+// time of the playing buffer. It moves the real editing cursors rather than
+// drawing a separate marker, so the pattern view switches to whatever pattern the
+// playing row is on and the existing cursor/curRow highlighting doubles as the
+// follow indicator with no new CSS. The grid re-renders only on an actual row
+// change; the per-channel note highlight below runs every tick, since a note's
+// envelope can end mid-row. ---
 let followSeq = -1, followPat = -1;
-// Stage E.5: populated by renderPatterns(), see its comment.
+// Populated by renderPatterns(), see its comment.
 let patRowEls = [];
 
 // Moves the curRow highlight (and, in pattern/fx edit mode, the live
@@ -870,23 +842,22 @@ function moveFollowRow(oldRow, newRow) {
     if (newRow >= 0 && rows[newRow]) {
       rows[newRow].classList.add('curRow');
       if (focused && cursorCol >= 0) rows[newRow].children[cursorCol].classList.add('cursor');
-      // Stage E.13: keep a playing song's row in view as it runs past the
-      // bottom of the panel. Focused channel only, and 'nearest' is a no-op
-      // while the row is already visible, so this stays cheap on a path that
-      // runs dozens of times a second (see Stage E.5's note above).
+      // Keep a playing song's row in view as it runs past the bottom of the
+      // panel. Focused channel only, and 'nearest' is a no-op while the row is
+      // already visible, so this stays cheap on a path that runs dozens of times
+      // a second.
       if (focused) rows[newRow].scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }
   }
 }
 
-// Stage E.7: the sequence-row/channel range currently playing, set by
-// setFollowRange() whenever main.js starts a render (full song by default,
-// or a restricted range for "play selected"/solo-pattern -- see
-// getPlayRange() above). player-worker.js's generated buffer only ever
-// contains samples from `firstRow`/`firstCol` on (see engine.js's
-// player-worker.js:init), so row 0 of *that* buffer is sequence row
-// followRow0, not row 0 -- everything below that reads `t` against the
-// buffer needs this offset to land on the right sequence/pattern position.
+// The sequence-row/channel range currently playing, set by setFollowRange()
+// whenever main.js starts a render -- the full song by default, or a restricted
+// range for "play selected"/solo-pattern (see getPlayRange() above).
+// player-worker.js's buffer only contains samples from `firstRow`/`firstCol` on,
+// so row 0 of *that* buffer is sequence row followRow0, not row 0; everything
+// below that reads `t` against the buffer needs this offset to land on the right
+// sequence/pattern position.
 let followRow0 = 0, followCol0 = 0, followCol1 = engine.MAX_CHANNELS - 1;
 export function setFollowRange(range) {
   followSeq = followPat = -1;
@@ -895,12 +866,10 @@ export function setFollowRange(range) {
   followCol1 = range ? range.lastCol : engine.MAX_CHANNELS - 1;
 }
 
-// Stage E.2: which note (if any) channel `chan` is currently sounding at
-// time t, ported from gui.js's getSamplesSinceNote + the envelope-duration
-// check in its redrawPlayerGfx (used there to fade the per-channel LEDs;
-// here to decide whether panels/keyboard.js should still show the key lit).
-// Scans backward through the pattern for the most recent note trigger, then
-// checks whether we're still within that note's total attack+release time.
+// Which note, if any, channel `chan` is sounding at time t -- what decides
+// whether panels/keyboard.js still shows a key lit. Scans backward through the
+// pattern for the most recent note trigger, then checks whether we are still
+// inside that note's total attack+release time.
 function samplesSinceNote(t, chan) {
   const patternLen = state.song.patternLen;
   const nFloat = t * 44100 / state.song.rowLen;
@@ -949,14 +918,12 @@ export function followPlayback(t) {
     setCursor(fx, 0, patPos, true);
     render(); notify();
   } else if (patPos !== followPat) {
-    // Stage E.5: same pattern set, just a later row within it -- this is
-    // the common case, happening every playback row (up to dozens of times
-    // a second at high BPM). Previously this called the same full
-    // render()+notify() as above, rebuilding all MAX_CHANNELS pattern
-    // columns' innerHTML from scratch every single tick -- the actual cost
-    // behind "scope framerate isn't great", since that DOM rebuild + layout
-    // was contending with the scope's own (much cheaper) canvas draw on the
-    // same main thread. Moving just the two affected classes is enough.
+    // Same pattern set, just a later row within it -- the common case, hit on
+    // every playback row, up to dozens of times a second at high BPM. A full
+    // render() here would rebuild all MAX_CHANNELS pattern columns' innerHTML
+    // every tick, and that DOM rebuild plus layout contends with the scope's
+    // canvas draw on the same thread. Moving the two affected classes is
+    // enough.
     const oldPat = followPat;
     followPat = patPos;
     setCursor(pat, pat.col, patPos, true);

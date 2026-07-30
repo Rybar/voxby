@@ -1,30 +1,18 @@
-// Voxby entry point (plans/soundbox-revamp.md Phase 3 Stage B; the editor was
-// called soundbox until Stage E.17 renamed it. The directory, the /soundbox/
-// dev-server route, the window.soundbox test hook and the localStorage keys
-// deliberately keep the old name -- none of them are user-visible, and renaming
-// the storage keys would silently discard everyone's saved preferences). Wires
-// the file/transport shell against engine.js plus the vendored
-// player.js/jammer.js/presets.js/rle.js/third_party globals —
-// see index.html's script-loading comment for why those stay classic
-// scripts. This file wires New/Open/Export JS/Export WAV/Play/Stop/Help/About
-// plus initializing the instrument (Stage C), tracker (Stage D), keyboard
-// (Stage E), and scope (Stage E.2, now also fed by the jammer as of
-// Stage E.4) panels.
+// Voxby entry point. Wires the file/transport bar against engine.js plus the
+// vendored player.js/jammer.js/presets.js/rle.js/third_party globals (see
+// index.html's script order for why those stay classic scripts), and
+// initializes the instrument, tracker, keyboard and scope panels.
 //
-// Playback here is deliberately simple (render the whole song with
-// CPlayer, play it through a plain <audio> element) — the old VU-meter
-// canvas was left behind in gui.js by Stage A (tracker/DOM-entangled) and
-// is dropped rather than ported (nothing in the new UI reads it). Playback
-// row-following *is* ported, as of Stage E.1's re-scope: panels/tracker.js's
-// followPlayback(), polled here against audioEl.currentTime, moves the
-// sequencer/pattern/fx cursors along with the song the same way gui.js's
-// updateFollower did.
+// The directory, the /soundbox/ dev-server route, the window.soundbox test hook
+// and the localStorage keys all still say "soundbox": none of them is
+// user-visible, and renaming the storage keys would silently discard everyone's
+// saved preferences.
 //
-// The legacy "Save" dialog (a bookmarkable data: URL for the binary song
-// format) is dropped rather than ported: Phase 4 gives this tool a real
-// save/load loop — export a .js file, re-import it later — which is a
-// better fit for a repo-local dev tool than a giant URL. Export JS now
-// doubles as "save" (it clears the dirty flag New/Open check against).
+// Playback renders the whole selection with CPlayer and plays the result through
+// one AudioBufferSourceNode; panels/tracker.js's followPlayback() moves the grid
+// cursors along with it. Saving is Export JS -- a real file, re-importable --
+// rather than the bookmarkable data: URL SoundBox used, and it doubles as save
+// by clearing the unsaved-changes flag.
 
 import * as engine from './engine.js';
 import { state, markClean, isDirty } from './state.js';
@@ -35,22 +23,23 @@ import { initTrackerPanel, refreshTrackerPanel, followPlayback, stopFollowingPla
 import { initKeyboardPanel, refreshKeyboardPanel, previewNote, syncJammer, highlightPlaybackNotes, shadowNotes, getJammer } from './panels/keyboard.js';
 import { initScopePanel, drawScope } from './panels/scope.js';
 import { initTheme } from './theme.js';
+import { keyHandledByFocus } from './focus.js';
 import { DEMO_SONGS, SECTIONS } from './songs/index.js';
 
 // console/automation access, mirroring tools/scenetool/main.js's
 // `window.scenetool = {...}` hook. getJammer exposed for tests to confirm
-// the jammer is actually producing samples (Stage E.4) without depending on
-// canvas-pixel heuristics. getAudioState (Stage E.5) exposes the shared
+// the jammer is actually producing samples without depending on canvas-pixel
+// heuristics. getAudioState exposes the shared
 // audioContext's .state so tests can confirm the startup gate actually
 // resumed it, without importing audio.js themselves.
 window.soundbox = { state, engine, loadSong, loadDemoSong, DEMO_SONGS, importSongFile, getJammer, getAudioState: () => audioContext.state };
 
 const $ = id => document.getElementById(id);
 
-// Stage E.5: the one required user gesture that unlocks audioContext (see
-// audio.js) for both the jammer and rendered song playback -- see
-// index.html's #audio-gate comment for why it's a dedicated non-dismissible
-// overlay rather than the generic #picker modal.
+// The one required user gesture that unlocks audioContext (see audio.js) for
+// both the jammer and rendered song playback. A dedicated non-dismissible
+// overlay rather than the generic #picker modal: there is nothing to do in here
+// until it has been answered.
 $('audio-gate-start').onclick = () => {
   audioContext.resume();
   $('audio-gate').classList.add('closed');
@@ -62,9 +51,7 @@ for (const [id, icon] of Object.entries({
   'stop-song': 'stop', 'help-btn': 'help', 'about-btn': 'about',
 })) $(id).insertAdjacentHTML('afterbegin', svgIcon(icon) + ' ');
 
-// Stage E.18: the manual (help.html -- rewritten for this editor, with its own
-// screenshots) gets a button of its own rather than only a link buried in the
-// About dialog. Its own tab, so a song in progress isn't navigated away from.
+// Its own tab, so a song in progress isn't navigated away from.
 $('help-btn').onclick = () => window.open('help.html', '_blank', 'noopener');
 
 function refresh() {
@@ -76,23 +63,22 @@ function refresh() {
   refreshKeyboardPanel();
   syncJammer();
 }
-// Stage D's tracker panel calls this after any cursor move or edit that
-// isn't itself a full song load (state.song reassignment already goes
-// through loadSong() -> refresh()) -- keeps the instrument panel's FX-cell
-// preview and the status line in sync without an import cycle between
-// panels/instrument.js and panels/tracker.js.
+// The tracker panel calls this after any cursor move or edit that isn't itself a
+// full song load (a state.song reassignment already goes through loadSong() ->
+// refresh()). It keeps the instrument panel's FX-cell preview and the status line
+// in sync without an import cycle between panels/instrument.js and
+// panels/tracker.js.
 state.notify = refresh;
-// Stage E: lets tracker.js live-preview piano-key note entry through
-// keyboard.js's jammer without importing keyboard.js (see state.js's
-// comment on this field for why that import would close a cycle).
+// Lets tracker.js live-preview piano-key note entry through keyboard.js's jammer
+// without importing keyboard.js (see state.js's comment on this field for why
+// that import would close a cycle).
 state.previewNote = previewNote;
-// Stage E.2: lets tracker.js's followPlayback() light up the on-screen keys
-// currently sounding during song playback (see state.js's comment on this
-// field for why it's a callback rather than a direct import).
+// Lets tracker.js's followPlayback() light up the on-screen keys currently
+// sounding during song playback -- a callback rather than a direct import, for
+// the same reason.
 state.highlightNotes = highlightPlaybackNotes;
-// Stage E.14: lets the entry pie (panels/pie.js, opened from tracker.js) outline
-// the notes it's about to write on the on-screen piano -- same callback-field
-// reasoning as the two above.
+// Lets the entry pie (panels/pie.js, opened from tracker.js) outline the notes
+// it's about to write on the on-screen piano -- same callback-field reasoning.
 state.shadowNotes = shadowNotes;
 
 function loadSong(song) {
@@ -102,7 +88,7 @@ function loadSong(song) {
 }
 
 // --- generic modal shell, reused for the open-song picker, the about and
-// share dialogs, and (Stage E.18) the confirm/notice prompts below ---
+// share dialogs, and the confirm/notice prompts below ---
 // `onClose` runs whenever the modal goes away by any route the user has --
 // its own Cancel button, the backdrop, or Escape. confirmModal() needs that
 // to settle its promise on the paths that aren't its own button; without it
@@ -115,19 +101,22 @@ function openModal(bodyHTML, onClose = null) {
 }
 function closeModal() {
   $('picker').classList.remove('open');
+  // The body is emptied, not just hidden: markup left behind means
+  // #ask-ok/#picker-cancel/#gen-bar still resolve, with live handlers, long after
+  // the dialog they belong to is gone.
+  $('picker-body').innerHTML = '';
   const cb = modalOnClose;
   modalOnClose = null;
   cb && cb();
 }
 
-// Stage E.18 (the plan's last section: "new/open/save/about -> real modal
-// components"): the last two dialogs in the tool that weren't ours. A native
-// confirm()/alert() renders in the browser's own light chrome, prefixed with
-// the origin ("localhost:8787 says"), and blocks the renderer outright -- in a
-// dark full-screen tool it reads as something having gone wrong. Both are now
-// the same #picker panel as everything else, so they're themed, dismissible
-// the same three ways, and don't freeze playback while they're up. The cost is
-// that they're asynchronous, hence the awaits at the call sites.
+// The editor's own confirm/notice prompts. A native confirm()/alert() renders in
+// the browser's light chrome, prefixed with the origin ("localhost:8787 says"),
+// and blocks the renderer outright -- in a dark full-screen tool it reads as
+// something having gone wrong. These are the same #picker panel as every other
+// dialog: themed, dismissible the same three ways, and they don't freeze
+// playback. The cost is that they're asynchronous, hence the awaits at the call
+// sites.
 function confirmModal(heading, message, okLabel) {
   return new Promise(resolve => {
     // Guarded because closeModal() fires onClose on *every* dismissal route,
@@ -142,6 +131,52 @@ function confirmModal(heading, message, okLabel) {
     $('ask-ok').onclick = () => { settle(true); closeModal(); };
     $('picker-cancel').onclick = closeModal;
   });
+}
+
+// The render-progress dialog. Rendering a long song is genuinely slow -- the
+// library's biggest tune is 6 channels over 2.5 minutes, and the worker
+// allocates and walks a 50 MB Int32Array per channel -- so Play without one goes
+// quiet for several seconds and reads as a broken button. The bar is driven by
+// player-worker.js's own per-row progress messages.
+//
+// Nothing appears for the first PROGRESS_DELAY ms: an SFX or a short pattern
+// renders in well under a frame, and a dialog that flashes up and vanishes on
+// every Play would be worse than none.
+const PROGRESS_DELAY = 200;
+function progressModal(heading, hint, onCancel) {
+  let opened = false, finished = false, pct = 0;
+  const paint = () => {
+    if (!opened) return;
+    $('gen-bar').style.width = pct * 100 + '%';
+    $('gen-pct').textContent = Math.round(pct * 100) + '%';
+    $('gen-track').setAttribute('aria-valuenow', Math.round(pct * 100));
+  };
+  const timer = setTimeout(() => {
+    // Another dialog opened inside the delay window (the top bar is still live
+    // for those first few frames) -- leave it alone and render silently.
+    if (finished || $('picker').classList.contains('open')) return;
+    opened = true;
+    openModal(`<h3>${heading}…</h3><p class="hint">${hint}</p>
+      <div class="gen-row">
+        <div class="gen-track" id="gen-track" role="progressbar"
+             aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="gen-bar"></div></div>
+        <span class="mono" id="gen-pct">0%</span>
+      </div>
+      <div class="row"><button id="picker-cancel" title="Stop rendering and go back to the song">Cancel</button></div>`,
+      onCancel);
+    $('picker-cancel').onclick = closeModal;
+    paint();
+  }, PROGRESS_DELAY);
+  return {
+    set(p) { pct = p; paint(); },
+    // Closes without running onCancel -- this is the success path, and
+    // closeModal() fires onClose on every route including this one.
+    done() {
+      finished = true;
+      clearTimeout(timer);
+      if (opened) { modalOnClose = null; closeModal(); opened = false; }
+    },
+  };
 }
 
 function noticeModal(heading, message) {
@@ -167,25 +202,17 @@ $('new-song').onclick = async () => {
   loadSong(engine.makeNewSong());
 };
 
-// Stage E.12: the list this dialog opens onto used to be SoundBox's own
-// vendored demo-songs.js (a handful of upstream tunes as compressed binary
-// blobs, decoded with binToSong). It's now songs/index.js — Ryan's own
-// converted back catalogue as plain `export default {...}` modules, split
-// into Songs and SFX sections. index.html no longer loads demo-songs.js at
-// all; binToSong() is still reached by importSongFile()'s .snd route below.
-//
-// Each entry is fetched on click (dynamic import — see songs/index.js on
-// why) and run through normalizeSong, since these files are sparse exports
+// Each library entry is fetched on click (a dynamic import — see songs/index.js
+// for why) and run through normalizeSong, since those files are sparse exports
 // exactly like anything else the importer takes.
 async function loadDemoSong(entry) {
   const mod = await import(`./songs/${entry.file}`);
   return engine.normalizeSong(mod.default);
 }
 
-// Named (Stage E.18) so a discard prompt raised from inside it can put it back
-// afterwards: the prompt reuses the same #picker panel, so cancelling used to
-// leave the user with no dialog at all instead of the song list they were
-// halfway through choosing from.
+// Named so a discard prompt raised from inside it can put it back afterwards: the
+// prompt reuses the same #picker panel, so without this, cancelling leaves you
+// with no dialog at all rather than the song list you were choosing from.
 function openSongDialog() {
   const cards = SECTIONS.map(section =>
     `<div class="pick-section">${section}</div>` +
@@ -226,12 +253,12 @@ function openSongDialog() {
 }
 $('open-song').onclick = openSongDialog;
 
-// --- import a song file (Phase 4) ---
+// --- import a song file ---
 // Two routes, picked by extension/MIME: a .js file exported by this editor
 // goes through engine.songFromJS() (which evaluates it as a real ES module
 // -- hence the trust warning in the open dialog and on the drop overlay),
 // anything else is tried as one of the legacy binary formats binToSong()
-// understands, the same bytes the old gui.js drag-and-drop path accepted.
+// understands.
 // Either way the load follows the same sequence as the demo-song picker
 // above: unsaved-changes confirm, stop playback, swap the song in, refresh,
 // re-snapshot (loadSong -> markClean).
@@ -284,11 +311,10 @@ document.addEventListener('drop', e => {
 });
 
 // --- about ---
-// Stage E.16 spelled the credit out properly rather than leaving it a footnote:
-// the synth, the song format, the instrument presets and both players are still
-// Marcus Geelnard's, and the GPL comes with them. A shorter version of the same
-// thing sits on the startup gate (index.html), which is the first thing anyone
-// opening the editor sees.
+// The synth, the song format, the instrument presets and both players are Marcus
+// Geelnard's, and the GPL comes with them -- so the credit is spelled out here
+// rather than left a footnote. A shorter version sits on the startup gate
+// (index.html), which is the first thing anyone opening the editor sees.
 $('about-btn').onclick = () => {
   openModal(`<h3>About Voxby</h3>
     <p><b>Voxby</b> is a synth music tracker for writing js13k-sized music: a
@@ -297,22 +323,19 @@ $('about-btn').onclick = () => {
     whose synth, players, instrument presets and song format it keeps intact.</p>
     <p>Voxby inherits that licence, the
     <a href="gpl.txt" target="_blank" rel="noopener noreferrer">GPL v3</a>; the minimal
-    player routine stays under zlib/libpng, as upstream.</p>
+    player routine stays under zlib/libpng, as it does in SoundBox.</p>
     <p>The <a href="help.html" target="_blank">manual</a> covers the panels, note entry, the FX
     track and how to use a song in a game. Every control in here also has a hover tip.</p>
     <div class="row"><button id="picker-cancel" title="Close">Close</button></div>`);
   $('picker-cancel').onclick = closeModal;
 };
 
-// --- share (Stage E.14) ---
-// Restores the URL-encoded song the original SoundBox had (gui.js's
-// makeURLSongData, dropped by Stage B along with the rest of its dialogs) for
-// posting a tune in chat without attaching a file. The payload lives in the
-// *hash*, so it never reaches the server and needs no route of its own -- the
-// page reads it at boot below. SHARE_BASE is where the app is actually deployed
-// (Stage E.17 -- GitHub Pages off the voxby repo's master branch, under Ryan's
-// own domain) rather than the local dev server: a link is only worth sending if
-// it opens somewhere public. https, not http: the payload never reaches the
+// --- share ---
+// A whole song packed into a URL, for posting a tune in chat without attaching a
+// file. The payload lives in the *hash*, so it never reaches the server and needs
+// no route of its own -- the page reads it at boot below. SHARE_BASE is where the
+// app is deployed rather than the local dev server: a link is only worth sending
+// if it opens somewhere public. https, not http: the payload never reaches the
 // server, but the page's own clipboard/keyboard-layout calls need a secure
 // context, and Pages doesn't enforce the upgrade itself.
 const SHARE_BASE = 'https://ryanbmalm.com/voxby/';
@@ -375,33 +398,60 @@ $('export-js').onclick = () => {
   markClean();
 };
 
-// doneFn also receives the CPlayer instance -- Stage E.2's scope panel
-// reads already-rendered samples back out of it (player.getData(t, n)) to
-// draw a waveform against the currently-playing <audio> element's
-// currentTime, the same call gui.js's VU-meter used. `opts`, added in Stage
-// E.7, is player-worker.js's own {firstRow,lastRow,firstCol,lastCol} shape
-// (undefined renders the whole song, same as before) -- see
-// panels/tracker.js's getPlayRange().
-function generateWave(song, doneFn, opts) {
-  const player = new CPlayer();
+// doneFn receives (wave, player, live): the CPlayer instance, because the scope
+// panel reads already-rendered samples back out of it (player.getData(t, n)) to
+// draw a waveform against playback's elapsed time; and `live`, a predicate that
+// goes false if the user cancelled or started another render, for callers that
+// keep working asynchronously after the samples land. `opts` is
+// player-worker.js's own {firstRow,lastRow,firstCol,lastCol} shape (undefined
+// renders the whole song) -- see panels/tracker.js's getPlayRange().
+//
+// Two long-lived CPlayers, one per purpose, instead of a fresh one
+// per render. Each `new CPlayer()` spawns a Worker that nothing ever
+// terminates, and that worker holds its finished mix buffer (tens of MB on a
+// real song) alive for the rest of the session -- so every Play used to leak
+// one. Reusing an instance costs nothing: player-worker.js's init() rebuilds
+// all of its state per generate. They are kept separate so an Export WAV can't
+// overwrite the buffer the scope is reading out of the playing song.
+const players = {};
+function playerFor(kind) {
+  return players[kind] || (players[kind] = new CPlayer());
+}
+
+// Bumped by every render request. A callback whose ticket is stale belongs to a
+// render that was cancelled or superseded, and is ignored -- the worker itself
+// can't be interrupted without editing vendored code, so a cancelled render
+// runs to completion in the background and its result is dropped.
+let renderTicket = 0;
+function generateWave(song, doneFn, opts, kind = 'play', heading = 'Rendering audio') {
+  const player = playerFor(kind);
+  const ticket = ++renderTicket;
+  const live = () => ticket === renderTicket;
+  const bar = progressModal(heading,
+    `Voxby renders the whole thing to samples before playing a note of it. Long songs, many
+     channels and the delay effect are what make this take a moment.`,
+    () => { if (live()) renderTicket++; });
   player.generate(song, opts, progress => {
-    if (progress >= 1) doneFn(player.createWave(), player);
+    if (!live()) return;
+    bar.set(progress);
+    if (progress >= 1) {
+      bar.done();
+      doneFn(player.createWave(), player, live);
+    }
   });
 }
 
 $('export-wav').onclick = () => {
   generateWave(state.song, wave => {
     saveAs(new Blob([wave], { type: 'application/octet-stream' }), 'voxby-music.wav');
-  });
+  }, undefined, 'wav', 'Rendering WAV');
 };
 
 // --- transport ---
-// Stage E.5 re-scope: playback moved off a plain <audio> element (its own
-// decode/output pipeline, entirely outside Web Audio) onto an
-// AudioBufferSourceNode on the shared audioContext (tools/soundbox/
-// audio.js) -- the same context the jammer now plays through -- so there's
-// one audio graph and one autoplay-policy unlock (the startup gate below)
-// instead of two independently-unlocked pipelines.
+// Playback runs through an AudioBufferSourceNode on the shared audioContext
+// (audio.js), the same context the jammer plays through: one audio graph and one
+// autoplay-policy unlock (the startup gate above) rather than two independently
+// unlocked pipelines.
 let currentSource = null, currentPlayer = null, playStartTime = 0, playDuration = 0;
 function stopSong() {
   if (currentSource) {
@@ -413,15 +463,18 @@ function stopSong() {
   stopFollowingPlayback();
   state.playing = false;
 }
-// Stage E.7: `range` is undefined for a full-song Play, or a
+// `range` is undefined for a full-song Play, or a
 // {firstRow,lastRow,firstCol,lastCol} from getPlayRange() for Play
 // selected/Space -- passed straight through to player-worker.js's opts and,
 // separately, to setFollowRange() so row-following/note-highlighting read
 // against the right offset (see tracker.js's comment on followRow0).
 function startPlayback(range) {
   stopSong();
-  generateWave(state.song, (wave, player) => {
+  generateWave(state.song, (wave, player, live) => {
     audioContext.decodeAudioData(wave.buffer).then(buffer => {
+      // Decoding is quick next to the render, but it is still async: a Stop or
+      // another Play in that window must win, or the song starts anyway.
+      if (!live()) return;
       const source = audioContext.createBufferSource();
       source.buffer = buffer;
       source.loop = $('loop-playback').checked;
@@ -445,42 +498,37 @@ $('play-selected').onclick = () => startPlayback(getPlayRange());
 $('stop-song').onclick = stopSong;
 state.requestStop = stopSong;
 
-// Stage E.7: "hitting space should play either the selection from the
-// sequence editor if a selection has been made or the sequence editor is in
-// focus, or solo-play the current pattern being edited" -- getPlayRange()
-// (panels/tracker.js) picks which of those two per state.editMode, matching
-// #play-selected exactly (same handler, different trigger). Ignored while a
-// text input/select has focus (typing a space in the BPM/rows fields
-// shouldn't trigger playback) and while the startup audio gate is still up.
+// Space plays the sequencer's selection when that grid is being worked in, or
+// solo-plays the pattern being edited otherwise; getPlayRange()
+// (panels/tracker.js) picks between them, so this is #play-selected's behaviour
+// on a different trigger. Ignored while the startup audio gate is still up.
 document.addEventListener('keydown', e => {
   if (e.code !== 'Space') return;
-  const ae = document.activeElement;
-  if (ae && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) return;
+  // focus.js rather than a tag-name test, so Space still plays with an instrument
+  // slider focused -- but not with the loop checkbox or a button focused, where
+  // the browser's own Space press already means something.
+  if (keyHandledByFocus(e)) return;
   if (!$('audio-gate').classList.contains('closed')) return;
+  // ...and not while a dialog is up: the generation progress modal in
+  // particular, whose whole point is that a render is already running.
+  if ($('picker').classList.contains('open')) return;
   e.preventDefault();
   if (state.playing) stopSong();
   else startPlayback(getPlayRange());
 });
 
-// Stage E.1/E.2/E.3/E.4/E.5: a single persistent requestAnimationFrame loop
-// (started once below, never stopped) drives both playback row-following
-// and the scope. Running continuously rather than only while a song plays is
-// what lets the scope pick up jamming with no separate start/stop
-// bookkeeping for it. `t` is elapsed real seconds since playStart, wrapped
-// modulo the rendered buffer's duration when looping
-// (audioContext.currentTime only ever counts up -- unlike the old <audio>
-// element, nothing resets it for us on loop).
+// One persistent requestAnimationFrame loop, started once and never stopped,
+// drives both playback row-following and the scope. Running continuously rather
+// than only during playback is what lets the scope pick up jamming with no
+// start/stop bookkeeping of its own. `t` is elapsed real seconds since
+// playStart, wrapped modulo the rendered buffer's duration when looping --
+// audioContext.currentTime only counts up, and nothing resets it on loop.
 //
-// Stage E.6: the scope gets *both* sources every frame, not whichever one
-// this loop guesses is more interesting. It used to pass
-// `state.playing && currentPlayer ? currentPlayer : getJammer()`, which
-// silently dropped the jammer for the whole duration of a playing song --
-// and a rendered song is mostly silence when it's one note in a long
-// sequence, so jamming over it drew a flat line (the reported bug). Both
-// nodes really are connected to the shared context's destination at once,
-// so panels/scope.js sums them: what you see is what you hear. getJammer()
-// returns null until the first note is ever previewed, and currentPlayer is
-// null when nothing is playing -- scope.js filters those out.
+// The scope gets *both* sources every frame rather than whichever one this loop
+// guesses is more interesting: both nodes really are connected to the shared
+// context's destination at once, so panels/scope.js sums them and what you see
+// is what you hear. getJammer() returns null until the first note is previewed
+// and currentPlayer is null when nothing plays; scope.js filters those out.
 (function tick() {
   const t = state.playing ? (audioContext.currentTime - playStartTime) % playDuration : 0;
   if (state.playing) followPlayback(t);

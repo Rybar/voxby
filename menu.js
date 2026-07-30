@@ -1,8 +1,7 @@
-// Generic popup menu (plans/soundbox-revamp.md Stage E.15), used for the
-// pattern grid's right-click transpose menu. Deliberately not a panel and not
-// tracker-aware: openMenu() takes a position and a list of {label, hint, run}
-// items, so anything else that wants a context menu later (the sequencer, the
-// instrument cards) reuses this rather than growing a second one.
+// Generic popup menu, used for the pattern grid's right-click transpose menu.
+// Deliberately not a panel and not tracker-aware: openMenu() takes a position
+// and a list of {label, hint, run} items, so anything else wanting a context
+// menu reuses this rather than growing a second one.
 //
 // Same overlay technique as panels/pie.js -- a full-viewport div that catches
 // the dismissing click, with the actual menu positioned inside it -- but the

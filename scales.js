@@ -1,4 +1,4 @@
-// Scale + chord tables for note input (plans/soundbox-scale-chord-input.md).
+// Scale + chord tables for note input.
 // Pure data and math -- no DOM, no imports, no state: panels/tracker.js and
 // panels/keyboard.js both read from here, and keeping it dependency-free is
 // what lets both do so without closing an import cycle (tracker -> keyboard

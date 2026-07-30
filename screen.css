@@ -1,24 +1,15 @@
-/* Voxby screen.css — full rewrite (plans/soundbox-revamp.md Phase 3 Stage B)
-   against this repo's shared dark tool palette, adapted from
-   tools/scenetool/index.html's inline styles. Upstream SoundBox's rules (nested
-   <table class="ui">, gui/*.png sprite-swap widgets, blue #447/#559/#88f
-   tracker theme) were never carried over, and the last stage deleted gui.js and
-   the gui/ sprites they styled. The manual has its own stylesheet (help.css) —
-   it's a document, not this fixed-height application shell. */
+/* The editor's stylesheet, on this repo's shared dark tool palette. The manual
+   has its own (help.css) — it's a document, not this fixed-height application
+   shell. */
 
-/* Stage E.9: every color below is a var(--xxx) against this palette rather
-   than a literal hex, so the whole UI can be recolored from one place.
-   --accent is the one exposed as user-adjustable (theme.js's #theme-accent
-   color input in #top, defaulting to bright orange per Ryan's "change the
-   bright blue used everywhere" ask) -- everything else here is a fixed,
-   higher-contrast dark palette (also per Ryan's ask: the old #8a919d-on-
-   #1a1c20 dim text read as "dark grey on black"). --bg-selected/--bg-currow
-   derive from --accent via color-mix() so a picked-cell/current-row tint
-   updates for free when the accent changes, without a second set of
-   hardcoded per-theme colors. panels/scope.js draws its own canvas pixels,
-   which can't inherit a CSS variable -- it reads theme.js's getAccent()
-   instead (see that file's comment), and mirrors --bg0 as a literal
-   constant for the canvas background fill. */
+/* Every color below is a var(--xxx) against this palette rather than a literal
+   hex, so the whole UI recolors from one place. --accent is the one the user can
+   change (theme.js's #theme-accent input in #top); the rest is a fixed, high-
+   contrast dark palette. --bg-selected/--bg-currow are color-mix()es of --accent,
+   so a picked-cell or current-row tint follows a new accent for free rather than
+   needing a second set of hardcoded colors. panels/scope.js draws canvas pixels,
+   which can't inherit a CSS variable -- it reads theme.js's getAccent() and
+   mirrors --bg0 as a literal for its background fill. */
 :root {
   --bg0: #0d0e11;    /* page background */
   --bg1: #1c1f25;    /* panel background */
@@ -52,32 +43,25 @@ button:hover { border-color: var(--accent); }
 button:active { background: var(--bg3); }
 button svg { flex-shrink: 0; }
 input[type=checkbox] { accent-color: var(--accent); }
-/* Stage E.8: the native accent-color thumb (~16-20px) read oversized against
-   a 12px-tall track once dozens of these were packed into the instrument
-   panel -- but Chromium ignores ::-webkit-slider-thumb width/height entirely
-   while the control is still natively themed (confirmed by screenshot: only
-   dropping appearance: none on the *host* element let a thumb override take
-   effect at all). Going fully custom loses accent-color's free "filled up to
-   the thumb" look, so instrument.js's paintFill() repaints a matching
-   background gradient on every value change instead (bindSlider/refreshSlider
-   /bindArpNotes/refreshArpNotes) directly onto the host element's own
-   background -- with appearance: none and no separate ::-webkit-slider-
-   runnable-track rule, the host's own box *is* the visual track, and
-   Chromium/Firefox both center the thumb on the host's own height with no
-   extra positioning needed. Stage E.9: the thumb itself is plain white
-   (not --accent) per Ryan's ask -- it reads as a neutral handle sitting on
-   top of the accent-colored fill, instead of disappearing into it. Stage
-   E.10: host height dropped to 6px, under the thumb's 9px, so the thumb
-   now visibly overhangs the track top and bottom instead of matching it
-   edge to edge -- deliberately not touching ::-webkit-slider-runnable-
-   track (introducing it would decouple the invisible geometry the browser
-   centers the thumb against from the visible fill paintFill() paints,
-   requiring a margin-top hack to re-align them). Stage E.12: the unfilled
-   part of the track was --bg2, the same color as the .instr-card it sits
-   on, so a slider near zero was invisible -- only the accent fill on the
-   left showed. It's --bg0 (the page background, darker than both the panel
-   and the card) now; instrument.js's paintFill() mirrors that same value
-   as a literal, since a gradient stop can't read a CSS variable. */
+/* Custom sliders, because the native accent-color thumb (~16-20px) reads
+   oversized on a track this short once dozens of them are packed into the
+   instrument panel -- and Chromium ignores ::-webkit-slider-thumb sizing
+   entirely while the control is still natively themed, so `appearance: none` on
+   the *host* is what makes a thumb override take effect at all.
+
+   Going custom gives up accent-color's free "filled up to the thumb" look, which
+   instrument.js's paintFill() paints back as a background gradient on every
+   value change. There is deliberately no ::-webkit-slider-runnable-track rule:
+   without one the host's own box *is* the visual track, so the geometry the
+   browser centers the thumb against is the same box paintFill() paints, and both
+   engines need no re-alignment hack. That also means the host is 6px against a
+   9px thumb, which is why the thumb visibly overhangs the track.
+
+   The thumb is white rather than --accent so it reads as a neutral handle on top
+   of the accent fill instead of disappearing into it, and the unfilled track is
+   --bg0 (the page background) rather than --bg2, which is .instr-card's own
+   color and would make a slider near zero invisible. instrument.js mirrors that
+   --bg0 value as a literal, since a gradient stop can't read a CSS variable. */
 input[type=range] { -webkit-appearance: none; appearance: none; height: 6px;
   background: var(--bg0); border-radius: 3px; cursor: pointer; }
 input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none;
@@ -95,11 +79,10 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
    rather than being squeezed into a narrow center column. */
 #top, #bottom { flex-shrink: 0; display: flex; align-items: center; gap: 16px;
                 padding: 8px 10px; border-bottom: 1px solid var(--border-dim); overflow-x: auto; }
-/* Fixed (not min-) height: Stage C's instrument panel has enough controls
-   to keep growing #bottom indefinitely if it's allowed to size to content
-   (it did, when this was still a .wip placeholder) — a fixed height plus
+/* Fixed (not min-) height: the instrument panel has enough controls to grow
+   #bottom indefinitely if allowed to size to content. A fixed height plus
    .panel's own overflow: auto below keeps #tracks' share of the screen
-   predictable and pushes overflow into an internal scrollbar instead. */
+   predictable and pushes any overflow into an internal scrollbar. */
 #bottom { border-bottom: none; border-top: 1px solid var(--border-dim); align-items: stretch; height: 320px; }
 #top .title { font-size: 15px; text-transform: none; color: var(--text); letter-spacing: 0.5px;
               flex-shrink: 0; }
@@ -113,51 +96,37 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
    box instead of activating this rule's own overflow: auto. */
 .panel { background: var(--bg1); padding: 10px; overflow: auto; min-height: 0; }
 #tracks .panel { flex: 1; min-width: 0; }
-/* Stage D's sequencer always shows all engine.MAX_CHANNELS=16 columns (see
-   panels/tracker.js) -- wider than the old .wip placeholder's 160px, with
-   its own internal horizontal scroll (.trk-scroll below) for anything past
-   this width rather than growing further and starving #patterns-panel. */
+/* The sequencer always shows all engine.MAX_CHANNELS=16 columns (see
+   panels/tracker.js), with its own internal horizontal scroll (.trk-scroll
+   below) for anything past this width rather than growing further and starving
+   #patterns-panel. */
 #tracks #sequencer-panel { flex: 0 0 320px; display: flex; flex-direction: column; }
-/* Stage E.14: the panel itself no longer scrolls -- its <h3> and each column's
-   Ch/Pat header have to stay put while the pattern rows run under them, which
-   means the scroller is .pat-scroll inside it (same shape #sequencer-panel
-   already had with .trk-scroll). overflow: hidden so .panel's own auto doesn't
-   put a second scrollbar around the whole thing. */
+/* The panel itself doesn't scroll: its <h3> and each column's Ch/Pat header have
+   to stay put while the pattern rows run under them, so the scroller is
+   .pat-scroll inside it (the shape #sequencer-panel has with .trk-scroll).
+   overflow: hidden so .panel's own auto doesn't add a second scrollbar around
+   the whole thing. */
 #tracks #patterns-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 #bottom .panel { flex: 1; min-width: 0; }
-/* Stage E.1: its own full-width row directly under #top (was squeezed into
-   #bottom next to the instrument panel) -- height comes from its own fixed-
-   height piano (see .kb-piano below), not #bottom's, so it stays compact.
-   Stage E.2 split it into two columns (piano + scope); Stage E.8 moved the
-   scope column into #bottom (see below), leaving just the piano here. */
+/* The piano gets its own full-width row directly under #top, and its height
+   comes from the fixed-height .kb-piano below rather than from a shared row, so
+   it stays compact. */
 #keyboard-row { flex-shrink: 0; display: flex; gap: 1px; background: var(--border-dim); border-bottom: 1px solid var(--border-dim); }
 #keyboard-panel { flex: 1; min-width: 0; }
-/* Stage E.8 put the scope in #bottom, sized against its own fixed 320px
-   height; Stage E.9 re-scope: instead of a fixed 480px column, the
-   instrument panel gets a fixed-ish basis sized to comfortably fit
-   .instr-grid's columns (see that rule above) and the scope's flex: 1
-   soaks up whatever's left to the right edge, per Ryan's "take up
-   whatever space is left between the instrument panel and the right edge"
-   -- the reverse of E.8's split, where the scope was the fixed one.
-   Stage E.11: widened 650px -> 820px to go with .instr-grid's move from 3
-   auto-fill columns to a fixed 4 (Osc/Noise-Arp/Envelope-LFO/FX in one
-   row) -- keeps each column's content (a 52px label + slider + valuetip)
-   about as roomy as the old 3-column layout instead of getting squeezed
-   by the extra column.
-   Stage E.12: the fixed 820px basis is now exactly 66% of #bottom's
-   content box, per Ryan's ask -- neither panel grows or shrinks off that
-   split (`flex: 0 0 66%`), and the scope takes the remainder (`flex: 1 1
-   0`), whatever the window width. The 16px gap comes out of the scope's
-   share, so it lands a touch under 34%. */
+/* #bottom splits two thirds / one third at any window width: the instrument
+   panel neither grows nor shrinks off 66% (`flex: 0 0 66%`), which is what keeps
+   .instr-grid's four columns roomy enough for a 52px label + slider + valuetip
+   each, and the scope takes the remainder (`flex: 1 1 0`). The 16px gap comes
+   out of the scope's share, so it lands a touch under 34%. */
 #bottom #instrument-panel { flex: 0 0 66%; }
 #bottom #scope-panel { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
 .panel.wip { display: flex; flex-direction: column; }
 .wip-note { margin: auto; color: var(--text-dim2); font-size: 11px; text-align: center; max-width: 16em; }
 
-/* Stage D: sequencer + pattern/fx grids */
+/* sequencer + pattern/fx grids */
 .trk-controls { margin: 4px 0 6px; }
-/* Stage E.8: 4em was too narrow for the spinner arrows to leave room for 3
-   digits (BPM's own max is 1000, Rows' is 256) -- the last digit clipped. */
+/* Wide enough for 3 digits *plus* the spinner arrows (BPM's max is 1000, Rows'
+   is 256); at 4em the last digit clips. */
 .trk-controls input[type=number] { width: 5.5em; background: var(--bg2); color: inherit;
                                     border: 1px solid var(--border); border-radius: 4px;
                                     padding: 2px 4px; font: inherit; font-size: 11px; }
@@ -183,12 +152,11 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
 .trk-table tr td.selected { background: var(--bg-selected); }
 .trk-table tr td.cursor { background: var(--accent); color: var(--accent-text); }
 
-/* Stage E.1: pattern/fx cells reserve space for their widest possible
-   content (a note like "C-4", an fx byte pair like "0F:3A") so the columns
-   don't visibly widen/narrow as cells go from empty to filled while
-   editing -- the sequencer table is unaffected (its cells are always 0-1
-   char) since this is scoped to #pat-scroll. */
-/* Stage E.14: keeps scrollCursorIntoView()/moveFollowRow()'s block: 'nearest'
+/* Pattern/fx cells reserve space for their widest possible content (a note like
+   "C-4", an fx byte pair like "0F:3A") so columns don't visibly widen and narrow
+   as cells go from empty to filled while editing. Scoped to #pat-scroll; the
+   sequencer's cells are always 0-1 char. */
+/* Keeps scrollCursorIntoView()/moveFollowRow()'s block: 'nearest'
    from parking the row it just scrolled to somewhere it can't be clicked --
    under the now-sticky .pat-col-head at the top (the header is painted over it
    and isn't a grid cell), or under this scroller's own always-present
@@ -202,7 +170,7 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
 .pat-scroll { flex: 1; min-height: 0; overflow: auto; display: flex; gap: 10px; align-items: flex-start; }
 .pat-col { flex: 0 0 auto; opacity: 0.55; }
 .pat-col.focused { opacity: 1; }
-/* Sticky inside .pat-scroll (Stage E.14), so which channel and pattern a column
+/* Sticky inside .pat-scroll, so which channel and pattern a column
    is showing stays readable however far down the rows you've scrolled -- the
    same trick .trk-table thead th uses for the sequencer's channel numbers.
    z-index beats the cells it overlaps; the background stops them showing
@@ -212,7 +180,7 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
                 cursor: pointer; white-space: nowrap; }
 .pat-col.focused .pat-col-head { color: var(--accent); }
 
-/* Stage C: instrument panel */
+/* instrument panel */
 #instrument-panel { display: flex; flex-direction: column; gap: 6px; }
 .instr-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .instr-header h3 { margin: 0; }
@@ -225,54 +193,33 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
    card ended up stretched to fit that oversized row, so only 2 fit per
    line where 3+ should. Grid's minmax(…, 1fr) sizes columns from the track
    itself, sidestepping the per-item min-width floor entirely.
-   Stage E.9: flex: 1/min-height: 0 lets the grid claim any leftover height
-   in #instrument-panel (rather than sizing to exactly its content), and
-   grid-auto-rows: minmax(min-content, 1fr) (was a bare min-content) lets
-   rows share that leftover height instead of leaving it as blank space
-   below the grid; align-items reverting to the stretch default (was
-   start) makes each row's .instr-card backgrounds actually fill that
-   row's height instead of hugging their own shorter content -- together,
-   "make all the instrument panel backgrounds fill the space vertically".
-   Stage E.11: repeat(auto-fill, minmax(190px, 1fr)) is now a flat
-   repeat(4, 1fr) -- there are exactly four .instr-card elements (Osc,
-   Noise/Arpeggio, Envelope/LFO, FX) and auto-fill let the FX card's old
-   2-column span push it onto a second row that overflowed #bottom's fixed
-   height (see .instr-card-fx's old comment, below). A fixed 4-up grid
-   guarantees one row of four equal columns instead, with #instrument-panel
-   widened to give each column enough room (see #bottom #instrument-panel
-   below).
-   Stage E.12 briefly went to five tracks with a 2-track FX card, then back
-   to four at Ryan's request -- FX is a single column of sliders like every
-   other card again, and the panel's extra width (66%, below) goes into
-   making all four columns' sliders wider instead. */
+   A flat repeat(4, 1fr) rather than auto-fill: there are exactly four
+   .instr-card elements (Osc, Noise/Arpeggio, Envelope/LFO, FX) and this
+   guarantees them one row of four equal columns, where auto-fill can wrap the
+   last card onto a second row that overflows #bottom's fixed height.
+   #instrument-panel is sized to give each of the four room (see #bottom
+   #instrument-panel below).
+
+   flex: 1/min-height: 0 lets the grid claim leftover height in
+   #instrument-panel rather than sizing to its content; grid-auto-rows:
+   minmax(min-content, 1fr) hands that height to the rows instead of leaving it
+   blank below the grid; and align-items at its stretch default is what makes
+   each .instr-card's background fill its row rather than hugging its own
+   possibly-shorter content. */
 .instr-grid { display: grid; grid-template-columns: repeat(4, 1fr);
               grid-auto-rows: minmax(min-content, 1fr); gap: 8px; align-content: start;
               overflow: auto; flex: 1; min-height: 0; }
 .instr-card { background: var(--bg2); border: 1px solid var(--border-dim); border-radius: 6px;
               padding: 6px 8px; min-width: 0; }
-/* Stage E.8: Osc1/Osc2, Noise/Arpeggio, and Envelope/LFO each share one
-   .instr-card as two stacked .instr-sub sections -- see instrument.js's
-   comment above initInstrumentPanel(). */
+/* Osc1/Osc2, Noise/Arpeggio and Envelope/LFO each share one .instr-card as two
+   stacked .instr-sub sections -- see instrument.js's comment above
+   initInstrumentPanel(). */
 .instr-sub + .instr-sub { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border-dim); }
-/* Stage E.8 first tried making the FX card (8 sliders, 2x any other card)
-   span two grid tracks with its own internal 2-column sub-grid to stay
-   roughly square. That only worked while the outer .instr-grid was an
-   auto-fill row that happened to fit 3 cards per line -- spanning 2 of 3
-   pushed FX onto its own second row, which overflowed #bottom's fixed
-   height (confirmed via getBoundingClientRect(): the FX card's bottom
-   edge landed ~90px past the grid's own bottom). Stage E.11: the grid is
-   now a fixed repeat(4, 1fr) (see .instr-grid above) sized so all four
-   cards -- Osc, Noise/Arpeggio, Envelope/LFO, FX -- are simply the grid's
-   four same-width columns in one row; FX no longer needs to span tracks
-   or lay its sliders out in an internal 2-column sub-grid, so both of
-   those rules (and the min-width: 0 workaround the sub-grid needed) are
-   gone -- .fx-sliders' ctl-rows just stack single-column like every other
-   card's, and the scope panel picks up next to this now-wider instrument
-   panel same as before (see #bottom #instrument-panel below).
-   Stage E.12 brought both rules back for one round and then dropped them
-   again -- FX is one column of sliders, same as every other card, so
-   .instr-card-fx needs no rule of its own and .fx-sliders is just a
-   wrapper. */
+/* The FX card has twice as many sliders as any other, but it is still one
+   column of them, so it needs no rule of its own and .fx-sliders is just a
+   wrapper. Spanning it across two grid tracks with an internal 2-column
+   sub-grid to stay square is tempting and does not work: it pushes the card
+   onto a second row, which overflows #bottom's fixed height. */
 .instr-card h4 { margin: 0 0 4px; font-size: 10px; text-transform: uppercase; color: var(--text-dim); }
 .ctl-row { display: flex; align-items: center; gap: 6px; margin: 1px 0; }
 .ctl-row label { width: 52px; flex-shrink: 0; color: var(--text-dim); font-size: 10px; }
@@ -286,11 +233,9 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
 .icon-group button svg { width: 14px; height: 14px; }
 .icon-group button.active { color: var(--accent); border-color: var(--accent); }
 
-/* Stage E / E.1 / E.2: on-screen piano keyboard. Full engine octave range
-   (1-8 => 56 white + 40 black keys, 96 total -- close to a real piano's 88,
-   and every key here actually plays a note in this engine) laid out as
-   percentages of the panel's full width (see panels/keyboard.js) instead of
-   a fixed px 2-octave slice, so it fills whatever width the window gives it.
+/* On-screen piano keyboard. The engine's full octave range (1-8 => 56 white + 40
+   black keys, 96 in all), laid out as percentages of the panel's width (see
+   panels/keyboard.js) so it fills whatever width the window gives it.
    .kb-label holds up to two stacked spans: the bottom-row (ZXCVB...) and
    QWERTY-row physical keys both currently mapped to that note (they overlap
    across a 5-note span -- see panels/keyboard.js's BOTTOM_ROW comment), both
@@ -302,9 +247,8 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
 .kb-header h3 { margin: 0; }
 .kb-header button { padding: 2px 9px; }
 .kb-header .mono { min-width: 1.2em; text-align: center; }
-/* Stage E.13's note-input controls (scale / root transpose / chord + its
-   voicing toggles), sharing the header with the octave buttons that were
-   already there. .off is the "this setting has nothing to act on right now"
+/* The note-input controls (scale / root transpose / chord + its voicing
+   toggles), sharing the header with the octave buttons. .off is the "this setting has nothing to act on right now"
    state -- dimmed rather than disabled, so it still reads at a glance. */
 .kb-header label, .kb-header .kb-root, .kb-header .kb-voicing {
   display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--text-dim); }
@@ -313,7 +257,7 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
 .kb-header select { background: var(--bg2); color: inherit; border: 1px solid var(--border);
                     border-radius: 4px; padding: 2px 4px; font: inherit; font-size: 11px; }
 .kb-header .off { opacity: 0.4; }
-/* Stage E.14's edit-step field. Narrower than .trk-controls' number inputs
+/* The edit-step field. Narrower than .trk-controls' number inputs
    (its max is 16, two digits) but otherwise the same control. */
 .kb-header input[type=number] { width: 3.6em; background: var(--bg2); color: inherit;
                                 border: 1px solid var(--border); border-radius: 4px;
@@ -324,8 +268,8 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
             border: 1px solid #111318; border-radius: 0 0 2px 2px; cursor: pointer; }
 /* Three signals can land on one key at once, so each gets its own visual
    channel: the active scale tints the key (a fixed cool blue -- deliberately
-   *not* derived from --accent, which is what a struck/sounding key uses, per
-   Ryan's "a different color than 'hit' keyboard uses"), a hovered chord's
+   *not* derived from --accent, which is what a struck/sounding key uses), a
+   hovered chord's
    notes get an outline rather than a fill, and a lit key fills with the
    accent. The tint rules come before .active so a struck key still wins the
    fill at equal specificity; .kb-shadow is an outline, so it never competes
@@ -337,7 +281,7 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
             cursor: pointer; }
 .kb-black.kb-in-scale { background: #2f5476; }
 .kb-black.active { background: var(--accent); }
-/* Stage E.13: the chord a hovered key would enter, previewed on its own
+/* The chord a hovered key would enter, previewed on its own
    notes (panels/keyboard.js's showShadow). An inset ring plus a soft glow --
    it has to stay readable on top of both the scale tint and the accent fill,
    which is why it takes neither.
@@ -353,20 +297,19 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
 .kb-white .kb-label { color: #111; }
 .kb-black .kb-label { color: #eee; }
 
-/* Stage E.2: oscilloscope column. Stage E.8: no more fixed height -- it
-   fills whatever #bottom #scope-panel's flex column leaves after the
-   header (panels/scope.js's initScopePanel() reads the canvas's own
-   clientWidth/clientHeight after layout and sizes the backing bitmap to
-   match, so the larger box stays crisp instead of stretching a small
-   bitmap). #scope-canvas's background is var(--bg0) -- scope.js's own BG
-   constant is a literal copy of that same value for its canvas fillRect
-   calls, since canvas pixels can't inherit a CSS variable. */
+/* Oscilloscope column. No fixed height -- the canvas fills whatever #bottom
+   #scope-panel's flex column leaves after the header, and panels/scope.js's
+   initScopePanel() reads its clientWidth/clientHeight after layout to size the
+   backing bitmap to match, so the box stays crisp instead of stretching a small
+   bitmap. #scope-canvas's background is var(--bg0); scope.js's own BG constant
+   is a literal copy of that value for its fillRect calls, since canvas pixels
+   can't inherit a CSS variable. */
 .scope-header { margin-bottom: 2px; }
 .scope-header h3 { margin: 0; }
 #scope-canvas { width: 100%; flex: 1; min-height: 0; background: var(--bg0); border: 1px solid var(--border-dim); border-radius: 2px; }
 
-/* Stage E.5: startup audio-unlock gate -- see index.html's comment. Sits
-   above #picker (which is only ever open later, after the gate's gone). */
+/* Startup audio-unlock gate. Sits above #picker, which is only ever open later,
+   after the gate is gone. */
 #audio-gate { position: fixed; inset: 0; background: rgba(0,0,0,.85);
               display: grid; place-items: center; z-index: 10; }
 #audio-gate.closed { display: none; }
@@ -374,15 +317,11 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
                      padding: 20px 26px; text-align: center;
                      display: flex; flex-direction: column; gap: 10px; align-items: center; }
 #audio-gate-panel p { color: var(--text-dim); margin: 0; }
-/* Stage E.17: the app's wordmark, back to text now that it says Voxby rather
-   than upstream's name (Stage E.12 had logo.svg here). Wide letter-spacing does
-   the work the image used to. Stage E.16's attribution line sits under it.
-   Stage E.18: white and lowercase rather than accented uppercase -- the accent
-   is user-adjustable (theme.js), so the wordmark was the one piece of chrome
-   that changed identity with the theme; plain white keeps it fixed, and
-   lowercase is quieter next to the shouting all-caps panel headers. The
-   markup still reads "Voxby" (text-transform, not a lowercased string), so
-   copy/paste and the accessibility tree get the real name. */
+/* The app's wordmark: text rather than an image, with wide letter-spacing doing
+   the work a logotype would. White, not accented -- the accent is user-adjustable
+   (theme.js), and this is the one piece of chrome that shouldn't change identity
+   with the theme. Lowercase via text-transform, not a lowercased string, so
+   copy/paste and the accessibility tree still get the real name. */
 #audio-gate-title { margin: 0; font-size: 34px; font-weight: 700; letter-spacing: 4px;
                     text-transform: lowercase; color: #fff; }
 #audio-gate-panel .gate-sub { font-size: 11px; max-width: 26em; margin-bottom: 6px; }
@@ -395,15 +334,12 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
 #picker-panel { background: var(--bg1); border: 1px solid var(--border); border-radius: 6px;
                 padding: 14px; max-width: 70vw; max-height: 70vh;
                 display: flex; flex-direction: column; gap: 10px; }
-/* #picker-grid/.pick-card style the open dialog's built-in song library.
-   Stage E.12 swapped the vendored SoundBox demos for Ryan's own converted
-   catalogue (tools/soundbox/songs/) and split it into Songs/SFX sections,
-   which is what .pick-section is -- a sticky header inside the same
-   scrolling column, so the section a card belongs to stays visible while
-   scrolling a long list. max-height keeps a 30-plus-entry library from
-   pushing the import controls under it off the bottom of the panel
-   (#picker-panel's own max-height: 70vh has to cover the hint and buttons
-   too). */
+/* #picker-grid/.pick-card style the open dialog's built-in song library
+   (tools/soundbox/songs/), split into Songs/SFX sections. .pick-section is a
+   sticky header inside the same scrolling column, so the section a card belongs
+   to stays visible while scrolling a long list. max-height keeps a 30-plus-entry
+   library from pushing the import controls off the bottom of the panel --
+   #picker-panel's own max-height: 70vh has to cover the hint and buttons too. */
 #picker-grid { display: flex; flex-direction: column; gap: 4px; overflow: auto;
                max-width: 60vw; max-height: 46vh; }
 .pick-section { position: sticky; top: 0; z-index: 1; background: var(--bg1);
@@ -414,17 +350,27 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
 .pick-card:hover { border-color: var(--accent); color: var(--text); }
 .pick-card .name { color: var(--text); font-weight: 600; }
 .pick-card .desc { font-size: 11px; }
-/* Phase 4: import affordance/trust note in the open dialog. */
+/* Import affordance/trust note in the open dialog. */
 #picker-body .hint { margin: 0; max-width: 52ch; font-size: 11px; color: var(--text-dim); line-height: 1.5; }
 #picker-body .hint b { color: var(--text); font-weight: 600; }
-/* Stage E.14: the share dialog's link field. Full width of the panel and
+/* The render-progress dialog (main.js's progressModal). The bar is
+   a plain filled div rather than a <progress> element -- <progress> is styled
+   through vendor-prefixed pseudo-elements that differ per engine, and this one
+   has to match the accent color everything else in the tool follows. */
+.gen-row { display: flex; align-items: center; gap: 8px; }
+.gen-track { flex: 1; min-width: 32ch; height: 8px; background: var(--bg2);
+             border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+.gen-track > div { height: 100%; width: 0; background: var(--accent); transition: width .1s linear; }
+#gen-pct { font-size: 11px; color: var(--text-dim); min-width: 4ch; text-align: right; }
+
+/* The share dialog's link field. Full width of the panel and
    selectable rather than wrapped across lines -- it's one long token that only
    ever gets copied, never read. */
 #share-url { width: 52ch; max-width: 100%; background: var(--bg2); color: var(--text-dim);
              border: 1px solid var(--border); border-radius: 4px; padding: 4px 6px;
              font-family: monospace; font-size: 11px; }
 
-/* Phase 4: drag-and-drop overlay -- see index.html's #drop-hint. Tops the
+/* Drag-and-drop overlay -- see index.html's #drop-hint. Tops the
    stack (above #picker, since a song can be dropped while the open dialog is
    up, and above #audio-gate, since importing needs no audio). `pointer-
    events: none` matters: the overlay appears on the dragenter it would
@@ -437,7 +383,7 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
                    padding: 20px 26px; text-align: center; }
 #drop-hint-panel p { color: var(--text-dim); margin: 6px 0 0; font-size: 12px; }
 
-/* Stage E.14: the note/chord entry pie menu (panels/pie.js), opened by
+/* The note/chord entry pie menu (panels/pie.js), opened by
    double-clicking a pattern note cell. The overlay is full-viewport rather
    than just the circle: it has to catch every mousemove/mouseup for the
    duration of the gesture, and covering the grid is also what stops
@@ -460,7 +406,7 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
              pointer-events: none; fill: var(--accent); }
 .pie-hub-t.sub { fill: var(--text-dim2); font-size: 8px; }
 
-/* Stage E.15: generic popup menu (menu.js), used for the pattern grid's
+/* Generic popup menu (menu.js), used for the pattern grid's
    right-click transpose menu. Overlay + positioned panel, same two-layer shape
    as .pie above -- the full-viewport layer is what catches the click that
    dismisses it. Sits just under .pie in the stack: a pie is a live gesture and

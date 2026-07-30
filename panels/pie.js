@@ -1,5 +1,5 @@
-// Note/chord entry pie menu (plans/soundbox-revamp.md Stage E.14). Opened by
-// panels/tracker.js when a note cell is double-clicked: a radial overlay with
+// Note/chord entry pie menu. Opened by panels/tracker.js when a note cell is
+// double-clicked: a radial overlay with
 // the note in an inner ring and the chord quality in an outer one.
 //
 // This module is deliberately all geometry, labels and gesture -- it knows

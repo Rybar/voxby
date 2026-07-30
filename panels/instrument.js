@@ -1,46 +1,24 @@
-// Instrument panel (plans/soundbox-revamp.md Phase 3 Stage C). Renders
-// oscillator 1/2, noise, envelope, arpeggio, FX, and LFO controls for the
-// instrument on the currently selected channel, against engine.js's plain
-// instrument-property-index constants. Replaces gui.js's drag-an-<img>
-// slider widget with native <input type="range">, and its .src-swap
-// waveform/filter pickers with SVG icon toggle-groups.
+// Instrument panel: oscillator 1/2, noise, envelope, arpeggio, FX and LFO
+// controls for the instrument on the currently selected channel, written
+// against engine.js's instrument-property-index constants.
 //
-// SoundBox ties one instrument to one channel (gui.js read/wrote
-// mSong.songData[mSeq.col()].i, mSeq being the sequencer's column
-// cursor) -- there's no separate "instrument list". This panel's own
-// "Channel" selector (state.selInstrument) is now shared with Stage D's
-// tracker: clicking any sequencer/pattern/fx cell moves state.selInstrument
-// to that cell's channel, and this panel just reflects whatever it's set
-// to. The selector lists all engine.MAX_CHANNELS slots (not
-// state.song.numChannels) because tracker.js also renders all 16 sequencer
-// columns always -- a channel past the current numChannels is simply one
-// with no sequence data yet, and needs to stay reachable here too so its
-// instrument can be set up before it's used.
+// The song format ties one instrument to one channel -- there is no separate
+// instrument list -- so this panel's "Channel" selector is state.selInstrument,
+// shared with the tracker: clicking any sequencer/pattern/fx cell moves it, and
+// this panel reflects whatever it is set to. The selector lists all
+// engine.MAX_CHANNELS slots rather than state.song.numChannels, matching
+// tracker.js's always-16 columns: a channel past numChannels is one with no
+// sequence data yet, and its instrument still has to be reachable to set up
+// before it is used.
 //
-// Also wired to Stage D: while a Fx-track cell is selected
-// (tracker.js's activeFxCell()), every slider/icon write here is mirrored
-// into that cell instead of (well, in addition to -- see setInstrProp)
-// just the live instrument, and the sliders preview the cell's stored
-// value rather than the instrument's -- gui.js's updateInstrument()/
-// mouseMove EDIT_FXTRACK branches, ported the same way.
+// While an FX-track cell is selected (tracker.js's activeFxCell()), every
+// slider/icon write here is mirrored into that cell *as well as* the live
+// instrument (see setInstrProp), and the controls display the cell's stored
+// value on top of the instrument's (see previewInstrI, which panels/keyboard.js
+// also reads so the jammer previews exactly what is on screen).
 //
-// Instrument copy/paste uses its own module-local clipboard rather than
-// state.clipboard -- that field is left free for Stage D's pattern/fx-cell
-// clipboard so the two don't collide.
-//
-// previewInstrI() is exported for panels/keyboard.js (Stage E): the
-// jammer's live-preview audio is kept in sync with whatever this panel is
-// currently displaying (the live instrument, or an FX cell's stored value
-// while one is selected).
-//
-// Dropped vs. gui.js: the "Save instrument" button (downloaded a single
-// instrument as a raw binary data: URI) and presetOnKeyDown's
-// arrow-key-ignoring guard on the preset <select> -- both small legacy
-// conveniences, neither asked for, both inconsistent with how every other
-// export in this tool already works (a real Blob download, or a plain
-// native control with no extra guard). "Display file size" (a periodic
-// export-size readout) is also dropped, same reasoning as Stage B's other
-// trims: nothing in the new UI reads it.
+// Instrument copy/paste uses a module-local clipboard, leaving state.clipboard
+// to the pattern/fx-cell clipboard so the two can't collide.
 
 import * as engine from '../engine.js';
 import { state } from '../state.js';
@@ -50,9 +28,8 @@ import { getAccent } from '../theme.js';
 
 const $ = id => document.getElementById(id);
 
-// [icon, stored value, hover tip]. The tips (Stage E.18, the plan's last
-// section) are the whole reason these are triples: the icons draw the waveform
-// shape accurately, which says nothing about what it sounds like.
+// [icon, stored value, hover tip]. The tips are why these are triples: the icons
+// draw each waveform shape accurately, which says nothing about how it sounds.
 const WAVE_ICONS = [
   ['waveSine', 0, 'Sine — a pure tone with no harmonics. Soft; disappears in a mix.'],
   ['waveSquare', 1, 'Square — hollow and buzzy, odd harmonics only. The classic chiptune lead.'],
@@ -66,11 +43,10 @@ const FILTER_ICONS = [
 ];
 
 // Linear sliders map straight to the instrument's stored value. The three
-// non-linear ones (osc2_det, fx_freq, fx_dist) keep gui.js's sqrt/square
-// curve (sliderMouseDown/updateSlider in the old code) so fine control at
-// the low end of the range is preserved -- ported as the range input's own
-// value mapping (see bindSlider/refreshSlider) rather than reimplemented
-// as pixel math.
+// non-linear ones (osc2_det, fx_freq, fx_dist) carry a sqrt/square curve, which
+// is what gives them fine control at the low end of their range where it
+// matters; it lives in the range input's own value mapping, not in pixel math
+// (see bindSlider/refreshSlider).
 const SLIDERS = {
   osc1_vol: { prop: engine.OSC1_VOL, min: 0, max: 255 },
   osc1_semi: { prop: engine.OSC1_SEMI, min: 92, max: 164 },
@@ -103,9 +79,8 @@ function currentInstr() {
   return state.song.songData[state.selInstrument];
 }
 
-// If an FX-track cell is selected, mirror the write into that cell too --
-// gui.js's mouseMove/icon-click handlers always did both (fx cell AND the
-// live instrument property), not one or the other; ported as-is.
+// If an FX-track cell is selected, mirror the write into that cell as well as
+// the live instrument property -- both, never one or the other.
 function setInstrProp(prop, value) {
   currentInstr().i[prop] = value;
   const cell = activeFxCell();
@@ -113,12 +88,10 @@ function setInstrProp(prop, value) {
   $('instr-preset').value = '';
 }
 
-// The instrument array to *display*: the real instrument, unless an FX
-// cell is selected, in which case that cell's stored value previews on top
-// of whichever one property it targets -- gui.js's updateInstrument()
-// building instrI = deepCopy(...) then overriding instrI[fxCmd[0]-1].
-// Exported for panels/keyboard.js (Stage E): the jammer's live-preview
-// audio should hear the same previewed instrument these controls display.
+// The instrument array to *display*: the real instrument, unless an FX cell is
+// selected, in which case that cell's stored value previews on top of whichever
+// one property it targets. panels/keyboard.js reads this too, so the jammer's
+// live preview hears the same instrument these controls show.
 export function previewInstrI() {
   const i = currentInstr().i.slice();
   const cell = activeFxCell();
@@ -153,20 +126,17 @@ function sliderRow(id, label, title = '') {
     + `<input type="range" id="${id}"><span class="valuetip"></span></div>`;
 }
 
-// Stage E.8: screen.css switched input[type=range] to appearance: none so
-// the thumb could be shrunk (Chromium ignores ::-webkit-slider-thumb sizing
-// while a range input is still natively themed) -- that traded away
-// accent-color's free "filled track up to the thumb" rendering, so this
-// repaints an equivalent gradient by hand on every value change. Stage E.9:
-// the filled portion tracks the live (user-adjustable) accent color via
-// theme.js instead of a hardcoded hex, same as screen.css's var(--accent)
-// does for everything else. Stage E.12: the unfilled portion was --bg2,
-// which is also .instr-card's background -- an unlit track was invisible
-// against the card it sat on, so only the accent fill read as a slider.
-// TRACK_BG is --bg0, the (darker) page background, copied as a literal the
-// same way panels/scope.js copies it for its canvas fills: a gradient stop
-// built in JS can't read the CSS variable. Keep it in sync with
-// screen.css's input[type=range] rule.
+// screen.css sets input[type=range] to appearance: none so the thumb can be
+// shrunk (Chromium ignores ::-webkit-slider-thumb sizing while a range input is
+// still natively themed). That gives up accent-color's free "filled track up to
+// the thumb" rendering, so this paints an equivalent gradient by hand on every
+// value change, in the live accent color.
+//
+// TRACK_BG is --bg0, the page background, not .instr-card's own --bg2: an unlit
+// track the same color as the card it sits on reads as no track at all. It is
+// copied as a literal because a gradient stop built in JS can't read a CSS
+// variable (panels/scope.js copies its canvas background for the same reason) --
+// keep it in sync with screen.css's input[type=range] rule.
 const TRACK_BG = '#0d0e11';
 
 function paintFill(el) {
@@ -174,13 +144,12 @@ function paintFill(el) {
   el.style.background = `linear-gradient(to right, ${getAccent()} ${pct}%, ${TRACK_BG} ${pct}%)`;
 }
 
-// Stage E.10: paintFill() bakes getAccent() into each slider's inline style
-// at paint time rather than reading it live like CSS's var(--accent) does,
-// so a color picked after a slider was last painted needs an explicit
-// repaint -- theme.js's setAccent() fires 'themechange' for exactly this.
-// Harmless no-op before initInstrumentPanel() has created any sliders yet
-// (initTheme() runs first in main.js's boot sequence and applies the
-// restored/default accent, firing one 'themechange' with nothing to find).
+// paintFill() bakes the accent into each slider's inline style at paint time
+// rather than reading it live the way CSS's var(--accent) does, so a color
+// picked after a slider was last painted needs an explicit repaint --
+// theme.js's setAccent() fires 'themechange' for exactly this. A no-op before
+// initInstrumentPanel() has created any sliders (initTheme() runs first in
+// main.js's boot order and fires one 'themechange' with nothing to find).
 document.addEventListener('themechange', () => {
   for (const el of document.querySelectorAll('#instrument-panel input[type=range]')) paintFill(el);
 });
@@ -210,9 +179,9 @@ function refreshSlider(id, def, i) {
   paintFill(el);
 }
 
-// The arpeggio's two notes share one byte (ARP_CHORD: high nibble = note
-// 1, low nibble = note 2) -- kept as a special case rather than folded
-// into SLIDERS, same as gui.js's mouseMove handler did.
+// The arpeggio's two notes share one byte (ARP_CHORD: high nibble = note 1, low
+// nibble = note 2), so they can't go through SLIDERS' one-slider-one-property
+// mapping and are bound as a special case.
 function bindArpNotes() {
   $('arp_note1').min = $('arp_note2').min = 0;
   $('arp_note1').max = $('arp_note2').max = 12;
@@ -246,13 +215,11 @@ function presetOptionsHTML() {
   ).join('');
 }
 
-// Stage E.8: oscillators, noise+arpeggio, and envelope+LFO are each two
-// .instr-sub sections stacked inside one .instr-card (rather than four
-// separate cards) so the pairing holds together as one .instr-grid item --
-// Ryan asked for Osc1 above Osc2, Arpeggio under Noise, LFO under Envelope.
-// That leaves exactly four .instr-card elements (these three plus FX), which
-// Stage E.11's fixed-4-column .instr-grid (screen.css) relies on to lay all
-// four out in one row instead of wrapping.
+// Oscillators, noise+arpeggio and envelope+LFO are each two .instr-sub sections
+// stacked inside one .instr-card, so each pairing stays one .instr-grid item
+// (Osc1 above Osc2, Arpeggio under Noise, LFO under Envelope). That leaves
+// exactly four .instr-card elements including FX, which screen.css's fixed
+// 4-column .instr-grid relies on to lay them out in a single row.
 export function initInstrumentPanel() {
   $('instrument-panel').classList.remove('wip');
   $('instrument-panel').innerHTML = `

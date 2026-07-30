@@ -1,29 +1,17 @@
-// Scope panel (plans/soundbox-revamp.md Phase 3 Stage E.2, mode-cycling
-// added by Stage E.3, a third waterfall/spectrogram mode added by Stage
-// E.7): a visualizer column next to the on-screen piano (see index.html's
-// #keyboard-row). Cycles between three draw modes -- never hidden, per
-// Stage E.3's re-scope (the earlier show/hide toggle is gone).
+// Scope panel: a visualizer column next to the on-screen piano (see
+// index.html's #keyboard-row), cycling between three draw modes.
 //
-// drawScope(sources, t) is deliberately source-agnostic: each source just
-// needs a getData(t, n) method returning n interleaved L/R samples, range
-// roughly [-1,1]. Two things implement that shape: player.js's CPlayer
-// (rendered song audio -- gui.js's own VU-meter, dropped in Stage E, used
-// the exact same call for its power calculation) and, as of Stage E.4,
-// jammer.js's CJammer (live on-screen/physical-keyboard note preview --
-// getData(t, n) was added there for this, ignoring `t` since it's always
-// "now", not a seekable buffer; see jammer.js's own comment on it).
-// main.js's single persistent rAF loop hands over *both* every frame and
-// this file sums them (Stage E.6 -- it used to be given only one, picked by
-// main.js, which is what made jamming over a playing song invisible; see
-// readSamples below). Stage E.3 also moved that loop from a 50ms
-// setInterval to rAF for a higher framerate (the display's actual refresh
-// rate, not a flat 20fps).
+// drawScope(sources, t) is deliberately source-agnostic: each source only needs
+// a getData(t, n) returning n interleaved L/R samples in roughly [-1,1]. Two
+// things implement that shape -- player.js's CPlayer (rendered song audio) and
+// jammer.js's CJammer (live note preview, which ignores `t` since it is always
+// "now" rather than a seekable buffer). main.js's persistent rAF loop hands over
+// both every frame and readSamples() below sums them.
 //
-// The spectrometer's magnitudes come from a direct DFT over a small sample
-// window (SPEC_N=256 samples, SPEC_BINS=24 bins => 6144 multiply-adds/frame
-// -- trivial even at 60fps) rather than a real FFT; "simple" per the
-// original ask, and small enough that an FFT's added complexity wouldn't
-// earn its keep here.
+// The spectrometer's magnitudes come from a direct DFT over a small window
+// (SPEC_N=256 samples, SPEC_BINS=24 bins => 6144 multiply-adds per frame,
+// trivial at 60fps) rather than a real FFT, whose complexity wouldn't earn its
+// keep at this size.
 
 import { getAccent } from '../theme.js';
 
@@ -52,10 +40,9 @@ export function initScopePanel() {
     </div>
     <canvas id="scope-canvas" title="Live output. Handy for spotting a note that clips (the wave flattening at the top) or an envelope that is longer or shorter than you meant."></canvas>`;
 
-  // Stage E.8: the canvas is now sized by its flex layout (screen.css's
-  // #scope-canvas rule), not a fixed HTML width/height -- read back the
-  // rendered box and match the backing bitmap to it so the enlarged panel
-  // draws crisp instead of the CSS stretching a small bitmap blurry.
+  // The canvas is sized by its flex layout (screen.css's #scope-canvas rule),
+  // so match the backing bitmap to the rendered box -- otherwise CSS stretches
+  // a small bitmap and the trace draws blurry.
   const c = $('scope-canvas');
   c.width = c.clientWidth;
   c.height = c.clientHeight;
@@ -79,22 +66,14 @@ export function initScopePanel() {
   drawScope(null, 0);
 }
 
-// Stage E.6: reads `n` interleaved L/R samples from every live source and
-// sums them. This is the fix for "live-playing the keyboard shows nothing on
-// the scope": drawScope used to be handed a *single* source, chosen by
-// main.js as `state.playing ? currentPlayer : jammer` -- so for the entire
-// duration of a rendered song (which, for a one-note pattern in a long
-// sequence, is mostly silence) the jammer was ignored no matter how loudly
-// you jammed over it. Measured: jamming during a playing song's silent tail
-// produced a jammer peak of 0.46 while the scope drew a flat line, and the
-// identical jam after pressing Stop deflected the trace 33px.
-//
-// Summing rather than picking a winner is also just the honest thing to
-// draw -- both sources really are going to the speakers at once (jammer.js's
-// ScriptProcessorNode and main.js's AudioBufferSourceNode are both connected
-// to the shared context's destination), so what you see is what you hear.
-// Their scales already agree (jammer.js's 0.002441481 == player-worker.js's
-// per-note 80x / player.js getData()'s 32768 normalization).
+// Reads `n` interleaved L/R samples from every live source and sums them.
+// Summing rather than picking one is the honest thing to draw: both sources
+// really do reach the speakers at once (jammer.js's ScriptProcessorNode and
+// main.js's AudioBufferSourceNode are both connected to the shared context's
+// destination), so what you see is what you hear. Picking a winner instead
+// hides whichever one lost -- jamming over a song that is mostly silence draws
+// a flat line. Their scales already agree (jammer.js's 0.002441481 ==
+// player-worker.js's per-note 80x / player.js getData()'s 32768 normalization).
 function readSamples(sources, t, n) {
   const out = new Float32Array(n * 2);
   for (const src of sources) {
@@ -194,9 +173,8 @@ function magColor(mag) {
   return `hsl(${240 - mag * 240},100%,${8 + mag * 55}%)`;
 }
 
-// Stage E.7: "a third scope type, a 2 axis color spectrometer so I can see
-// a bit of frequency over time" -- frequency (bins, low at bottom) on the
-// y axis, time scrolling right-to-left on the x axis, magnitude as color.
+// Frequency over time: bins (low at the bottom) on the y axis, time scrolling
+// right-to-left on the x axis, magnitude as color.
 // Unlike the other two modes this doesn't redraw from scratch every frame
 // (there's no way to recompute history that's already scrolled off): it
 // shifts the existing canvas one pixel left via a self-copying drawImage
@@ -226,8 +204,7 @@ function drawSpectrogram(ctx, w, h, data) {
 // making sound right now (a CPlayer and/or a CJammer -- see this file's top
 // comment), summed by readSamples above. Accepts either an array or a single
 // source; nulls are filtered out, and no live source at all draws a blank
-// canvas. Stage E.6 widened this from a single source to a list -- see
-// readSamples' comment for the bug that caused.
+// canvas.
 export function drawScope(sources, t) {
   const canvas = $('scope-canvas');
   if (!canvas) return;
