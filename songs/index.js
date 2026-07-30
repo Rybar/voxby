@@ -4,7 +4,7 @@ export const DEMO_SONGS = [
   { section: 'Songs', file: 'greeble-game.js', name: 'Greeble — in-game', desc: '6 channels · 2:29' },
   { section: 'Songs', file: 'super-glitch-box.js', name: 'Super Glitch Box', desc: '4 channels · 0:40' },
   { section: 'Songs', file: 'super-glitch-box-title.js', name: 'Super Glitch Box — title', desc: '6 channels · 0:20' },
-  { section: 'Songs', file: 'archer-duel-of-aces.js', name: 'Archer: Duel of Aces', desc: '5 channels · 0:15' },
+  { section: 'Songs', file: 'archer-duel-of-aces.js', name: 'Archer: Duet of Aces', desc: '5 channels · 0:15' },
   { section: 'Songs', file: 'backpack-monsters.js', name: 'Backpack Monsters', desc: '5 channels · 0:55' },
   { section: 'Songs', file: 'moonlight-sonata.js', name: 'Moonlight Sonata, 3rd mvt', desc: 'Beethoven, readapted · 5 channels · 0:48' },
   { section: 'Songs', file: 'tendergotchi.js', name: 'Tendergotchi', desc: '5 channels · 0:27' },
