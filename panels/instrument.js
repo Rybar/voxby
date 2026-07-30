@@ -50,8 +50,20 @@ import { getAccent } from '../theme.js';
 
 const $ = id => document.getElementById(id);
 
-const WAVE_ICONS = [['waveSine', 0], ['waveSquare', 1], ['waveSaw', 2], ['waveTriangle', 3]];
-const FILTER_ICONS = [['filterLowpass', 2], ['filterHighpass', 1], ['filterBandpass', 3]];
+// [icon, stored value, hover tip]. The tips (Stage E.18, the plan's last
+// section) are the whole reason these are triples: the icons draw the waveform
+// shape accurately, which says nothing about what it sounds like.
+const WAVE_ICONS = [
+  ['waveSine', 0, 'Sine — a pure tone with no harmonics. Soft; disappears in a mix.'],
+  ['waveSquare', 1, 'Square — hollow and buzzy, odd harmonics only. The classic chiptune lead.'],
+  ['waveSaw', 2, 'Sawtooth — bright and harsh, every harmonic present. Basses, brass, strings.'],
+  ['waveTriangle', 3, 'Triangle — flute-like. A square with the edges taken off.'],
+];
+const FILTER_ICONS = [
+  ['filterLowpass', 2, 'Low-pass — keeps what is below the cutoff. Turn Freq down to darken the sound.'],
+  ['filterHighpass', 1, 'High-pass — keeps what is above the cutoff. Thins the sound out, drops the body.'],
+  ['filterBandpass', 3, 'Band-pass — keeps a band around the cutoff. Nasal, telephone-like.'],
+];
 
 // Linear sliders map straight to the instrument's stored value. The three
 // non-linear ones (osc2_det, fx_freq, fx_dist) keep gui.js's sqrt/square
@@ -116,7 +128,8 @@ export function previewInstrI() {
 
 function iconGroupHTML(id, entries) {
   return `<div class="icon-group" id="${id}" role="radiogroup">`
-    + entries.map(([icon, val]) => `<button type="button" data-value="${val}">${svgIcon(icon)}</button>`).join('')
+    + entries.map(([icon, val, tip]) =>
+        `<button type="button" data-value="${val}" title="${tip}">${svgIcon(icon)}</button>`).join('')
     + '</div>';
 }
 
@@ -244,70 +257,71 @@ export function initInstrumentPanel() {
   $('instrument-panel').classList.remove('wip');
   $('instrument-panel').innerHTML = `
     <div class="instr-header">
-      <h3>Instrument</h3>
-      <label>Channel <select id="instr-channel" title="Which channel's instrument to edit"></select></label>
-      <select id="instr-preset" title="Select an instrument preset"></select>
-      <button id="instr-copy" type="button" title="Copy instrument">${svgIcon('copy')}</button>
-      <button id="instr-paste" type="button" title="Paste instrument">${svgIcon('paste')}</button>
+      <h3 title="The sound one channel plays. Every note in that channel's patterns uses these settings — one instrument per channel, all the way through the song.">Instrument</h3>
+      <label title="Which channel's instrument these controls edit. Clicking any cell in the tracker selects that channel too.">Channel <select id="instr-channel"></select></label>
+      <select id="instr-preset" title="Load one of SoundBox's ready-made instruments into this channel, as a starting point to tweak. Overwrites every setting below.">
+      </select>
+      <button id="instr-copy" type="button" title="Copy this whole instrument, to paste onto another channel">${svgIcon('copy')}</button>
+      <button id="instr-paste" type="button" title="Overwrite this channel's instrument with the copied one">${svgIcon('paste')}</button>
     </div>
     <div class="instr-grid">
       <div class="instr-card">
         <div class="instr-sub">
-          <h4>Oscillator 1</h4>
-          <div class="ctl-row"><label>Wave</label>${iconGroupHTML('osc1-wave', WAVE_ICONS)}</div>
-          ${sliderRow('osc1_vol', 'Vol', 'Volume')}
-          ${sliderRow('osc1_semi', 'Semi', 'Semitune')}
-          ${sliderRow('osc1_xenv', 'X-Env', 'Envelope modulates frequency')}
+          <h4 title="The main tone generator. Oscillator 2 layers a second one on top; Noise adds hiss.">Oscillator 1</h4>
+          <div class="ctl-row" title="Waveform: what shape this oscillator draws, which is what decides its timbre."><label>Wave</label>${iconGroupHTML('osc1-wave', WAVE_ICONS)}</div>
+          ${sliderRow('osc1_vol', 'Vol', 'How loud this oscillator is. 0 switches it off entirely.')}
+          ${sliderRow('osc1_semi', 'Semi', 'Pitch offset in semitones. 128 plays the written note; 116 is an octave down, 140 an octave up.')}
+          ${sliderRow('osc1_xenv', 'X-Env', 'Envelope sweeps this oscillator down in pitch as the note decays. The kick-drum and laser-zap control — a little goes a long way.')}
         </div>
         <div class="instr-sub">
-          <h4>Oscillator 2</h4>
-          <div class="ctl-row"><label>Wave</label>${iconGroupHTML('osc2-wave', WAVE_ICONS)}</div>
-          ${sliderRow('osc2_vol', 'Vol', 'Volume')}
-          ${sliderRow('osc2_semi', 'Semi', 'Semitune')}
-          ${sliderRow('osc2_det', 'Det', 'Detune')}
-          ${sliderRow('osc2_xenv', 'X-Env', 'Envelope modulates frequency')}
-        </div>
-      </div>
-      <div class="instr-card">
-        <div class="instr-sub">
-          <h4>Noise</h4>
-          ${sliderRow('noise_vol', 'Vol', 'Volume')}
-        </div>
-        <div class="instr-sub">
-          <h4>Arpeggio</h4>
-          ${sliderRow('arp_note1', 'Note 1')}
-          ${sliderRow('arp_note2', 'Note 2')}
-          ${sliderRow('arp_speed', 'Speed', 'Arpeggio speed')}
+          <h4 title="A second oscillator mixed in with the first. Detuned or pitched apart, this is where most of a sound's thickness comes from.">Oscillator 2</h4>
+          <div class="ctl-row" title="Waveform for the second oscillator. Mixing two different shapes gives a richer tone than either alone."><label>Wave</label>${iconGroupHTML('osc2-wave', WAVE_ICONS)}</div>
+          ${sliderRow('osc2_vol', 'Vol', 'How loud the second oscillator is. 0 switches it off entirely.')}
+          ${sliderRow('osc2_semi', 'Semi', 'Pitch offset in semitones. 128 plays the written note; try 135 (a fifth up) or 116 (an octave down) against Oscillator 1.')}
+          ${sliderRow('osc2_det', 'Det', 'Fine detune against Oscillator 1. Small amounts thicken the sound; larger ones beat and wobble. Finer at the low end of the slider.')}
+          ${sliderRow('osc2_xenv', 'X-Env', 'Envelope sweeps this oscillator down in pitch as the note decays, same as Oscillator 1.')}
         </div>
       </div>
       <div class="instr-card">
         <div class="instr-sub">
-          <h4>Envelope</h4>
-          ${sliderRow('env_att', 'Att', 'Attack time')}
-          ${sliderRow('env_sust', 'Sust', 'Sustain time')}
-          ${sliderRow('env_rel', 'Rel', 'Release time')}
-          ${sliderRow('env_decay', 'Exp', 'Exponential decay')}
+          <h4 title="White noise mixed in alongside the oscillators. Filtered noise is where the whole percussion section comes from — snares, hats, wind, surf.">Noise</h4>
+          ${sliderRow('noise_vol', 'Vol', 'How much white noise is mixed in. Shape it with the envelope and the FX filter.')}
         </div>
         <div class="instr-sub">
-          <h4>LFO</h4>
-          <div class="ctl-row"><label>Wave</label>${iconGroupHTML('lfo-wave', WAVE_ICONS)}</div>
-          ${sliderRow('lfo_amt', 'Amt', 'Amount')}
-          ${sliderRow('lfo_freq', 'Freq', 'Frequency')}
-          <label class="ctl-check"><input id="lfo_fxfreq" type="checkbox" title="Envelope modulates filter frequency"> FX freq modulation</label>
+          <h4 title="Cycles each note through up to three pitches while it sounds: the written note, then Note 1, then Note 2. One held note becomes a chord you can hear.">Arpeggio</h4>
+          ${sliderRow('arp_note1', 'Note 1', 'Second step of the cycle, in semitones above the written note. 0 leaves the arpeggio flat.')}
+          ${sliderRow('arp_note2', 'Note 2', 'Third step of the cycle, in semitones above the written note. 4 and 7 make a major chord, 3 and 7 a minor one.')}
+          ${sliderRow('arp_speed', 'Speed', 'How fast the cycle steps. 0 is four rows per step; every notch up halves that, so 7 is a blur.')}
+        </div>
+      </div>
+      <div class="instr-card">
+        <div class="instr-sub">
+          <h4 title="The shape of a note's volume over time: fade in (Att), hold (Sust), fade out (Rel). Total length is the note's length — patterns trigger notes, they don't hold them.">Envelope</h4>
+          ${sliderRow('env_att', 'Att', 'Fade-in time. 0 starts instantly (percussive); high values swell in, for pads and strings.')}
+          ${sliderRow('env_sust', 'Sust', 'How long the note holds at full volume after the fade-in, before it starts releasing.')}
+          ${sliderRow('env_rel', 'Rel', 'Fade-out time — the tail of the note. This is what makes a sound short and dry or long and ringing.')}
+          ${sliderRow('env_decay', 'Exp', 'Bends the fade-out from a straight line into an exponential drop: plucky and front-loaded instead of an even fade.')}
+        </div>
+        <div class="instr-sub">
+          <h4 title="A slow oscillator that sweeps the FX filter cutoff up and down for wah and wobble. It does nothing until FX freq modulation below is ticked.">LFO</h4>
+          <div class="ctl-row" title="Shape of the sweep: sine wobbles smoothly, square jumps between two cutoffs, saw ramps and snaps back."><label>Wave</label>${iconGroupHTML('lfo-wave', WAVE_ICONS)}</div>
+          ${sliderRow('lfo_amt', 'Amt', 'How far the sweep pushes the filter cutoff. 0 is no movement at all.')}
+          ${sliderRow('lfo_freq', 'Freq', 'How fast it sweeps, relative to the row length — so it stays in step with the tempo. Low values are one slow wave over several rows.')}
+          <label class="ctl-check" title="Route the LFO to the FX filter cutoff. Nothing the LFO is set to does anything until this is on — it is the LFO's on switch."><input id="lfo_fxfreq" type="checkbox"> FX freq modulation</label>
         </div>
       </div>
       <div class="instr-card instr-card-fx">
-        <h4>FX</h4>
-        <div class="ctl-row"><label>Filt</label>${iconGroupHTML('fx-filter', FILTER_ICONS)}</div>
+        <h4 title="Applied to the whole channel after the notes are mixed, in this order: filter, distortion, drive, panning, delay. The FX track can change any of these mid-pattern.">FX</h4>
+        <div class="ctl-row" title="Filter type. This is the single biggest tone control in the synth — most of the difference between a bass and a hi-hat is here."><label>Filt</label>${iconGroupHTML('fx-filter', FILTER_ICONS)}</div>
         <div class="fx-sliders">
-          ${sliderRow('fx_freq', 'Freq', 'Filter frequency')}
-          ${sliderRow('fx_res', 'Res', 'Filter resonance')}
-          ${sliderRow('fx_dist', 'Dist', 'Distortion')}
-          ${sliderRow('fx_drive', 'Drive', 'Volume drive')}
-          ${sliderRow('fx_pan_amt', 'Pan', 'Pan amount')}
-          ${sliderRow('fx_pan_freq', 'Pan freq', 'Pan frequency')}
-          ${sliderRow('fx_dly_amt', 'Delay', 'Delay amount')}
-          ${sliderRow('fx_dly_time', 'Delay time', 'Delay time')}
+          ${sliderRow('fx_freq', 'Freq', 'Filter cutoff, roughly 43 Hz per step — 255 is wide open, low values are muffled. Finer at the low end of the slider.')}
+          ${sliderRow('fx_res', 'Res', 'Resonance: emphasises the frequencies right at the cutoff. High values whistle and can get loud, so watch the level.')}
+          ${sliderRow('fx_dist', 'Dist', 'Distortion driven into the signal before the output — grit and crunch. Finer at the low end of the slider.')}
+          ${sliderRow('fx_drive', 'Drive', 'Output level for this channel. The mix control: use it to balance the channels against each other.')}
+          ${sliderRow('fx_pan_amt', 'Pan', 'How far the sound swings between left and right. 0 keeps it centred.')}
+          ${sliderRow('fx_pan_freq', 'Pan freq', 'How fast it swings, relative to the row length. Slow values drift across the stereo field.')}
+          ${sliderRow('fx_dly_amt', 'Delay', 'How loud the echoes are. 0 is no delay; high values feed back for a long tail.')}
+          ${sliderRow('fx_dly_time', 'Delay time', 'Gap between echoes, in rows — so it follows the tempo. 4 is a beat at the default 4 rows per beat.')}
         </div>
       </div>
     </div>`;

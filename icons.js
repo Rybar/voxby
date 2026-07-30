@@ -36,6 +36,11 @@ export const ICONS = {
   // Misc
   about: '<circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="1.6"/>'
     + '<text x="10" y="14.5" font-size="11" font-family="system-ui,sans-serif" text-anchor="middle" fill="currentColor">?</text>',
+  // An open book, for Stage E.18's Help button (main.js's #help-btn opens
+  // help.html, the manual, in its own tab).
+  help: '<path d="M10 5 Q6.5 3 2.5 3.5 V15 Q6.5 14.5 10 16.5 Q13.5 14.5 17.5 15 V3.5 Q13.5 3 10 5 Z"'
+    + ' fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>'
+    + '<path d="M10 5 V16.5" stroke="currentColor" stroke-width="1.6"/>',
 
   // Waveforms (Stage C: OSC1/OSC2/LFO wave pickers)
   waveSine: '<path d="M2 10 Q6 3 10 10 T18 10" fill="none" stroke="currentColor" stroke-width="1.6"/>',

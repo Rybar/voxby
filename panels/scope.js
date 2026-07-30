@@ -46,11 +46,11 @@ export function initScopePanel() {
   $('scope-panel').classList.remove('wip');
   $('scope-panel').innerHTML = `
     <div class="row scope-header">
-      <h3>Scope</h3>
+      <h3 title="Shows everything you can hear — the playing song and anything you play on the keyboard, summed, the same as it reaches your speakers.">Scope</h3>
       <div class="spacer"></div>
-      <button id="scope-toggle" type="button" title="Cycle visualizer (oscilloscope/spectrometer/waterfall)">${MODE_LABEL[MODES[modeIndex]]}</button>
+      <button id="scope-toggle" type="button" title="Switch view: Osc is the waveform over time, Spec the frequency content right now, Wfall that spectrum scrolling as a heat map">${MODE_LABEL[MODES[modeIndex]]}</button>
     </div>
-    <canvas id="scope-canvas"></canvas>`;
+    <canvas id="scope-canvas" title="Live output. Handy for spotting a note that clips (the wave flattening at the top) or an envelope that is longer or shorter than you meant."></canvas>`;
 
   // Stage E.8: the canvas is now sized by its flex layout (screen.css's
   // #scope-canvas rule), not a fixed HTML width/height -- read back the

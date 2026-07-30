@@ -1,9 +1,10 @@
-/* soundbox screen.css — full rewrite (plans/soundbox-revamp.md Phase 3
-   Stage B) against this repo's shared dark tool palette, adapted from
-   tools/scenetool/index.html's inline styles. The old rules here (nested
+/* Voxby screen.css — full rewrite (plans/soundbox-revamp.md Phase 3 Stage B)
+   against this repo's shared dark tool palette, adapted from
+   tools/scenetool/index.html's inline styles. Upstream SoundBox's rules (nested
    <table class="ui">, gui/*.png sprite-swap widgets, blue #447/#559/#88f
-   tracker theme) go away with gui.js in Stage F; nothing below references
-   those ids/classes. */
+   tracker theme) were never carried over, and the last stage deleted gui.js and
+   the gui/ sprites they styled. The manual has its own stylesheet (help.css) —
+   it's a document, not this fixed-height application shell. */
 
 /* Stage E.9: every color below is a var(--xxx) against this palette rather
    than a literal hex, so the whole UI can be recolored from one place.
@@ -374,11 +375,16 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
                      display: flex; flex-direction: column; gap: 10px; align-items: center; }
 #audio-gate-panel p { color: var(--text-dim); margin: 0; }
 /* Stage E.17: the app's wordmark, back to text now that it says Voxby rather
-   than upstream's name (Stage E.12 had logo.svg here). Wide letter-spacing and
-   the accent colour do the work the image used to. Stage E.16's attribution
-   line sits under it. */
+   than upstream's name (Stage E.12 had logo.svg here). Wide letter-spacing does
+   the work the image used to. Stage E.16's attribution line sits under it.
+   Stage E.18: white and lowercase rather than accented uppercase -- the accent
+   is user-adjustable (theme.js), so the wordmark was the one piece of chrome
+   that changed identity with the theme; plain white keeps it fixed, and
+   lowercase is quieter next to the shouting all-caps panel headers. The
+   markup still reads "Voxby" (text-transform, not a lowercased string), so
+   copy/paste and the accessibility tree get the real name. */
 #audio-gate-title { margin: 0; font-size: 34px; font-weight: 700; letter-spacing: 4px;
-                    text-transform: uppercase; color: var(--accent); }
+                    text-transform: lowercase; color: #fff; }
 #audio-gate-panel .gate-sub { font-size: 11px; max-width: 26em; margin-bottom: 6px; }
 #audio-gate-panel .gate-sub a { color: var(--text-dim); }
 #audio-gate-panel .gate-sub a:hover { color: var(--accent); }

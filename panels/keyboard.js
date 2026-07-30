@@ -284,29 +284,32 @@ export function initKeyboardPanel() {
   $('keyboard-panel').classList.remove('wip');
   $('keyboard-panel').innerHTML = `
     <div class="row kb-header">
-      <h3>Keyboard</h3>
+      <h3 title="Note entry. Anything you play here — piano keys, computer keys, the entry pie — is heard live and written into the pattern cell the tracker cursor is on.">Keyboard</h3>
       <label title="Which characters your keyboard prints, for the key hints on the piano below. Auto asks the browser. The notes themselves are tied to physical key positions, so the fingering is the same on every layout — only the labels change.">Keys
         <select id="kb-layout">${LAYOUTS.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</select></label>
       <label id="kb-scale-label" title="Remap the computer keyboard to two straight rows of in-scale notes: Z-M and Q-P. The sharp keys (S D G H J / 2 3 5 6 7) go unused — that is the point.">Scale
         <select id="kb-scale">${SCALES.map(([name], i) => `<option value="${i}">${name}</option>`).join('')}</select></label>
       <span class="kb-root" id="kb-root-group" title="Transpose the scale in half steps. Independent of the octave buttons, which keep moving the whole key set.">Root
-        <button id="kb-root-down" type="button">-</button>
-        <span class="mono" id="kb-root"></span>
-        <button id="kb-root-up" type="button">+</button></span>
+        <button id="kb-root-down" type="button" title="Move the scale's root down a half step">-</button>
+        <span class="mono" id="kb-root" title="The scale's root note — which note the Z and Q keys land on"></span>
+        <button id="kb-root-up" type="button" title="Move the scale's root up a half step">+</button></span>
       <label class="kb-chord-toggle" title="One keypress writes a chord across the pattern row's 4 note columns. With a scale set, the quality comes from the scale; otherwise press a digit right after the note (Q then 1 = Cmaj7, W then 6 = D6).">
         <input id="kb-chord" type="checkbox"> Chord</label>
       <span class="kb-voicing" id="kb-voicing" title="Which chord tones get written. Switch the root off for a rootless voicing — the rest pack left into columns 0-2.">
         ${['R', '3', '5', '7'].map((label, i) =>
           `<label><input type="checkbox" class="kb-tone" data-tone="${i}"> ${label}</label>`).join('')}</span>
-      <span class="mono kb-chord-name" id="kb-chord-name"></span>
+      <span class="mono kb-chord-name" id="kb-chord-name" title="The chord the last note you played spells out, given the scale and voicing set here"></span>
       <div class="spacer"></div>
       <label title="Rows the pattern cursor moves after entering a note — a tracker's edit step. 1 = the next row, 0 = stay put, 4 = a beat at a time. Applies to typed notes, on-screen piano clicks and the double-click entry pie alike.">Step
         <input id="kb-step" type="number" min="0" max="16"></label>
-      <button id="kb-oct-down" type="button" title="Octave down (&lt;)">-</button>
-      <span class="mono" id="kb-octave"></span>
-      <button id="kb-oct-up" type="button" title="Octave up (&gt;)">+</button>
+      <button id="kb-oct-down" type="button" title="Move the playable key range down an octave (&lt; or -)">-</button>
+      <span class="mono" id="kb-octave" title="Octave the bottom-left computer key (Z) currently plays"></span>
+      <button id="kb-oct-up" type="button" title="Move the playable key range up an octave (&gt; or =)">+</button>
     </div>
-    <div class="kb-piano" id="kb-piano"></div>`;
+    <!-- Stage E.18: one tip on the piano rather than 96 on the individual
+         keys -- each key already labels itself with its note and computer
+         key, so a per-key tooltip would repeat what is printed on it. -->
+    <div class="kb-piano" id="kb-piano" title="Click a key to hear it and write it at the tracker cursor. The labels on each key are the computer key that plays it. Hovering outlines the chord that key would write; the lit keys during playback are the notes currently sounding."></div>`;
 
   let html = '';
   for (let oct = OCTAVE_MIN; oct <= OCTAVE_MAX; oct++) {

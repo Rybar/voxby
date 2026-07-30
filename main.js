@@ -6,7 +6,7 @@
 // the file/transport shell against engine.js plus the vendored
 // player.js/jammer.js/presets.js/rle.js/third_party globals —
 // see index.html's script-loading comment for why those stay classic
-// scripts. This file wires New/Open/Export JS/Export WAV/Play/Stop/About
+// scripts. This file wires New/Open/Export JS/Export WAV/Play/Stop/Help/About
 // plus initializing the instrument (Stage C), tracker (Stage D), keyboard
 // (Stage E), and scope (Stage E.2, now also fed by the jammer as of
 // Stage E.4) panels.
@@ -59,8 +59,13 @@ $('audio-gate-start').onclick = () => {
 for (const [id, icon] of Object.entries({
   'new-song': 'newDoc', 'open-song': 'open', 'export-js': 'download',
   'export-wav': 'download', 'share-song': 'link', 'play-song': 'play', 'play-selected': 'playSel',
-  'stop-song': 'stop', 'about-btn': 'about',
+  'stop-song': 'stop', 'help-btn': 'help', 'about-btn': 'about',
 })) $(id).insertAdjacentHTML('afterbegin', svgIcon(icon) + ' ');
+
+// Stage E.18: the manual (help.html -- rewritten for this editor, with its own
+// screenshots) gets a button of its own rather than only a link buried in the
+// About dialog. Its own tab, so a song in progress isn't navigated away from.
+$('help-btn').onclick = () => window.open('help.html', '_blank', 'noopener');
 
 function refresh() {
   const s = state.song;
@@ -90,24 +95,66 @@ state.highlightNotes = highlightPlaybackNotes;
 // reasoning as the two above.
 state.shadowNotes = shadowNotes;
 
-function confirmDiscard(msg) {
-  return !isDirty() || confirm(msg);
-}
-
 function loadSong(song) {
   state.song = song;
   markClean();
   refresh();
 }
 
-// --- generic modal shell, reused for the open-song picker and the about
-// dialog (Stage F adds new/save dialogs the same way) ---
-function openModal(bodyHTML) {
+// --- generic modal shell, reused for the open-song picker, the about and
+// share dialogs, and (Stage E.18) the confirm/notice prompts below ---
+// `onClose` runs whenever the modal goes away by any route the user has --
+// its own Cancel button, the backdrop, or Escape. confirmModal() needs that
+// to settle its promise on the paths that aren't its own button; without it
+// a dismissed prompt would leave the caller awaiting forever.
+let modalOnClose = null;
+function openModal(bodyHTML, onClose = null) {
+  modalOnClose = onClose;
   $('picker-body').innerHTML = bodyHTML;
   $('picker').classList.add('open');
 }
 function closeModal() {
   $('picker').classList.remove('open');
+  const cb = modalOnClose;
+  modalOnClose = null;
+  cb && cb();
+}
+
+// Stage E.18 (the plan's last section: "new/open/save/about -> real modal
+// components"): the last two dialogs in the tool that weren't ours. A native
+// confirm()/alert() renders in the browser's own light chrome, prefixed with
+// the origin ("localhost:8787 says"), and blocks the renderer outright -- in a
+// dark full-screen tool it reads as something having gone wrong. Both are now
+// the same #picker panel as everything else, so they're themed, dismissible
+// the same three ways, and don't freeze playback while they're up. The cost is
+// that they're asynchronous, hence the awaits at the call sites.
+function confirmModal(heading, message, okLabel) {
+  return new Promise(resolve => {
+    // Guarded because closeModal() fires onClose on *every* dismissal route,
+    // including the one the OK button itself takes.
+    let settled = false;
+    const settle = v => { if (!settled) { settled = true; resolve(v); } };
+    openModal(`<h3>${heading}</h3><p class="hint">${message}</p>
+      <div class="row">
+        <button id="ask-ok" title="${okLabel} — the current song is discarded">${okLabel}</button>
+        <button id="picker-cancel" title="Keep the current song and close">Cancel</button>
+      </div>`, () => settle(false));
+    $('ask-ok').onclick = () => { settle(true); closeModal(); };
+    $('picker-cancel').onclick = closeModal;
+  });
+}
+
+function noticeModal(heading, message) {
+  openModal(`<h3>${heading}</h3><p class="hint">${message}</p>
+    <div class="row"><button id="picker-cancel" title="Close">Close</button></div>`);
+  $('picker-cancel').onclick = closeModal;
+}
+
+// Resolves true if it's safe to throw the current song away -- either nothing
+// has changed since the last load/export, or the user said so.
+function confirmDiscard(message) {
+  return !isDirty() ? Promise.resolve(true)
+    : confirmModal('Unsaved changes', message, 'Discard');
 }
 $('picker').onclick = e => { if (e.target.id === 'picker') closeModal(); };
 document.addEventListener('keydown', e => {
@@ -115,8 +162,8 @@ document.addEventListener('keydown', e => {
 });
 
 // --- new / open ---
-$('new-song').onclick = () => {
-  if (!confirmDiscard('Start a new song? Unsaved changes will be lost.')) return;
+$('new-song').onclick = async () => {
+  if (!await confirmDiscard('Starting a new song discards the one you have open. Export JS first if you want to keep it.')) return;
   loadSong(engine.makeNewSong());
 };
 
@@ -135,7 +182,11 @@ async function loadDemoSong(entry) {
   return engine.normalizeSong(mod.default);
 }
 
-$('open-song').onclick = () => {
+// Named (Stage E.18) so a discard prompt raised from inside it can put it back
+// afterwards: the prompt reuses the same #picker panel, so cancelling used to
+// leave the user with no dialog at all instead of the song list they were
+// halfway through choosing from.
+function openSongDialog() {
   const cards = SECTIONS.map(section =>
     `<div class="pick-section">${section}</div>` +
     DEMO_SONGS.map((demo, i) => [demo, i]).filter(([demo]) => demo.section === section).map(([demo, i]) =>
@@ -161,15 +212,19 @@ $('open-song').onclick = () => {
   for (const card of $('picker-grid').querySelectorAll('.pick-card')) {
     card.onclick = async () => {
       const entry = DEMO_SONGS[+card.dataset.i];
-      if (!confirmDiscard(`Load ${entry.name}? Unsaved changes will be lost.`)) return;
+      if (!await confirmDiscard(`Loading ${entry.name} discards the song you have open.`)) {
+        openSongDialog();
+        return;
+      }
       const song = await loadDemoSong(entry).catch(() => undefined);
-      if (!song) { alert(`Could not load ${entry.name}.`); return; }
+      if (!song) { noticeModal('Could not open', `${entry.name} failed to load.`); return; }
       stopSong();
       loadSong(song);
       closeModal();
     };
   }
-};
+}
+$('open-song').onclick = openSongDialog;
 
 // --- import a song file (Phase 4) ---
 // Two routes, picked by extension/MIME: a .js file exported by this editor
@@ -188,7 +243,7 @@ async function readBinaryString(file) {
 }
 
 async function importSongFile(file) {
-  if (!confirmDiscard(`Load ${file.name}? Unsaved changes will be lost.`)) return;
+  if (!await confirmDiscard(`Loading ${file.name} discards the song you have open.`)) return;
   let song;
   try {
     song = /\.js$/i.test(file.name) || /javascript/.test(file.type)
@@ -197,7 +252,11 @@ async function importSongFile(file) {
   } catch {
     song = undefined;  // a truncated/garbage binary can throw its way out of the parser
   }
-  if (!song) { alert(`Could not load ${file.name} (format not recognized).`); return; }
+  if (!song) {
+    noticeModal('Could not open', `${file.name} isn't a song file this editor recognizes — it takes
+      a .js export from Voxby or the old sonant-x editor, or a legacy binary .snd song.`);
+    return;
+  }
   stopSong();
   loadSong(song);
   closeModal();
@@ -239,9 +298,9 @@ $('about-btn').onclick = () => {
     <p>Voxby inherits that licence, the
     <a href="gpl.txt" target="_blank" rel="noopener noreferrer">GPL v3</a>; the minimal
     player routine stays under zlib/libpng, as upstream.</p>
-    <p><a href="help.html" target="_blank">SoundBox's original help</a> still documents
-    the instrument parameters and the song format — its screenshots show the old UI.</p>
-    <div class="row"><button id="picker-cancel">Close</button></div>`);
+    <p>The <a href="help.html" target="_blank">manual</a> covers the panels, note entry, the FX
+    track and how to use a song in a game. Every control in here also has a hover tip.</p>
+    <div class="row"><button id="picker-cancel" title="Close">Close</button></div>`);
   $('picker-cancel').onclick = closeModal;
 };
 
@@ -302,7 +361,11 @@ function loadSharedSong() {
   if (!m) return;
   let song;
   try { song = engine.urlDataToSong(m[1]); } catch { song = undefined; }
-  if (!song) { alert('That share link could not be decoded.'); return; }
+  if (!song) {
+    noticeModal('Broken share link', `The song data in this link could not be decoded — it was
+      probably truncated on its way here. Ask whoever sent it for the exported .js file instead.`);
+    return;
+  }
   loadSong(song);
 }
 

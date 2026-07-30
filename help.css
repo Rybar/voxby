@@ -1,89 +1,205 @@
-/* -*- mode: css; tab-width: 2; indent-tabs-mode: nil; -*-
-*
-* Copyright (c) 2011-2013 Marcus Geelnard
-*
-* This file is part of SoundBox.
-*
-* SoundBox is free software: you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* (at your option) any later version.
-*
-* SoundBox is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with SoundBox.  If not, see <http://www.gnu.org/licenses/>.
-*
-*/
+/* Voxby manual (help.html) — written from scratch for this editor
+   (plans/soundbox-revamp.md's last stage). It replaces upstream SoundBox's
+   help.css, which was a light-background Audiowide-headings page pulling a
+   webfont off fonts.googleapis.com: a jarring flip from the dark editor, and a
+   network request in a page that has to work offline from a checkout.
 
-@import url(http://fonts.googleapis.com/css?family=Audiowide);
+   Deliberately standalone rather than importing screen.css: the manual is one
+   long document, not an application shell, and screen.css is a flexbox layout
+   for a fixed-height window. The palette below is the same set of values,
+   copied, so the two pages look like one product — keep them in sync by eye if
+   screen.css's :root block ever changes. */
+
+:root {
+  --bg0: #0d0e11;
+  --bg1: #1c1f25;
+  --bg2: #262a32;
+  --border: #545c68;
+  --border-dim: #383d46;
+  --text: #f3f5f8;
+  --text-dim: #b0b8c4;
+  --text-dim2: #7d8492;
+  --accent: #ff8a3d;
+  --accent-text: #1a0f04;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
 
 body {
-  font-family: arial, sans-serif;
-  padding-bottom: 20px;
+  margin: 0;
+  padding: 0 20px 80px;
+  background: var(--bg0);
+  color: var(--text);
+  font: 15px/1.6 system-ui, sans-serif;
 }
 
-#content {
-  min-width: 200px;
-  max-width: 1000px;
-  padding: 0;
-  margin-left: auto;
-  margin-right: auto;
-}
+#content { max-width: 860px; margin: 0 auto; }
 
-h1,h2,h3 {
-  font-family: 'Audiowide', cursive;
-  font-weight: normal;
-}
+/* --- masthead ------------------------------------------------------------ */
 
+header { padding: 40px 0 24px; border-bottom: 1px solid var(--border-dim); margin-bottom: 8px; }
 h1 {
-  font-size: 300%;
-  text-align: center;
-  background: #ccc;
-  border-radius: 9px;
+  margin: 0;
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: 5px;
+  text-transform: lowercase;   /* matches the editor's startup wordmark */
 }
+header p { color: var(--text-dim); margin: 6px 0 0; max-width: 60ch; }
+header .actions { margin-top: 18px; display: flex; gap: 8px; flex-wrap: wrap; }
+.button {
+  display: inline-block;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg2);
+  color: var(--text);
+  text-decoration: none;
+}
+.button:hover { border-color: var(--accent); color: var(--accent); }
+
+/* --- headings ------------------------------------------------------------ */
 
 h2 {
-  font-size: 180%;
-  margin-top: 2em;
+  margin: 56px 0 14px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-dim);
+  font-size: 22px;
+  font-weight: 600;
 }
+h3 { margin: 32px 0 8px; font-size: 16px; font-weight: 600; color: var(--accent); }
+h4 { margin: 22px 0 6px; font-size: 14px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: .06em; }
 
-h3 {
-  font-size: 130%;
-  margin-top: 2em;
+/* Deep-link targets sit under nothing (no sticky header), but anchoring still
+   wants a little breathing room when the browser scrolls to them. */
+h2, h3 { scroll-margin-top: 16px; }
+
+a { color: var(--accent); }
+a:hover { color: var(--text); }
+
+p { max-width: 72ch; }
+ul, ol { max-width: 70ch; padding-left: 22px; }
+li { margin: 4px 0; }
+
+/* --- contents ------------------------------------------------------------ */
+
+nav.toc {
+  background: var(--bg1);
+  border: 1px solid var(--border-dim);
+  border-radius: 6px;
+  padding: 14px 18px;
+  margin: 24px 0;
 }
+nav.toc ol { margin: 0; max-width: none; columns: 2; column-gap: 32px; }
+nav.toc a { text-decoration: none; }
 
-.centered {
-  text-align: center;
+/* --- figures ------------------------------------------------------------- */
+
+figure {
+  margin: 22px 0;
+  padding: 0;
 }
+figure img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--border-dim);
+  border-radius: 6px;
+  background: var(--bg1);
+}
+figcaption { color: var(--text-dim2); font-size: 13px; margin-top: 6px; }
+/* Figures of a single small panel shouldn't be blown up to the column width. */
+figure.narrow img { max-width: 420px; }
+figure.wide { margin-left: calc(50% - 50vw + 20px); margin-right: calc(50% - 50vw + 20px); text-align: center; }
+figure.wide img { margin: 0 auto; max-width: min(1600px, calc(100vw - 40px)); }
+figure.wide figcaption { max-width: 72ch; margin-inline: auto; }
 
-.smallButton {
-  width: 24px;
-  height: 24px;
-  padding: 3px;
-  margin: 0 1px;
+/* The instrument signal chain is inline SVG rather than a bitmap, so it stays
+   sharp and picks up the palette above (upstream's equivalent was a 41 KB PNG
+   of the same boxes). */
+figure svg { display: block; max-width: 100%; height: auto; margin: 0 auto; }
+
+/* --- keys, code, tables -------------------------------------------------- */
+
+kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--bg2);
+  font: 12px/1.5 ui-monospace, monospace;
+  color: var(--text);
+  white-space: nowrap;
+}
+code {
+  font: 13px/1.5 ui-monospace, monospace;
+  background: var(--bg1);
+  border: 1px solid var(--border-dim);
   border-radius: 3px;
-  background: #d8d8d8 url("gui/smallButton-bg.gif") repeat-x;
-  font-family: arial,sans;
-  font-size: 11px;
-  color: #000;
-  overflow: hidden;
+  padding: 0 4px;
 }
+pre {
+  background: var(--bg1);
+  border: 1px solid var(--border-dim);
+  border-radius: 6px;
+  padding: 12px 14px;
+  overflow-x: auto;
+}
+pre code { background: none; border: 0; padding: 0; }
 
-.note {
-  background: #fee;
-  border: 2px solid #a88;
-  padding: 3px 6px;
-  border-radius: 3px;
+table {
+  border-collapse: collapse;
+  margin: 16px 0;
+  width: 100%;
+  font-size: 14px;
 }
+th, td {
+  text-align: left;
+  vertical-align: top;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-dim);
+}
+th { color: var(--text-dim); font-weight: 600; }
+td:first-child { white-space: nowrap; }
+tbody tr:hover { background: var(--bg1); }
+
+/* --- callouts ------------------------------------------------------------ */
+
+.note, .warn {
+  margin: 18px 0;
+  padding: 10px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border-dim);
+  border-left: 3px solid var(--accent);
+  background: var(--bg1);
+  max-width: 72ch;
+}
+.note p, .warn p { margin: 0; }
+.note p + p, .warn p + p { margin-top: 8px; }
+.warn { border-left-color: #e05252; }
 
 .license {
-  font-family: monospace;
-  background: #eee;
-  border: 1px solid #a88;
-  padding: 3px 6px;
-  border-radius: 3px;
+  font: 12px/1.6 ui-monospace, monospace;
+  color: var(--text-dim);
+  background: var(--bg1);
+  border: 1px solid var(--border-dim);
+  border-radius: 6px;
+  padding: 10px 14px;
+  max-width: 90ch;
+  white-space: pre-wrap;
+}
+
+footer {
+  margin-top: 64px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-dim);
+  color: var(--text-dim2);
+  font-size: 13px;
+}
+
+@media (max-width: 700px) {
+  nav.toc ol { columns: 1; }
+  figure.wide { margin-inline: 0; }
 }

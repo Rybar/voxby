@@ -745,7 +745,8 @@ function renderSequencer() {
   const rows = seqGrid.numrows();
   let thead = '<tr><th></th>';
   for (let col = 0; col < engine.MAX_CHANNELS; col++) {
-    thead += `<th class="${col === state.selInstrument ? 'focused' : ''}">${col + 1}</th>`;
+    thead += `<th class="${col === state.selInstrument ? 'focused' : ''}"`
+      + ` title="Channel ${col + 1}. Click a cell in this column to edit this channel's patterns and instrument.">${col + 1}</th>`;
   }
   thead += '</tr>';
   let tbody = '';
@@ -777,7 +778,8 @@ function fxCellHTML(channel, pn, row) {
     const f = state.song.songData[channel].c[pn - 1].f;
     text = fxGrid.toHTML([f[row], f[row + state.song.patternLen]]);
   }
-  return `<td class="trk-fx ${cls}" data-channel="${channel}" data-col="0" data-row="${row}">${text}</td>`;
+  return `<td class="trk-fx ${cls}" data-channel="${channel}" data-col="0" data-row="${row}"`
+    + ` title="FX track: click a row here, then move any instrument control to record that change at this row. A command stays in effect until something else changes it, even into later patterns.">${text}</td>`;
 }
 
 function renderPatterns() {
@@ -786,7 +788,10 @@ function renderPatterns() {
   for (let channel = 0; channel < engine.MAX_CHANNELS; channel++) {
     const pn = patternNumFor(channel);
     html += `<div class="pat-col ${channel === state.selInstrument ? 'focused' : ''}">`
-      + `<div class="pat-col-head" data-channel="${channel}">Ch ${channel + 1} · ${pn ? 'Pat ' + pn : String.fromCharCode(8212)}</div>`
+      + `<div class="pat-col-head" data-channel="${channel}" title="${pn
+          ? `Channel ${channel + 1} plays pattern ${pn} at this sequence row. Click to edit it.`
+          : `Channel ${channel + 1} has no pattern at this sequence row — type a pattern number into the sequencer above before you can write notes here.`
+        }">Ch ${channel + 1} · ${pn ? 'Pat ' + pn : String.fromCharCode(8212)}</div>`
       + '<table class="trk-table"><tbody>';
     for (let row = 0; row < patternLen; row++) {
       html += `<tr class="${isBeatRow(row) ? 'beat' : ''}${row === pat.row ? ' curRow' : ''}">`;
@@ -979,16 +984,19 @@ export function stopFollowingPlayback() {
 export function initTrackerPanel() {
   $('sequencer-panel').classList.remove('wip');
   $('sequencer-panel').innerHTML = `
-    <h3>Sequencer</h3>
+    <h3 title="The song's running order. One row per step of the song, one column per channel; each cell says which of that channel's 36 patterns plays at that step.">Sequencer</h3>
     <div class="row trk-controls">
-      <label title="Tempo in beats per minute">BPM <input id="song-bpm" type="number" min="10" max="1000"></label>
-      <label title="Rows per pattern">Rows <input id="song-rpp" type="number" min="1" max="256"></label>
-      <label title="Highlight every Nth row as a beat, in both grids">Beat <input id="song-beat" type="number" min="1" max="32"></label>
+      <label title="Tempo, in beats per minute. Four rows make a beat, so this sets how fast the pattern rows run.">BPM <input id="song-bpm" type="number" min="10" max="1000"></label>
+      <label title="How many rows every pattern in the song has. Shortening this throws away the notes past the new end.">Rows <input id="song-rpp" type="number" min="1" max="256"></label>
+      <label title="Highlight every Nth row in both grids, so you can see where the beat is. 4 for 4/4, 3 for a waltz, 8 for 32nd-note patterns. A view setting — it changes nothing about the song.">Beat <input id="song-beat" type="number" min="1" max="32"></label>
     </div>
-    <div class="trk-scroll"><table class="trk-table"><thead id="seq-thead"></thead><tbody id="seq-tbody"></tbody></table></div>`;
+    <div class="trk-scroll" title="Click a cell, then type a pattern number (0-9, A-Z) to place a pattern; 0 or Backspace clears it. Arrow keys move, shift+arrows or click+drag select, Ctrl+C/Ctrl+V copy and paste a block. Clicking a column also picks that channel for the instrument panel.">
+      <table class="trk-table"><thead id="seq-thead"></thead><tbody id="seq-tbody"></tbody></table></div>`;
 
   $('patterns-panel').classList.remove('wip');
-  $('patterns-panel').innerHTML = '<h3>Patterns</h3><div class="pat-scroll" id="pat-scroll"></div>';
+  $('patterns-panel').innerHTML =
+    `<h3 title="The notes in the patterns playing at the sequencer's current row — every channel side by side. The highlighted column is the one you are editing.">Patterns</h3>
+     <div class="pat-scroll" id="pat-scroll" title="Four note columns per channel (four notes can sound at once) plus the narrow FX column. Play notes in with the piano, the computer keys, or double-click a cell for the note/chord pie. Alt+arrows transpose the selection; right-click for the rest."></div>`;
 
   $('song-bpm').oninput = () => {
     const bpm = +$('song-bpm').value;

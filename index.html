@@ -22,8 +22,9 @@
            Voxby that image would be claiming the wrong name, so the credit
            it used to carry implicitly is spelled out underneath instead
            (this panel is the first thing anyone opening the editor sees, so
-           it's where the attribution belongs). logo.svg is now unreferenced
-           — it goes with gui.js in Stage F. -->
+           it's where the attribution belongs). logo.svg went with gui.js in
+           the final cleanup. Lowercase and white rather than accented caps --
+           see screen.css's #audio-gate-title. -->
       <h1 id="audio-gate-title">Voxby</h1>
       <p class="gate-sub">A synth music tracker built on
         <a href="https://gitlab.com/mbitsnbites/soundbox" target="_blank" rel="noopener noreferrer">SoundBox</a>
@@ -36,26 +37,32 @@
   <div id="top">
     <h3 class="title">Voxby</h3>
 
+    <!-- Stage E.18: every control in here carries a title. The plan's last
+         section asked for hover documentation on everything, and this row is
+         where it matters most -- eight one-word buttons whose differences
+         (Export JS vs Export WAV vs Share; Play vs Play selected) are exactly
+         what a newcomer can't guess. -->
     <div class="row">
-      <button id="new-song" title="New song">New</button>
-      <button id="open-song" title="Open a song file: a .js exported from Voxby or the old sonant-x editor, or a legacy binary .snd">Open</button>
-      <button id="export-js" title="Export song as an ES module (import-ready for src/js/sounds/, and re-importable here)">Export JS</button>
-      <button id="export-wav" title="Export song as a WAV file">Export WAV</button>
-      <button id="share-song" title="Get a link with the whole song packed into it, for pasting somewhere">Share</button>
+      <button id="new-song" title="Start an empty song — one channel, 32 rows per pattern, 120 BPM. Asks first if the current song has unsaved changes.">New</button>
+      <button id="open-song" title="Open a song: the built-in library, or a file — a .js exported from Voxby or the old sonant-x editor, or a legacy binary .snd">Open</button>
+      <button id="export-js" title="Download the song as an ES module (export default {...}) — drop it in src/js/sounds/ to play in a game, and it re-opens here. Doubles as Save: it clears the unsaved-changes flag.">Export JS</button>
+      <button id="export-wav" title="Render the whole song to a 44.1 kHz WAV file and download it">Export WAV</button>
+      <button id="share-song" title="Get a link with the whole song packed into it, for pasting somewhere — nothing is uploaded, the song travels in the URL">Share</button>
     </div>
 
     <div class="row">
-      <button id="play-song" title="Play song">Play</button>
+      <button id="play-song" title="Render and play the whole song from the top">Play</button>
       <button id="play-selected" title="Play the sequence editor's selection, or solo-play the pattern being edited (same as Space)">Play selected</button>
-      <button id="stop-song" title="Stop playing">Stop</button>
-      <label><input id="loop-playback" type="checkbox"> loop</label>
+      <button id="stop-song" title="Stop playing (Space)">Stop</button>
+      <label title="Repeat whatever gets played, instead of stopping at the end"><input id="loop-playback" type="checkbox"> loop</label>
     </div>
 
-    <div id="status" class="mono"></div>
+    <div id="status" class="mono" title="This song's shape: channels in use, rows per pattern, and how many steps long the sequence is"></div>
 
     <div class="spacer"></div>
-    <label class="theme-picker" title="Adjust the UI accent color">Theme <input id="theme-accent" type="color"></label>
-    <button id="about-btn" title="About Voxby">About</button>
+    <label class="theme-picker" title="Adjust the UI accent color — cursors, selections, sliders and the scope all follow it. Saved for next time.">Theme <input id="theme-accent" type="color"></label>
+    <button id="help-btn" title="Open the manual in a new tab: the panels, note entry, the FX track, and how to use a song in a game">Help</button>
+    <button id="about-btn" title="Credits, licence, and what Voxby is built on">About</button>
   </div>
 
   <!-- Stage E.1: promoted to its own full-width row (was squeezed into
@@ -120,15 +127,17 @@
        packing a song into a Share link — see engine.js's uncompress()/
        compress(). deflate.js was unloaded between Stage B and Stage E.14,
        when nothing called songToBin() any more; Share brought it back).
-       demo-songs.js is no longer loaded at all: Stage E.12 removed the
-       built-in demo list from the open dialog (see main.js's #open-song
-       handler); the file stays on disk only because the not-yet-deleted
-       legacy gui.js still include()s it. third_party/
-       Blob.js is a polyfill for browsers with no native Blob and isn't
-       needed by this repo's "current Chrome/Firefox" target; third_party/
-       WebMIDIAPI.js is dropped, not ported (MIDI input is optional/best-
-       effort per the plan and was never DOM-free to begin with — see
-       panels/keyboard.js's top comment). -->
+       The final cleanup deleted the rest of upstream's front end along with
+       gui.js: demo-songs.js (Stage E.12 replaced the built-in demo list with
+       songs/, see main.js's #open-song handler), the gui/ sprite sheet
+       (icons.js draws inline SVG instead), logo.svg, and
+       third_party/WebMIDIAPI.js — MIDI input was dropped rather than ported
+       (optional/best-effort per the plan, and never DOM-free to begin with;
+       see panels/keyboard.js's top comment). third_party/Blob.js survives
+       unloaded: it's a polyfill this repo's "current Chrome/Firefox" target
+       doesn't need, but demo.html and arpeggio-demo.html (upstream's
+       standalone player-small.js examples, which the manual links) include
+       it. -->
   <script src="presets.js"></script>
   <script src="rle.js"></script>
   <script src="third_party/inflate.js"></script>
