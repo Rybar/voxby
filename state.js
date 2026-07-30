@@ -68,7 +68,7 @@ export const state = {
   scaleMode: 0,         // index into scales.js's SCALES; 0 = Chromatic = off
   scaleRoot: 0,         // scale transpose in half steps, 0-11
   chordOn: false,       // one keypress writes a chord (see panels/tracker.js)
-  chordTones: [true, true, true, true],   // which of root/3rd/5th/7th to write
+  chordTones: [true, true, true, true, false, false, false],   // which of R/3/5/7/9/11/13 to write (max 4)
   // Name of the chord last entered, for the keyboard panel's readout. Purely
   // transient UI feedback -- not persisted.
   chordName: '',

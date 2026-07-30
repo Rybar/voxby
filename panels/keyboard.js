@@ -267,8 +267,8 @@ export function initKeyboardPanel() {
         <button id="kb-root-up" type="button" title="Move the scale's root up a half step">+</button></span>
       <label class="kb-chord-toggle" title="One keypress writes a chord across the pattern row's 4 note columns. With a scale set, the quality comes from the scale; otherwise press a digit right after the note (Q then 1 = Cmaj7, W then 6 = D6).">
         <input id="kb-chord" type="checkbox"> Chord</label>
-      <span class="kb-voicing" id="kb-voicing" title="Which chord tones get written. Switch the root off for a rootless voicing — the rest pack left into columns 0-2.">
-        ${['R', '3', '5', '7'].map((label, i) =>
+      <span class="kb-voicing" id="kb-voicing" title="Which chord tones get written (max 4). Switch the root off for a rootless voicing — the rest pack left into the pattern row's columns.">
+        ${['R', '3', '5', '7', '9', '11', '13'].map((label, i) =>
           `<label><input type="checkbox" class="kb-tone" data-tone="${i}"> ${label}</label>`).join('')}</span>
       <span class="mono kb-chord-name" id="kb-chord-name" title="The chord the last note you played spells out, given the scale and voicing set here"></span>
       <div class="spacer"></div>
@@ -348,7 +348,16 @@ export function initKeyboardPanel() {
     if (n >= 0 && n <= 16) { state.editStep = n; savePrefs(); }
   };
   for (const box of $('kb-voicing').querySelectorAll('.kb-tone')) {
-    box.onchange = () => { state.chordTones[+box.dataset.tone] = box.checked; changed(); };
+    box.onchange = () => {
+      const checked = state.chordTones.filter(Boolean).length;
+      // Enforce max 4 voices: if trying to check a 5th, uncheck it
+      if (box.checked && checked >= 4) {
+        box.checked = false;
+        return;
+      }
+      state.chordTones[+box.dataset.tone] = box.checked;
+      changed();
+    };
   }
 
   refreshKeyboardPanel();
