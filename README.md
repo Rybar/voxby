@@ -1,64 +1,55 @@
-# SoundBox
+# Voxby
 
-SoundBox is a tool for composing synthetic music, in your browser. Its design
-is basically that of a
-[music tracker](https://en.wikipedia.org/wiki/Music_tracker), which means that
-the music is organized in *tracks* and *patterns*.
+Voxby is a synth music tracker for the browser, aimed at writing music small
+enough to ship inside a [js13kGames](https://js13kgames.com) entry — the song is
+a few hundred bytes of plain JS data, played back by a tiny synth routine at
+runtime.
 
-The latest version of SoundBox is served at:
-[sb.bitsnbites.eu](http://sb.bitsnbites.eu).
+Live at **[ryanbmalm.com/voxby](https://ryanbmalm.com/voxby/)**.
+
+It is a rewritten editor around the audio engine of Marcus Geelnard's
+[SoundBox](https://gitlab.com/mbitsnbites/soundbox), whose synth, players,
+instrument presets and song format it keeps intact. What is new is the editing
+side: every channel's pattern side by side instead of one at a time, an
+on-screen piano with scale/chord-aware note entry, a radial note+chord entry
+menu, an oscilloscope, transpose and clipboard operations, songs exported as
+`export default {...}` ES modules (and re-importable), and share links that
+carry a whole song in the URL.
 
 ## Running locally
 
-To run your own copy of SoundBox locally, you need to serve it via a web server
-(using the file:// protocol is *not* supported).
-
-A simple method is to use Python SimpleHTTPServer (that usually comes
-preinstalled on Unix-like systems such as macOS and Linux):
+Serve the directory over HTTP — `file://` will not work, since the editor is
+built from ES modules:
 
 ```bash
-cd path/to/soundbox
-python -m http.server 8008
+cd path/to/voxby
+python3 -m http.server 8008
 ```
 
-Now point your browser to `http://localhost:8008/`.
+Then open `http://localhost:8008/`.
+
+Voxby is developed inside [Rybar/js13k2026](https://github.com/Rybar/js13k2026)
+as a submodule at `tools/soundbox/`, where it is served by that repo's shared
+dev-tool server and covered by its headless-Chrome test suites
+(`tests/soundbox/`).
+
+## Layout
+
+| | |
+|---|---|
+| `main.js`, `panels/`, `state.js`, `menu.js`, `theme.js`, `icons.js` | the editor: entry point, one module per panel (instrument, tracker, keyboard, scope, entry pie), UI state, generic popup menu, theming, inline SVG icons |
+| `engine.js` | song data model — binary/JS import and export, no DOM |
+| `scales.js`, `layouts.js` | scale/chord tables for note entry; keyboard-layout tables for the piano's key hints |
+| `songs/` | song library, each a plain ES module |
+| `player.js`, `player-worker.js`, `player-small.js`, `jammer.js`, `presets.js`, `rle.js`, `common.js`, `third_party/` | upstream SoundBox, untouched — the synth, the two players, the live-preview jammer, instrument presets, compression |
+| `gui.js`, `gui/`, `help.html`, `help/` | the original SoundBox editor and its documentation, kept until the rewrite is fully verified |
 
 ## License
 
-The SoundBox editor is licensed under the
-[GNU General Public License version 3](gpl.txt).
+The editor is licensed under the
+[GNU General Public License version 3](gpl.txt), inherited from SoundBox.
 
-However, the minimal player routine, [player-small.js](player-small.js), is
-released under the [zlib/libpng license](https://opensource.org/licenses/Zlib).
-This makes it suitable for inclusion in your own software.
-
-
-## Contributing
-
-You are very welcome to contribute with pull requests. When doing so, follow
-these conventions:
-
-### Git commits
-
-* Use [proper commit messages](http://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html),
-  in imperative form.
-* Let the Git history of your feature branch follow the
-  [recipe model](http://www.bitsnbites.eu/git-history-work-log-vs-recipe/).
-* If your commit fixes a reported issue, add "Fixes #14" (where "14" is the
-  issue number) on a separate line in the commit message (in the body part of
-  the comment, *not* in the summary part).
-
-These are simple, conventional practices that make it easier to keep track of
-different patches.
-
-### Code
-
-* All code is written in pure HTML/JavaScript/CSS, without any third party
-  toolkits or frameworks (though some shims are used for portability). Keep it
-  so.
-* Use spaces for indentation (not tabs).
-* The player routine is special - it is designed and tuned for being as small
-  and easily compressible (e.g. using [GCC](https://developers.google.com/closure/compiler/)
-  and [DEFLATE](https://en.wikipedia.org/wiki/DEFLATE)) as possible. Do not add
-  or alter the player routine without careful consideration.
-
+The minimal player routine, [player-small.js](player-small.js), is released
+under the [zlib/libpng license](https://opensource.org/licenses/Zlib), which
+makes it suitable for inclusion in your own software — that is the file you
+ship with an exported song.

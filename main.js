@@ -1,4 +1,8 @@
-// soundbox entry point (plans/soundbox-revamp.md Phase 3 Stage B). Wires
+// Voxby entry point (plans/soundbox-revamp.md Phase 3 Stage B; the editor was
+// called soundbox until Stage E.17 renamed it. The directory, the /soundbox/
+// dev-server route, the window.soundbox test hook and the localStorage keys
+// deliberately keep the old name -- none of them are user-visible, and renaming
+// the storage keys would silently discard everyone's saved preferences). Wires
 // the file/transport shell against engine.js plus the vendored
 // player.js/jammer.js/presets.js/rle.js/third_party globals —
 // see index.html's script-loading comment for why those stay classic
@@ -144,7 +148,7 @@ $('open-song').onclick = () => {
       or a legacy binary song (.snd) — you can also just drag the file onto this page.
       <b>Imports run as code — only open files you trust.</b></p>
     <div class="row">
-      <button id="import-file-btn" title="Open a .js song exported from soundbox or the old sonant-x editor (or a legacy binary .snd song)">Import file…</button>
+      <button id="import-file-btn" title="Open a .js song exported from Voxby or the old sonant-x editor (or a legacy binary .snd song)">Import file…</button>
       <button id="picker-cancel" title="Close without loading anything">Cancel</button>
     </div>
     <input id="import-file" type="file" accept=".js,.snd,text/javascript" hidden>`);
@@ -227,12 +231,12 @@ document.addEventListener('drop', e => {
 // thing sits on the startup gate (index.html), which is the first thing anyone
 // opening the editor sees.
 $('about-btn').onclick = () => {
-  openModal(`<h3>About</h3>
-    <p><b>soundbox</b> is a synth music tracker for writing js13k-sized music: a
+  openModal(`<h3>About Voxby</h3>
+    <p><b>Voxby</b> is a synth music tracker for writing js13k-sized music: a
     rewritten editor around the audio engine of
     <a href="https://gitlab.com/mbitsnbites/soundbox" target="_blank" rel="noopener noreferrer">Marcus Geelnard's SoundBox</a>,
     whose synth, players, instrument presets and song format it keeps intact.</p>
-    <p>It inherits that licence, the
+    <p>Voxby inherits that licence, the
     <a href="gpl.txt" target="_blank" rel="noopener noreferrer">GPL v3</a>; the minimal
     player routine stays under zlib/libpng, as upstream.</p>
     <p><a href="help.html" target="_blank">SoundBox's original help</a> still documents
@@ -246,9 +250,13 @@ $('about-btn').onclick = () => {
 // makeURLSongData, dropped by Stage B along with the rest of its dialogs) for
 // posting a tune in chat without attaching a file. The payload lives in the
 // *hash*, so it never reaches the server and needs no route of its own -- the
-// page reads it at boot below. SHARE_BASE is a placeholder until Ryan picks a
-// domain; it's the only thing that changes when he does.
-const SHARE_BASE = 'http://localhost:8787/soundbox/';
+// page reads it at boot below. SHARE_BASE is where the app is actually deployed
+// (Stage E.17 -- GitHub Pages off the voxby repo's master branch, under Ryan's
+// own domain) rather than the local dev server: a link is only worth sending if
+// it opens somewhere public. https, not http: the payload never reaches the
+// server, but the page's own clipboard/keyboard-layout calls need a secure
+// context, and Pages doesn't enforce the upgrade itself.
+const SHARE_BASE = 'https://ryanbmalm.com/voxby/';
 // Past roughly this length a URL stops being pasteable -- chat clients and
 // some browsers truncate or refuse to linkify it. Not a hard limit (the link
 // is still handed over), just the point where it's worth saying so.
@@ -320,7 +328,7 @@ function generateWave(song, doneFn, opts) {
 
 $('export-wav').onclick = () => {
   generateWave(state.song, wave => {
-    saveAs(new Blob([wave], { type: 'application/octet-stream' }), 'soundbox-music.wav');
+    saveAs(new Blob([wave], { type: 'application/octet-stream' }), 'voxby-music.wav');
   });
 };
 

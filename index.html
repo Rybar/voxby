@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>soundbox</title>
+<title>Voxby</title>
 <link rel="shortcut icon" href="favicon.ico">
 <link rel="stylesheet" href="screen.css">
 </head>
@@ -17,13 +17,14 @@
        policy. -->
   <div id="audio-gate">
     <div id="audio-gate-panel">
-      <!-- Stage E.12: upstream SoundBox's own wordmark, recoloured white
-           for this panel — see logo.svg's own header comment. It replaces
-           the "soundbox" text title that used to sit here rather than
-           doubling it up. Stage E.16 added the credit line under it: the
-           logo is upstream's, and this panel is the first thing anyone
-           opening the editor sees, so it's where the attribution belongs. -->
-      <img id="audio-gate-logo" src="logo.svg" width="130" height="32" alt="soundbox">
+      <!-- Stage E.17: the app's own wordmark, set in text. Stage E.12 had
+           upstream SoundBox's recoloured logo.svg here; with the rename to
+           Voxby that image would be claiming the wrong name, so the credit
+           it used to carry implicitly is spelled out underneath instead
+           (this panel is the first thing anyone opening the editor sees, so
+           it's where the attribution belongs). logo.svg is now unreferenced
+           — it goes with gui.js in Stage F. -->
+      <h1 id="audio-gate-title">Voxby</h1>
       <p class="gate-sub">A synth music tracker built on
         <a href="https://gitlab.com/mbitsnbites/soundbox" target="_blank" rel="noopener noreferrer">SoundBox</a>
         · <a href="gpl.txt" target="_blank" rel="noopener noreferrer">GPL&nbsp;v3</a></p>
@@ -33,11 +34,11 @@
   </div>
 
   <div id="top">
-    <h3 class="title">soundbox</h3>
+    <h3 class="title">Voxby</h3>
 
     <div class="row">
       <button id="new-song" title="New song">New</button>
-      <button id="open-song" title="Open a song file: a .js exported from soundbox or the old sonant-x editor, or a legacy binary .snd">Open</button>
+      <button id="open-song" title="Open a song file: a .js exported from Voxby or the old sonant-x editor, or a legacy binary .snd">Open</button>
       <button id="export-js" title="Export song as an ES module (import-ready for src/js/sounds/, and re-importable here)">Export JS</button>
       <button id="export-wav" title="Export song as a WAV file">Export WAV</button>
       <button id="share-song" title="Get a link with the whole song packed into it, for pasting somewhere">Share</button>
@@ -54,7 +55,7 @@
 
     <div class="spacer"></div>
     <label class="theme-picker" title="Adjust the UI accent color">Theme <input id="theme-accent" type="color"></label>
-    <button id="about-btn" title="About soundbox">About</button>
+    <button id="about-btn" title="About Voxby">About</button>
   </div>
 
   <!-- Stage E.1: promoted to its own full-width row (was squeezed into
@@ -89,7 +90,7 @@
   <div id="drop-hint">
     <div id="drop-hint-panel">
       <h3 class="title">Drop a song file to open it</h3>
-      <p>.js exported from soundbox or the old sonant-x editor, or a legacy binary .snd song.</p>
+      <p>.js exported from Voxby or the old sonant-x editor, or a legacy binary .snd song.</p>
       <p>Imports run as code — only open files you trust.</p>
     </div>
   </div>

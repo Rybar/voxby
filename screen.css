@@ -373,10 +373,12 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
                      padding: 20px 26px; text-align: center;
                      display: flex; flex-direction: column; gap: 10px; align-items: center; }
 #audio-gate-panel p { color: var(--text-dim); margin: 0; }
-/* Stage E.12: upstream's wordmark (logo.svg), sized off its own 130x32
-   aspect. It stands in for the text title this panel used to show. */
-#audio-gate-logo { width: 210px; height: auto; margin-bottom: 2px; }
-/* Stage E.16: the attribution line under it. */
+/* Stage E.17: the app's wordmark, back to text now that it says Voxby rather
+   than upstream's name (Stage E.12 had logo.svg here). Wide letter-spacing and
+   the accent colour do the work the image used to. Stage E.16's attribution
+   line sits under it. */
+#audio-gate-title { margin: 0; font-size: 34px; font-weight: 700; letter-spacing: 4px;
+                    text-transform: uppercase; color: var(--accent); }
 #audio-gate-panel .gate-sub { font-size: 11px; max-width: 26em; margin-bottom: 6px; }
 #audio-gate-panel .gate-sub a { color: var(--text-dim); }
 #audio-gate-panel .gate-sub a:hover { color: var(--accent); }
