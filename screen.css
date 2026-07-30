@@ -332,7 +332,7 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
           display: none; place-items: center; z-index: 9; }
 #picker.open { display: grid; }
 #picker-panel { background: var(--bg1); border: 1px solid var(--border); border-radius: 6px;
-                padding: 14px; max-width: 70vw; max-height: 70vh;
+                padding: 14px; max-width: 90vw; max-height: 82vh;
                 display: flex; flex-direction: column; gap: 10px; }
 /* #picker-grid/.pick-card style the open dialog's built-in song library
    (tools/soundbox/songs/), split into Songs/SFX sections. .pick-section is a
@@ -340,8 +340,9 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
    to stays visible while scrolling a long list. max-height keeps a 30-plus-entry
    library from pushing the import controls off the bottom of the panel --
    #picker-panel's own max-height: 70vh has to cover the hint and buttons too. */
-#picker-grid { display: flex; flex-direction: column; gap: 4px; overflow: auto;
-               max-width: 60vw; max-height: 46vh; }
+#picker-grid { display: flex; gap: 16px; overflow: auto;
+               max-width: 86vw; max-height: 64vh; }
+.pick-col { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 340px; }
 .pick-section { position: sticky; top: 0; z-index: 1; background: var(--bg1);
                 padding: 4px 0 2px; font-size: 10px; text-transform: uppercase;
                 letter-spacing: 0.5px; color: var(--accent); }
@@ -363,12 +364,12 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
 .gen-track > div { height: 100%; width: 0; background: var(--accent); transition: width .1s linear; }
 #gen-pct { font-size: 11px; color: var(--text-dim); min-width: 4ch; text-align: right; }
 
-/* The share dialog's link field. Full width of the panel and
-   selectable rather than wrapped across lines -- it's one long token that only
-   ever gets copied, never read. */
-#share-url { width: 52ch; max-width: 100%; background: var(--bg2); color: var(--text-dim);
-             border: 1px solid var(--border); border-radius: 4px; padding: 4px 6px;
-             font-family: monospace; font-size: 11px; }
+/* The share dialog's link field. Wide textarea to show most of an 8000-character
+   data URL without excessive scrolling. */
+#share-url { width: 100%; min-width: 700px; background: var(--bg2); color: var(--text-dim);
+             border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px;
+             font-family: monospace; font-size: 10px; line-height: 1.4;
+             resize: vertical; word-break: break-all; }
 
 /* Drag-and-drop overlay -- see index.html's #drop-hint. Tops the
    stack (above #picker, since a song can be dropped while the open dialog is

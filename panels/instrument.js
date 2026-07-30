@@ -24,6 +24,7 @@ import * as engine from '../engine.js';
 import { state } from '../state.js';
 import { svgIcon } from '../icons.js';
 import { activeFxCell } from './tracker.js';
+import { syncJammer } from './keyboard.js';
 import { getAccent } from '../theme.js';
 
 const $ = id => document.getElementById(id);
@@ -86,6 +87,7 @@ function setInstrProp(prop, value) {
   const cell = activeFxCell();
   if (cell) cell.set(prop, value);
   $('instr-preset').value = '';
+  syncJammer();
 }
 
 // The instrument array to *display*: the real instrument, unless an FX cell is

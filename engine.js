@@ -27,7 +27,7 @@
 //
 // Depends on three globals supplied by classic scripts index.html loads ahead
 // of the modules: gInstrumentPresets (presets.js), rle_encode/rle_decode
-// (rle.js), RawDeflate (third_party/deflate.js + inflate.js).
+// (rle.js), fflate (https://unpkg.com/fflate for deflate/inflate).
 //------------------------------------------------------------------------------
 
 export const MAX_SONG_ROWS = 500;
@@ -125,6 +125,27 @@ var CBinParser = function (d) {
     return str;
   };
 };
+
+// fflate adapters: convert between string-based binary (legacy) and Uint8Array (modern)
+function strToU8(str) {
+  const arr = new Uint8Array(str.length);
+  for (let i = 0; i < str.length; i++) arr[i] = str.charCodeAt(i);
+  return arr;
+}
+
+function u8ToStr(arr) {
+  let str = '';
+  for (let i = 0; i < arr.length; i++) str += String.fromCharCode(arr[i]);
+  return str;
+}
+
+function deflate(data, level) {
+  return u8ToStr(fflate.deflateSync(strToU8(data), {level}));
+}
+
+function inflate(data) {
+  return u8ToStr(fflate.inflateSync(strToU8(data)));
+}
 
 var CBinWriter = function () {
   var mData = "";
@@ -362,8 +383,8 @@ var compress = function(unpackedData)
   // find something that works (this should not be necessary).
   var packedData, testData, compressionMethod = 0, i;
   for (i = 9; i > 0; i--) {
-    packedData = RawDeflate.deflate(unpackedData, i);
-    testData = RawDeflate.inflate(packedData);
+    packedData = deflate(unpackedData, i);
+    testData = inflate(packedData);
     if (unpackedData === testData) {
       compressionMethod = 2;
       break;
@@ -393,7 +414,7 @@ var uncompress = function(method,packedData)
     case 1:
       return rle_decode(packedData);
     case 2:
-      return RawDeflate.inflate(packedData);
+      return inflate(packedData);
   }
 }
 

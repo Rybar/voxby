@@ -36,6 +36,15 @@ window.soundbox = { state, engine, loadSong, loadDemoSong, DEMO_SONGS, importSon
 
 const $ = id => document.getElementById(id);
 
+// Native browser download (replaces FileSaver.js)
+const downloadFile = (blob, filename) => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
 // The one required user gesture that unlocks audioContext (see audio.js) for
 // both the jammer and rendered song playback. A dedicated non-dismissible
 // overlay rather than the generic #picker modal: there is nothing to do in here
@@ -214,14 +223,16 @@ async function loadDemoSong(entry) {
 // prompt reuses the same #picker panel, so without this, cancelling leaves you
 // with no dialog at all rather than the song list you were choosing from.
 function openSongDialog() {
-  const cards = SECTIONS.map(section =>
-    `<div class="pick-section">${section}</div>` +
-    DEMO_SONGS.map((demo, i) => [demo, i]).filter(([demo]) => demo.section === section).map(([demo, i]) =>
-      `<div class="pick-card" data-i="${i}" title="Load ${demo.name}">
-         <div class="name">${demo.name}</div><div class="desc">${demo.desc}</div></div>`
-    ).join('')
+  const columns = SECTIONS.map(section =>
+    `<div class="pick-col">
+       <div class="pick-section">${section}</div>` +
+    DEMO_SONGS.filter(demo => demo.section === section).map(demo => {
+      const idx = DEMO_SONGS.indexOf(demo);
+      return `<div class="pick-card" data-i="${idx}" title="Load ${demo.name}">
+         <div class="name">${demo.name}</div><div class="desc">${demo.desc}</div></div>`;
+    }).join('') + '</div>'
   ).join('');
-  openModal(`<h3>Open song</h3><div id="picker-grid">${cards}</div>
+  openModal(`<h3>Open song</h3><div id="picker-grid">${columns}</div>
     <p class="hint">Or open a song you exported earlier (.js), an old sonant-x export,
       or a legacy binary song (.snd) — you can also just drag the file onto this page.
       <b>Imports run as code — only open files you trust.</b></p>
@@ -351,7 +362,7 @@ function shareURL() {
 $('share-song').onclick = () => {
   const url = shareURL();
   openModal(`<h3>Share link</h3>
-    <input id="share-url" class="mono" readonly value="${url}">
+    <textarea id="share-url" class="mono" readonly rows="18">${url}</textarea>
     <p class="hint">Anyone opening this loads the song straight into their own
       editor — the whole song travels in the link, nothing is uploaded anywhere.
       ${url.length > SHARE_LIMIT
@@ -394,7 +405,7 @@ function loadSharedSong() {
 
 // --- export ---
 $('export-js').onclick = () => {
-  saveAs(new Blob([engine.songToJS(state.song)], { type: 'text/plain' }), 'song.js');
+  downloadFile(new Blob([engine.songToJS(state.song)], { type: 'text/plain' }), 'song.js');
   markClean();
 };
 
@@ -443,7 +454,7 @@ function generateWave(song, doneFn, opts, kind = 'play', heading = 'Rendering au
 
 $('export-wav').onclick = () => {
   generateWave(state.song, wave => {
-    saveAs(new Blob([wave], { type: 'application/octet-stream' }), 'voxby-music.wav');
+    downloadFile(new Blob([wave], { type: 'application/octet-stream' }), 'voxby-music.wav');
   }, undefined, 'wav', 'Rendering WAV');
 };
 

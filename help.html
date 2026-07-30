@@ -490,9 +490,9 @@ soundtrack.</p>
 <code>Uint8Array</code> for handing to an <code>&lt;audio&gt;</code> element or
 <code>decodeAudioData</code>, and <code>getData(t, n)</code> to read samples back
 for a visualiser. <a href="demo.html">demo.html</a> and
-<a href="arpeggio-demo.html">arpeggio-demo.html</a> are SoundBox's own working
-examples; both take the older <code>&lt;audio&gt;</code> route, which costs you a
-WAV encode and a decode that <code>createAudioBuffer</code> skips.</p>
+<a href="arpeggio-demo.html">arpeggio-demo.html</a> are working examples that use
+<code>createAudioBuffer</code> with the WebAudio API and <code>requestAnimationFrame</code>
+for oscilloscope rendering.</p>
 
 <h3>Keeping it small</h3>
 
@@ -559,27 +559,16 @@ licence</a>, which is what makes it safe to ship inside your own game.</p>
 
 <h3>Third-party code</h3>
 
-<h4>FileSaver.js — <a href="https://github.com/eligrey/FileSaver.js/">github.com/eligrey/FileSaver.js</a></h4>
-<div class="license">Copyright © 2011 Eli Grey.
+<h4>fflate — <a href="https://github.com/101arrowz/fflate">github.com/101arrowz/fflate</a></h4>
+<div class="license">MIT License
+
+Copyright (c) 2020 Arjun Barrett
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.</div>
-
-<h4>Blob.js — <a href="https://github.com/eligrey/Blob.js/">github.com/eligrey/Blob.js</a></h4>
-<p>Same MIT terms as FileSaver.js above, © 2011 Eli Grey. Loaded only by the two
-standalone demo pages.</p>
-
-<h4>js-deflate — <a href="https://github.com/dankogai/js-deflate">github.com/dankogai/js-deflate</a></h4>
-<div class="license">$Id: rawdeflate.js,v 0.3 2009/03/01 19:05:05 dankogai Exp dankogai $
-
-Original: http://www.onicos.com/staff/iz/amuse/javascript/expert/deflate.txt
-
-Copyright (C) 1999 Masanao Izumo &lt;iz@onicos.co.jp&gt;
-Version: 1.0.1
-LastModified: Dec 25 1999</div>
 
 <h3>Credits</h3>
 

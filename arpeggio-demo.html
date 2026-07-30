@@ -9,7 +9,6 @@ body {
 }
   </style>
   <script type="text/javascript" src="player-small.js"></script>
-  <script type="text/javascript" src="third_party/Blob.js"></script>
   <script type="text/javascript">
 function startDemo() {
   //----------------------------------------------------------------------------
@@ -23,17 +22,22 @@ var song={songData:[{i:[2,255,128,0,1,154,116,9,0,0,15,4,49,0,0,0,84,4,1,2,53,25
   // Demo program section
   //----------------------------------------------------------------------------
 
+  // Initialize WebAudio
+  var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
   // Initialize music generation (player).
   var t0 = new Date();
   var player = new CPlayer();
   player.init(song);
 
-  // Generate music...
+  // Generate music with requestAnimationFrame
   var done = false;
-  setInterval(function () {
-    if (done) {
-      return;
-    }
+  var sourceNode = null;
+  var startTime = 0;
+  var duration = 0;
+
+  function generateStep() {
+    if (done) return;
 
     var s = document.getElementById("status");
     s.textContent = s.textContent + ".";
@@ -44,45 +48,76 @@ var song={songData:[{i:[2,255,128,0,1,154,116,9,0,0,15,4,49,0,0,0,84,4,1,2,53,25
       var t1 = new Date();
       s.textContent = s.textContent + "done (" + (t1 - t0) + "ms)";
 
-      // Put the generated song in an Audio element.
-      var wave = player.createWave();
-      var audio = document.createElement("audio");
-      audio.src = URL.createObjectURL(new Blob([wave], {type: "audio/wav"}));
-      audio.play();
+      // Create AudioBuffer from generated samples
+      var samples = player.createAudioBuffer(audioCtx);
+      var buffer = audioCtx.createBuffer(2, samples.length / 2, 44100);
+      var leftChannel = buffer.getChannelData(0);
+      var rightChannel = buffer.getChannelData(1);
 
-      // Start an oscilloscope animation.
-      var ctx = document.getElementById("canvas").getContext("2d");
-      setInterval(function () {
-        // Get currently playing data.
-        var t = audio.currentTime;
-        var data = player.getData(t, 300);
+      for (var i = 0; i < samples.length / 2; i++) {
+        leftChannel[i] = samples[i * 2] / 32768;
+        rightChannel[i] = samples[i * 2 + 1] / 32768;
+      }
 
-        // Clear background.
-        ctx.fillStyle = "rgb(0,30,0)";
-        ctx.fillRect(0, 0, 300, 200);
-        ctx.fillStyle = "rgb(0,30,60)";
-        ctx.fillRect(0, 0, 300 * (t / audio.duration), 200);
+      duration = buffer.duration;
 
-        ctx.strokeStyle = "rgb(255,255,255)";
+      // Play the audio buffer
+      sourceNode = audioCtx.createBufferSource();
+      sourceNode.buffer = buffer;
+      sourceNode.connect(audioCtx.destination);
+      sourceNode.start(0);
+      startTime = audioCtx.currentTime;
 
-        // Plot left channel.
-        ctx.beginPath();
-        ctx.moveTo(0, 50 + 90 * data[0]);
-        for (var k = 1; k < 300; ++k) {
-          ctx.lineTo(k, 50 + 90 * data[k * 2]);
-        }
-        ctx.stroke();
-
-        // Plot right channel.
-        ctx.beginPath();
-        ctx.moveTo(0, 150 + 90 * data[1]);
-        for (var k = 1; k < 300; ++k) {
-          ctx.lineTo(k, 150 + 90 * data[k * 2 + 1]);
-        }
-        ctx.stroke();
-      }, 16);
+      // Start oscilloscope animation
+      animate();
+    } else {
+      requestAnimationFrame(generateStep);
     }
-  }, 0);
+  }
+
+  // Oscilloscope animation with requestAnimationFrame
+  var ctx = document.getElementById("canvas").getContext("2d");
+
+  function animate() {
+    // Get current time relative to start
+    var t = audioCtx.currentTime - startTime;
+
+    if (t >= duration) {
+      return; // Stop when song ends
+    }
+
+    // Get currently playing data
+    var data = player.getData(t, 300);
+
+    // Clear background
+    ctx.fillStyle = "rgb(0,30,0)";
+    ctx.fillRect(0, 0, 300, 200);
+    ctx.fillStyle = "rgb(0,30,60)";
+    ctx.fillRect(0, 0, 300 * (t / duration), 200);
+
+    ctx.strokeStyle = "rgb(255,255,255)";
+
+    // Plot left channel
+    ctx.beginPath();
+    ctx.moveTo(0, 50 + 90 * data[0]);
+    for (var k = 1; k < 300; ++k) {
+      ctx.lineTo(k, 50 + 90 * data[k * 2]);
+    }
+    ctx.stroke();
+
+    // Plot right channel
+    ctx.beginPath();
+    ctx.moveTo(0, 150 + 90 * data[1]);
+    for (var k = 1; k < 300; ++k) {
+      ctx.lineTo(k, 150 + 90 * data[k * 2 + 1]);
+    }
+    ctx.stroke();
+
+    requestAnimationFrame(animate);
+  }
+
+  // Start generation
+  requestAnimationFrame(generateStep);
 }
   </script>
 </head>
@@ -92,4 +127,3 @@ var song={songData:[{i:[2,255,128,0,1,154,116,9,0,0,15,4,49,0,0,0,84,4,1,2,53,25
 <canvas id="canvas" width="300" height="200" />
 </body>
 </html>
-
