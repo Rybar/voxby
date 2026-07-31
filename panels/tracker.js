@@ -851,6 +851,9 @@ function seqMouseDown(e) {
 function patternsMouseDown(e) {
   const t = cellTarget(e);
   if (!t || !primary(e)) return;
+  // Don't focus a channel that has no pattern assigned
+  const pn = patternNumFor(t.channel);
+  if (!pn) return;
   // Shift+click extends the selection from its anchor to the clicked
   // cell -- the mouse equivalent of shift+arrow, which likewise moves only the
   // col1/row1 corner and leaves the active cell where it is. Restricted to the
@@ -961,11 +964,14 @@ function renderPatterns() {
   let html = '';
   for (let channel = 0; channel < engine.MAX_CHANNELS; channel++) {
     const pn = patternNumFor(channel);
-    html += `<div class="pat-col ${channel === state.selInstrument ? 'focused' : ''}">`
-      + `<div class="pat-col-head" data-channel="${channel}" title="${pn
-          ? `Channel ${channel + 1} plays pattern ${pn} at this sequence row. Click to edit it.`
-          : `Channel ${channel + 1} has no pattern at this sequence row — type a pattern number into the sequencer above before you can write notes here.`
-        }">Ch ${channel + 1} · ${pn ? 'Pat ' + pn : String.fromCharCode(8212)}</div>`
+    const classes = ['pat-col'];
+    if (channel === state.selInstrument) classes.push('focused');
+    if (!pn) classes.push('no-pattern');
+    html += `<div class="${classes.join(' ')}" title="${pn
+        ? 'Four note columns (four notes can sound at once) plus the narrow FX column. Play notes in with the piano or the computer keys. Alt+arrows transpose the selection; right-click for the rest.'
+        : 'No pattern assigned — insert a pattern number in the sequencer above to edit notes here'
+      }">`
+      + `<div class="pat-col-head" data-channel="${channel}"${pn ? ` title="Channel ${channel + 1} plays pattern ${pn} at this sequence row. Click to edit it."` : ''}>Ch ${channel + 1} · ${pn ? 'Pat ' + pn : String.fromCharCode(8212)}</div>`
       + '<table class="trk-table"><tbody>';
     for (let row = 0; row < patternLen; row++) {
       html += `<tr class="${isBeatRow(row) ? 'beat' : ''}${row === pat.row ? ' curRow' : ''}">`;
@@ -1198,7 +1204,7 @@ export function initTrackerPanel() {
   $('patterns-panel').classList.remove('wip');
   $('patterns-panel').innerHTML =
     `<h3 title="The notes in the patterns playing at the sequencer's current row — every channel side by side. The highlighted column is the one you are editing.">Patterns</h3>
-     <div class="pat-scroll" id="pat-scroll" title="Four note columns per channel (four notes can sound at once) plus the narrow FX column. Play notes in with the piano or the computer keys. Alt+arrows transpose the selection; right-click for the rest."></div>`;
+     <div class="pat-scroll" id="pat-scroll"></div>`;
 
   $('song-bpm').oninput = () => {
     const bpm = +$('song-bpm').value;

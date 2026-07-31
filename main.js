@@ -546,8 +546,14 @@ document.addEventListener('keydown', e => {
   // particular, whose whole point is that a render is already running.
   if ($('picker').classList.contains('open')) return;
   e.preventDefault();
-  if (state.playing) stopSong();
-  else startPlayback(e.ctrlKey ? undefined : getPlayRange());
+  // Stop if anything is playing, regardless of which Space variant was pressed
+  if (state.playing) {
+    stopSong();
+    return;
+  }
+  // Not playing: start playback
+  // Ctrl+Space plays whole song, plain Space plays selection/current pattern
+  startPlayback(e.ctrlKey ? undefined : getPlayRange());
 });
 
 // One persistent requestAnimationFrame loop, started once and never stopped,

@@ -311,6 +311,7 @@ export function initInstrumentPanel() {
     const src = window.gInstrumentPresets[+idx].i;
     for (let j = 0; j < src.length; j++) currentInstr().i[j] = src[j];
     refreshInstrumentPanel();
+    $('instr-preset').blur();
   };
 
   $('instr-copy').onclick = () => { instrClipboard = currentInstr().i.slice(); };
@@ -323,6 +324,7 @@ export function initInstrumentPanel() {
   $('instr-channel').onchange = () => {
     state.selInstrument = +$('instr-channel').value;
     refreshInstrumentPanel();
+    $('instr-channel').blur();
   };
 }
 

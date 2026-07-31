@@ -220,6 +220,8 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
 .pat-scroll { flex: 1; min-height: 0; overflow: auto; display: flex; gap: 10px; align-items: flex-start; }
 .pat-col { flex: 0 0 auto; opacity: 0.55; }
 .pat-col.focused { opacity: 1; }
+.pat-col.no-pattern { opacity: 0.25; cursor: not-allowed; }
+.pat-col.no-pattern * { pointer-events: none; }
 /* Sticky inside .pat-scroll, so which channel and pattern a column
    is showing stays readable however far down the rows you've scrolled -- the
    same trick .trk-table thead th uses for the sequencer's channel numbers.
