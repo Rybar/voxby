@@ -539,14 +539,15 @@ document.addEventListener('keydown', e => {
   // focus.js rather than a tag-name test, so Space still plays with an instrument
   // slider focused -- but not with the loop checkbox or a button focused, where
   // the browser's own Space press already means something.
-  if (keyHandledByFocus(e)) return;
+  // Ctrl+Space plays the whole song and bypasses focus checks.
+  if (!e.ctrlKey && keyHandledByFocus(e)) return;
   if (!$('audio-gate').classList.contains('closed')) return;
   // ...and not while a dialog is up: the generation progress modal in
   // particular, whose whole point is that a render is already running.
   if ($('picker').classList.contains('open')) return;
   e.preventDefault();
   if (state.playing) stopSong();
-  else startPlayback(getPlayRange());
+  else startPlayback(e.ctrlKey ? undefined : getPlayRange());
 });
 
 // One persistent requestAnimationFrame loop, started once and never stopped,
