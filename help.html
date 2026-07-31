@@ -29,6 +29,7 @@
     <li><a href="#window">The window</a></li>
     <li><a href="#sequencer">Sequencer</a></li>
     <li><a href="#patterns">Patterns</a></li>
+    <li><a href="#pianoroll">Piano Roll</a></li>
     <li><a href="#notes">Playing notes in</a>
       <ul><li><a href="#pads">Chord pads</a></li><li><a href="#follow">Follow</a></li></ul></li>
     <li><a href="#editing">Selecting and editing</a></li>
@@ -151,6 +152,90 @@ what typing does, and what <kbd>Space</kbd> plays.</p>
 <p><kbd>Enter</kbd> inserts a row at the cursor, pushing the rest of the pattern
 down and dropping whatever fell off the end — useful for making room in a part
 you have already written.</p>
+
+<h2 id="pianoroll">Piano Roll</h2>
+
+<figure class="wide">
+  <img src="help/pianoroll.png" alt="The piano roll view showing a multi-channel arrangement">
+  <figcaption>Piano roll view: time flows left to right, pitch bottom to top. All
+  channels are visible with per-channel colors; the focused channel is bright, others
+  dimmed.</figcaption>
+</figure>
+
+<p>Use the <strong>View</strong> dropdown in the top bar to switch between
+<strong>Tracker</strong> (traditional vertical columns) and <strong>Piano
+Roll</strong> (horizontal grid). The piano roll shows time left-to-right and pitch
+bottom-to-top — a view many musicians from DAW backgrounds prefer.</p>
+
+<p>All channels are visible at once with per-channel colors. The focused channel
+(from the instrument panel) draws at full brightness; others are dimmed for
+context. Notes show as colored blocks on the grid.</p>
+
+<h3>Note Entry</h3>
+
+<p><strong>Click</strong> an empty cell to place a note. <strong>Right-click</strong>
+any note to delete it. The computer keyboard works the same as in tracker view:
+type <kbd>Z</kbd>–<kbd>M</kbd>, <kbd>Q</kbd>–<kbd>U</kbd> to enter notes at the
+cursor pitch, advancing by the edit step after each note.</p>
+
+<p>A tooltip follows your mouse showing which note you are hovering over. Piano
+key labels appear on the left at each C note (C1, C2, C3...).</p>
+
+<h3>Selection</h3>
+
+<figure class="wide">
+  <img src="help/pianoroll-selection.png" alt="Selected notes highlighted with blue outlines">
+  <figcaption>Selected notes show bright blue outlines. Drag them to move in time
+  or transpose; ghost previews appear during the drag.</figcaption>
+</figure>
+
+<p><strong>Click and drag</strong> in empty space to select notes in a rectangular
+region. A dashed blue marquee box appears while dragging; selected notes get
+bright blue outlines.</p>
+
+<p><strong>Click and drag</strong> on a selected note to move the entire selection
+in time (horizontally) or transpose it (vertically). Ghost previews show where
+notes will land. Release to commit the move.</p>
+
+<p>Click in empty space to deselect. <kbd>Ctrl</kbd>+<kbd>A</kbd> selects all
+notes in the pattern.</p>
+
+<h3>Clipboard</h3>
+
+<p><kbd>Ctrl</kbd>+<kbd>C</kbd> copies selected notes.
+<kbd>Ctrl</kbd>+<kbd>V</kbd> pastes at the cursor. Pasted notes stay selected so
+you can reposition them immediately. A single click clears the selection.</p>
+
+<h3>Transpose</h3>
+
+<p>With notes selected:</p>
+<ul>
+  <li><kbd>Alt</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> — transpose by one semitone</li>
+  <li><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> — transpose by one octave</li>
+</ul>
+
+<h3>Undo</h3>
+
+<p><kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes the last note placement, deletion, move, or
+transpose. The undo stack holds 50 operations.</p>
+
+<h3>Zoom</h3>
+
+<p>The <strong>Zoom</strong> slider in the piano roll header adjusts vertical row
+height from 6 to 20 pixels. Zoom out to see more octaves at once; zoom in for
+easier mouse targeting.</p>
+
+<h3>Playback</h3>
+
+<p>During playback, a vertical line sweeps through the piano roll showing the
+current position. The view scrolls vertically and horizontally to keep the cursor
+or playback position visible.</p>
+
+<h3>Full columns</h3>
+
+<p>Rows where all four note columns are occupied show a subtle red tint. You cannot
+place a fifth note in a full row — the limit is four simultaneous notes per
+channel.</p>
 
 <h2 id="notes">Playing notes in</h2>
 
