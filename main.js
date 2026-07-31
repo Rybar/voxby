@@ -529,9 +529,9 @@ function startPlayback(range) {
     });
   }, range);
 }
-$('play-song').onclick = () => startPlayback();
-$('play-selected').onclick = () => startPlayback(getPlayRange());
-$('stop-song').onclick = stopSong;
+$('play-song').onclick = () => { startPlayback(); $('play-song').blur(); };
+$('play-selected').onclick = () => { startPlayback(getPlayRange()); $('play-selected').blur(); };
+$('stop-song').onclick = () => { stopSong(); $('stop-song').blur(); };
 state.requestStop = stopSong;
 
 // Space plays the sequencer's selection when that grid is being worked in, or
