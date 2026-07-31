@@ -663,6 +663,9 @@ function pushUndo() {
 
   state.undoStack.push(newState);
 
+  // Clear redo stack when new action is performed
+  state.redoStack = [];
+
   // Limit undo stack to 50 entries
   if (state.undoStack.length > 50) {
     state.undoStack.shift();
@@ -672,6 +675,21 @@ function pushUndo() {
 function undo() {
   if (state.undoStack.length === 0) return;
 
+  // Save current state to redo stack before undoing
+  const pn = focusedPatternNum();
+  if (pn) {
+    const pattern = state.song.songData[state.selInstrument].c[pn - 1];
+    if (pattern) {
+      state.redoStack.push({
+        notes: [...pattern.n],
+        fx: [...pattern.f],
+        channel: state.selInstrument,
+        seqRow: state.selRow,
+        pattern: pn
+      });
+    }
+  }
+
   const undoState = state.undoStack.pop();
 
   // Restore pattern state
@@ -680,6 +698,41 @@ function undo() {
 
   pattern.n = [...undoState.notes];
   pattern.f = [...undoState.fx];
+
+  // Clear selection
+  setCursor(pat, 0, 0);
+  setCursor(fx, 0, 0);
+
+  render();
+  notify();
+}
+
+function redo() {
+  if (state.redoStack.length === 0) return;
+
+  // Save current state to undo stack before redoing
+  const pn = focusedPatternNum();
+  if (pn) {
+    const pattern = state.song.songData[state.selInstrument].c[pn - 1];
+    if (pattern) {
+      state.undoStack.push({
+        notes: [...pattern.n],
+        fx: [...pattern.f],
+        channel: state.selInstrument,
+        seqRow: state.selRow,
+        pattern: pn
+      });
+    }
+  }
+
+  const redoState = state.redoStack.pop();
+
+  // Restore pattern state
+  const pattern = state.song.songData[redoState.channel].c[redoState.pattern - 1];
+  if (!pattern) return;
+
+  pattern.n = [...redoState.notes];
+  pattern.f = [...redoState.fx];
 
   // Clear selection
   setCursor(pat, 0, 0);
@@ -809,8 +862,10 @@ function onKeyDown(e) {
   }
   if (e.ctrlKey && e.code === 'KeyC') { copySelection(state.editMode); e.preventDefault(); return; }
   if (e.ctrlKey && e.code === 'KeyV') { doPaste(state.editMode); e.preventDefault(); return; }
-  // Don't handle Ctrl+Z in tracker mode if we're in piano roll (it has its own handler)
-  if (e.ctrlKey && e.code === 'KeyZ' && state.viewMode !== 'pianoroll') { undo(); e.preventDefault(); return; }
+  // Don't handle Ctrl+Z/Ctrl+Shift+Z in tracker mode if we're in piano roll (it has its own handler)
+  // Check Ctrl+Shift+Z first (redo), then Ctrl+Z (undo)
+  if (e.ctrlKey && e.shiftKey && e.code === 'KeyZ' && state.viewMode !== 'pianoroll') { redo(); e.preventDefault(); return; }
+  if (e.ctrlKey && e.code === 'KeyZ' && !e.shiftKey && state.viewMode !== 'pianoroll') { undo(); e.preventDefault(); return; }
 
   if (state.editMode === 'sequence') {
     let code = null;

@@ -80,8 +80,9 @@ export const state = {
   viewMode: 'tracker',  // 'tracker' | 'pianoroll'
   channelsEnabled: Array(16).fill(true), // which channels are editable in piano roll
 
-  // Undo stack (shared between tracker and piano roll)
+  // Undo/redo stacks (shared between tracker and piano roll)
   undoStack: [],
+  redoStack: [],
 
   pianoRoll: {
     scrollY: 0,        // vertical scroll position (semitones from bottom)

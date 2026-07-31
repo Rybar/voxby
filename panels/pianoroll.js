@@ -693,6 +693,9 @@ function pushUndo() {
 
   state.undoStack.push(newState);
 
+  // Clear redo stack when new action is performed
+  state.redoStack = [];
+
   // Limit undo stack to 50 entries
   if (state.undoStack.length > 50) {
     state.undoStack.shift();
@@ -703,6 +706,21 @@ function undo() {
   if (state.undoStack.length === 0) {
     flashFeedback('Nothing to undo');
     return;
+  }
+
+  // Save current state to redo stack before undoing
+  const pn = state.song.songData[state.selInstrument].p[state.selRow];
+  if (pn) {
+    const pattern = state.song.songData[state.selInstrument].c[pn - 1];
+    if (pattern) {
+      state.redoStack.push({
+        notes: [...pattern.n],
+        fx: [...pattern.f],
+        channel: state.selInstrument,
+        seqRow: state.selRow,
+        pattern: pn
+      });
+    }
   }
 
   const undoState = state.undoStack.pop();
@@ -721,6 +739,45 @@ function undo() {
   state.notify && state.notify();
   render();
   flashFeedback('Undo');
+}
+
+function redo() {
+  if (state.redoStack.length === 0) {
+    flashFeedback('Nothing to redo');
+    return;
+  }
+
+  // Save current state to undo stack before redoing
+  const pn = state.song.songData[state.selInstrument].p[state.selRow];
+  if (pn) {
+    const pattern = state.song.songData[state.selInstrument].c[pn - 1];
+    if (pattern) {
+      state.undoStack.push({
+        notes: [...pattern.n],
+        fx: [...pattern.f],
+        channel: state.selInstrument,
+        seqRow: state.selRow,
+        pattern: pn
+      });
+    }
+  }
+
+  const redoState = state.redoStack.pop();
+
+  // Restore pattern state
+  const pattern = state.song.songData[redoState.channel].c[redoState.pattern - 1];
+  if (!pattern) {
+    flashFeedback('Cannot redo - pattern missing');
+    return;
+  }
+
+  pattern.n = [...redoState.notes];
+  pattern.f = [...redoState.fx];
+
+  state.pianoRoll.selectedNotes = [];
+  state.notify && state.notify();
+  render();
+  flashFeedback('Redo');
 }
 
 function transposeSelection(semitones) {
@@ -821,7 +878,12 @@ function onPianoRollKeyDown(e) {
       e.preventDefault();
       return;
     }
-    if (e.code === 'KeyZ') {
+    if (e.code === 'KeyZ' && e.shiftKey) {
+      redo();
+      e.preventDefault();
+      return;
+    }
+    if (e.code === 'KeyZ' && !e.shiftKey) {
       undo();
       e.preventDefault();
       return;
