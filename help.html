@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Voxby — manual</title>
+  <title>Voxby - manual</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="help.css">
   <link rel="shortcut icon" href="favicon.ico">
@@ -44,11 +44,11 @@
 </nav>
 
 <p>Voxby is a <a href="https://en.wikipedia.org/wiki/Music_tracker">tracker</a>.
-A song is up to <strong>16 channels</strong>; each channel has one
-<strong>instrument</strong> and up to <strong>36 patterns</strong> of notes; the
+A song is up to <strong>16 channels</strong>. Each channel has one
+<strong>instrument</strong> and up to <strong>36 patterns</strong> of notes. The
 <strong>sequencer</strong> says which pattern each channel plays at each step of
 the song. Every note you hear is synthesized on the spot from an instrument's
-settings — there are no samples, which is the whole reason a song fits in a few
+settings. There are no samples. This is why a song fits in a few
 hundred bytes.</p>
 
 <h2 id="quickstart">Quick start</h2>
@@ -61,14 +61,14 @@ hundred bytes.</p>
 
 <ol>
   <li>Press <strong>Start</strong>.</li>
-  <li>Press <strong>Open</strong> and pick a song from the library — starting
+  <li>Press <strong>Open</strong> and pick a song from the library. Starting
   from someone else's arrangement teaches the layout faster than an empty
   grid.</li>
   <li>Press <strong>Play</strong>. The cursor runs down the grids as the song
   plays, and the keys sounding at each moment light up on the piano.</li>
   <li>Click a cell in the pattern grid and play a few notes on the piano, or on
-  the computer keys — <kbd>Z</kbd> <kbd>X</kbd> <kbd>C</kbd>… is the bottom
-  octave, <kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd>… the one above.</li>
+  the computer keys. <kbd>Z</kbd> <kbd>X</kbd> <kbd>C</kbd>… is the bottom
+  octave. <kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd>… is the one above.</li>
   <li>Press <kbd>Space</kbd> to hear just the pattern you are editing, and
   <strong>Export JS</strong> when you want to keep it.</li>
 </ol>
@@ -76,7 +76,7 @@ hundred bytes.</p>
 <div class="note">
   <p>Nothing is stored on a server, and there is no autosave. A song lives in
   the page until you <strong>Export JS</strong> (which doubles as save) or copy
-  a <strong>Share</strong> link. Closing the tab loses it — the editor warns
+  a <strong>Share</strong> link. Closing the tab loses it. The editor warns
   before discarding unsaved work, but reloading past that warning is
   final.</p>
 </div>
@@ -90,16 +90,16 @@ hundred bytes.</p>
 </figure>
 
 <ol>
-  <li><strong>Top bar</strong> — new/open/export/share, transport, the accent
+  <li><strong>Top bar</strong>: new/open/export/share, transport, the accent
   colour, this manual, and About.</li>
-  <li><strong>Sequencer</strong> — the running order, plus tempo and pattern
+  <li><strong>Sequencer</strong>: the running order, plus tempo and pattern
   length.</li>
-  <li><strong>Patterns</strong> — the notes in whatever each channel is playing
-  at the sequencer's current row. Every channel is shown side by side; the
+  <li><strong>Patterns</strong>: the notes in whatever each channel is playing
+  at the sequencer's current row. Every channel is shown side by side. The
   highlighted column is the one you are editing.</li>
-  <li><strong>Keyboard</strong> — note entry, and the scale/chord helpers.</li>
-  <li><strong>Instrument</strong> — the sound the selected channel plays.</li>
-  <li><strong>Scope</strong> — what the output actually looks like.</li>
+  <li><strong>Keyboard</strong>: note entry, and the scale/chord helpers.</li>
+  <li><strong>Instrument</strong>: the sound the selected channel plays.</li>
+  <li><strong>Scope</strong>: what the output actually looks like.</li>
 </ol>
 
 <p>Every control in the editor has a hover tip explaining what it does, so this
@@ -120,15 +120,15 @@ of that channel's 36 patterns, <kbd>Backspace</kbd> to clear it. Hold
 <kbd>Shift</kbd> while typing to drop to the next row as you go, which is how
 you enter a run of steps quickly.</p>
 
-<p>The same pattern number can appear as often as you like — that is how a song
+<p>The same pattern number can appear as often as you like. That is how a song
 gets long without getting big. Clicking anywhere in a channel's column also
-makes it the <em>selected channel</em>, so the instrument panel and the
+makes it the <em>selected channel</em>. The instrument panel and the
 highlighted pattern column follow your cursor around.</p>
 
 <p>Two song-wide settings live here, because they apply to every pattern:
 <strong>BPM</strong> and <strong>Rows</strong> (rows per pattern). Four rows make
-a beat, so 32 rows is eight beats — two bars of 4/4. <strong>Beat</strong> only
-changes which rows get a highlight; set it to 3 for a waltz or 8 for
+a beat, so 32 rows is eight beats (two bars of 4/4). <strong>Beat</strong> only
+changes which rows get a highlight. Set it to 3 for a waltz or 8 for
 32nd-note patterns.</p>
 
 <div class="warn">
@@ -138,10 +138,10 @@ changes which rows get a highlight; set it to 3 for a waltz or 8 for
 
 <h2 id="patterns">Patterns</h2>
 
-<p>Each pattern has <strong>four note columns</strong> — four notes can sound at
-once in one channel, which is what makes chords possible — and one
-<strong>FX column</strong>. A pattern only exists where the sequencer put it: if
-a channel's column header reads <code>—</code> instead of <code>Pat 3</code>,
+<p>Each pattern has <strong>four note columns</strong>. Four notes can sound at
+once in one channel. This is what makes chords possible. Each pattern also has one
+<strong>FX column</strong>. A pattern only exists where the sequencer put it. If
+a channel's column header reads <code>-</code> instead of <code>Pat 3</code>,
 there is nothing at this step to write into. Place a pattern number in the
 sequencer first.</p>
 
@@ -149,8 +149,8 @@ sequencer first.</p>
 <kbd>Shift</kbd>+<kbd>Tab</kbd> goes back. Which grid has the cursor decides
 what typing does, and what <kbd>Space</kbd> plays.</p>
 
-<p><kbd>Enter</kbd> inserts a row at the cursor, pushing the rest of the pattern
-down and dropping whatever fell off the end — useful for making room in a part
+<p><kbd>Enter</kbd> inserts a row at the cursor. This pushes the rest of the pattern
+down and drops whatever fell off the end. This is useful for making room in a part
 you have already written.</p>
 
 <h2 id="pianoroll">Piano Roll</h2>
@@ -165,10 +165,10 @@ you have already written.</p>
 <p>Use the <strong>View</strong> dropdown in the top bar to switch between
 <strong>Tracker</strong> (traditional vertical columns) and <strong>Piano
 Roll</strong> (horizontal grid). The piano roll shows time left-to-right and pitch
-bottom-to-top — a view many musicians from DAW backgrounds prefer.</p>
+bottom-to-top. Many musicians from DAW backgrounds prefer this view.</p>
 
 <p>All channels are visible at once with per-channel colors. The focused channel
-(from the instrument panel) draws at full brightness; others are dimmed for
+(from the instrument panel) draws at full brightness. Others are dimmed for
 context. Notes show as colored blocks on the grid.</p>
 
 <h3>Note Entry</h3>
@@ -210,8 +210,8 @@ you can reposition them immediately. A single click clears the selection.</p>
 
 <p>With notes selected:</p>
 <ul>
-  <li><kbd>Alt</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> — transpose by one semitone</li>
-  <li><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> — transpose by one octave</li>
+  <li><kbd>Alt</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd>: transpose by one semitone</li>
+  <li><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd>: transpose by one octave</li>
 </ul>
 
 <h3>Undo</h3>
@@ -234,7 +234,7 @@ or playback position visible.</p>
 <h3>Full columns</h3>
 
 <p>Rows where all four note columns are occupied show a subtle red tint. You cannot
-place a fifth note in a full row — the limit is four simultaneous notes per
+place a fifth note in a full row. The limit is four simultaneous notes per
 channel.</p>
 
 <h2 id="notes">Playing notes in</h2>
@@ -245,8 +245,8 @@ channel.</p>
   labelled with the computer key that plays them.</figcaption>
 </figure>
 
-<p>Notes go in at the pattern cursor from two places — the on-screen piano or
-the computer keyboard — and both sound the note as they write it. The computer keys are two overlapping octaves: <kbd>Z</kbd>
+<p>Notes go in at the pattern cursor from two places: the on-screen piano or
+the computer keyboard. Both sound the note as they write it. The computer keys are two overlapping octaves: <kbd>Z</kbd>
 <kbd>X</kbd> <kbd>C</kbd> <kbd>V</kbd> <kbd>B</kbd> <kbd>N</kbd> <kbd>M</kbd>
 with sharps on <kbd>S</kbd> <kbd>D</kbd> <kbd>G</kbd> <kbd>H</kbd> <kbd>J</kbd>,
 then <kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd> <kbd>R</kbd> <kbd>T</kbd>
@@ -260,14 +260,14 @@ what the <strong>Keys</strong> selector fixes: set it to your layout (or leave
 it on Auto) and the piano labels itself with the characters your keyboard
 actually types.</p>
 
-<p>The keys keep playing wherever you are in the window — drag an instrument
+<p>The keys keep playing wherever you are in the window. Drag an instrument
 slider and go on hitting notes to hear what you just changed. Only a field you
 type into (BPM, rows, Step) takes the keyboard away from the song, and a focused
 slider keeps just its own arrow keys.</p>
 
 <h3>Step</h3>
 
-<p><strong>Step</strong> is how many rows the cursor moves after each note —
+<p><strong>Step</strong> is how many rows the cursor moves after each note. This is
 a tracker's edit step. 1 walks down a row at a time, 4 writes one note per beat,
 and 0 stays put so you can stack a chord by hand into the four note columns.</p>
 
@@ -283,8 +283,8 @@ half steps; the octave buttons still move the whole set.</p>
 <h3>Chords</h3>
 
 <p>Tick <strong>Chord</strong> and one keypress writes a whole chord across the
-row's four note columns, taking its quality from the scale — the chord that
-belongs on the degree you played. With no scale set there is nothing to infer a
+row's four note columns. It takes its quality from the scale (the chord that
+belongs on the degree you played). With no scale set there is nothing to infer a
 quality from, so you get the bare note.</p>
 
 <p>The <strong>R 3 5 7 9 11 13</strong> toggles pick which of a chord's tones
@@ -308,14 +308,14 @@ piano without playing it, so you can see what you are about to commit to.</p>
 
 <p>Each pad shows two things: the chord's name (<code>Cm9</code>) and the degree
 of the key it is (<code>i9</code>). The second one is worth reading even if it
-means nothing to you yet — the same numeral in another key is the same chord
-doing the same job, which is most of what there is to know about chord
+means nothing to you yet. The same numeral in another key is the same chord
+doing the same job. This is most of what there is to know about chord
 progressions.</p>
 
-<p>A flavor is a hand-written set, not something derived from the scale, and
-that is the point: what makes a genre sound like itself is usually the chords
-that <em>aren't</em> strictly in the key — the ♭VII in a rock progression, the
-V7 in a minor one, the tritone substitution in jazz. There are ten to choose
+<p>A flavor is a hand-written set, not something derived from the scale. That
+is the point: what makes a genre sound like itself is usually the chords
+that <em>aren't</em> strictly in the key (the ♭VII in a rock progression, the
+V7 in a minor one, the tritone substitution in jazz). There are ten to choose
 from, from Pop and Chiptune through Lo-fi and Jazz to Spooky and Andalusian.</p>
 
 <p>Picking a flavor also sets the <strong>Scale</strong> to the one it plays
@@ -325,19 +325,19 @@ Changing the scale afterwards is allowed and does not change the flavor back.
 
 <p>After you play a chord, a few pads pick up an accent bar along their top
 edge: those are the chords that most often follow the one you just played. It is
-a hint, not a rule — every other pad still works, and ignoring the suggestion is
+a hint, not a rule. Every other pad still works, and ignoring the suggestion is
 how you write something that isn't predictable.</p>
 
 <h3>Voicing</h3>
 
 <p>A chord's <em>voicing</em> is how its notes are spread out, not which chord
-it is — the name on the pad never changes when you switch these.</p>
+it is. The name on the pad never changes when you switch these.</p>
 
 <ul>
   <li><strong>Close</strong> stacks the notes in thirds, packed inside one
   octave. Compact and neutral.</li>
   <li><strong>Wide</strong> lifts every other note an octave, so the same chord
-  fans across nearly two — a bass note with the rest above it, the way it falls
+  fans across nearly two octaves. This creates a bass note with the rest above it, the way it falls
   under two hands on a keyboard.</li>
   <li><strong>Quartal</strong> restacks the chord in fourths instead of thirds,
   for the open, modal sound. A few chords cannot survive that (a diminished or
@@ -346,15 +346,15 @@ it is — the name on the pad never changes when you switch these.</p>
 </ul>
 
 <p><strong>Smooth</strong> places each chord's notes near the ones before them
-rather than always starting from the root. It is the difference between a
-progression that lurches from chord to chord and one that moves — and it is the
+rather than always starting from the root. This is the difference between a
+progression that lurches from chord to chord and one that moves. It is the
 single most audible thing separating chords entered by hand from chords played
 by somebody who knows how. Leave it on unless you want the root in the bass
 every time.</p>
 
 <p>Wide re-arranges whatever the R 3 5 7 toggles picked, so the two work
-together. Quartal replaces them — it is built from the mode the chord implies
-rather than from the chord's own notes — which is why those toggles dim when it
+together. Quartal replaces them. It is built from the mode the chord implies
+rather than from the chord's own notes. This is why those toggles dim when it
 is on.</p>
 
 <h3 id="follow">Follow</h3>
@@ -367,8 +367,8 @@ is on.</p>
 
 <p>Once there are chords on one channel, point <strong>Follow</strong> at it and
 write your melody on another. The bottom key row (<kbd>Z</kbd>–<kbd>M</kbd>)
-becomes the notes of whatever chord is sounding at the cursor row, so every key
-under your resting hand belongs in that chord; the top row
+becomes the notes of whatever chord is sounding at the cursor row. Every key
+under your resting hand belongs in that chord. The top row
 (<kbd>Q</kbd>–<kbd>P</kbd>) stays the scale, for passing notes between them.</p>
 
 <p>It re-reads as you move down the pattern: cross into the next chord and the
@@ -376,7 +376,7 @@ bottom row changes with it. The header names the chord it has found, and the
 piano tints that chord's keys a shade stronger than the scale's.</p>
 
 <p>Nothing about this is stored. It reads the chords out of a channel that
-already holds them and writes ordinary notes into ordinary columns — a song
+already holds them and writes ordinary notes into ordinary columns. A song
 written with Follow on is identical to one written without it. It is a keyboard
 mapping, the same as Scale is.</p>
 
@@ -410,7 +410,7 @@ is keyboard-only.</p>
 
 <p>The narrow column on the right of each channel's pattern is its automation
 lane: one command per row, changing a single instrument parameter as the song
-plays. There is nothing to type — <strong>click a row in the FX column, then
+plays. There is nothing to type. <strong>Click a row in the FX column, then
 move any control in the instrument panel</strong>, and that parameter and value
 are recorded on that row. The instrument panel shows the value stored in the
 selected FX cell rather than the instrument's own while such a row is
@@ -418,8 +418,8 @@ selected, so you are always looking at what will happen there.</p>
 
 <div class="note">
   <p>FX commands are <strong>persistent</strong>. A change made in one pattern
-  stays in force — into later patterns, and into other places the same pattern
-  is used — until another command sets that parameter to something else. If a
+  stays in force (into later patterns, and into other places the same pattern
+  is used) until another command sets that parameter to something else. If a
   channel sounds wrong halfway through a song, an FX command earlier in it is
   the usual reason.</p>
 </div>
@@ -514,7 +514,7 @@ one slider at a time and listen. Some things worth knowing:</p>
   <li>The <strong>envelope</strong> decides the note's length. Patterns
   <em>trigger</em> notes rather than holding them, so a note lasts exactly
   attack + sustain + release, however long the row is.</li>
-  <li><strong>Drive</strong> is the channel's output level — the mix control.</li>
+  <li><strong>Drive</strong> is the channel's output level (the mix control).</li>
   <li>The <strong>LFO</strong> does nothing until <strong>FX freq
   modulation</strong> is on: that switch is what routes it to the filter.</li>
 </ul>
@@ -522,7 +522,7 @@ one slider at a time and listen. Some things worth knowing:</p>
 <h2 id="playback">Playback</h2>
 
 <p><strong>Play</strong> renders and plays the whole song. <strong>Play
-selected</strong> — and <kbd>Space</kbd>, which is the same thing — plays the
+selected</strong> (and <kbd>Space</kbd>, which is the same thing) plays the
 sequencer's selection if you are working in the sequencer, or just the pattern
 you are editing otherwise. <kbd>Space</kbd> stops it again, as does
 <strong>Stop</strong>. <strong>loop</strong> repeats whatever gets played, which
@@ -530,7 +530,7 @@ is how you sit inside one pattern while you shape it.</p>
 
 <p>Playback is rendered up front, not streamed: the synth generates the whole
 selection into a buffer before the first sound, so edits made while it plays are
-heard the next time you press play. A long song takes a few seconds — a progress
+heard the next time you press play. A long song takes a few seconds. A progress
 dialog appears while it works, and <strong>Cancel</strong> abandons the render.
 Playing one pattern instead of the whole song is nearly instant, which is why
 <kbd>Space</kbd> is the key you live on while writing. Once it runs, the grids
@@ -538,8 +538,8 @@ follow the playing row and the piano lights the notes currently sounding.</p>
 
 <figure class="narrow">
   <img src="help/scope.png" alt="The scope, showing a waveform">
-  <figcaption>The scope sums everything audible — the song and anything you
-  play live. The button cycles waveform, spectrum, and a scrolling
+  <figcaption>The scope sums everything audible (the song and anything you
+  play live). The button cycles waveform, spectrum, and a scrolling
   spectrogram.</figcaption>
 </figure>
 
@@ -550,21 +550,21 @@ follow the playing row and the piano lights the notes currently sounding.</p>
   <figcaption>The built-in library, plus the route in for your own files.</figcaption>
 </figure>
 
-<p><strong>Export JS</strong> is save: it downloads the song as an ES module and
+<p><strong>Export JS</strong> is save. It downloads the song as an ES module and
 clears the unsaved-changes flag. <strong>Open → Import file…</strong> takes it
 back, as does dragging the file anywhere onto the page. Three formats load:</p>
 
 <table>
   <thead><tr><th>Format</th><th>Notes</th></tr></thead>
   <tbody>
-    <tr><td><code>.js</code> from Voxby</td><td>The round trip is exact — re-exporting an imported song reproduces the same file.</td></tr>
-    <tr><td><code>.js</code> from sonant / sonant-x</td><td>Converted on the way in. One-way: the result is a Voxby song.</td></tr>
+    <tr><td><code>.js</code> from Voxby</td><td>The round trip is exact. Re-exporting an imported song reproduces the same file.</td></tr>
+    <tr><td><code>.js</code> from sonant / sonant-x</td><td>Converted on the way in. One-way only: the result is a Voxby song.</td></tr>
     <tr><td><code>.snd</code></td><td>Legacy binary songs, including SoundBox's and Sonant's own.</td></tr>
   </tbody>
 </table>
 
 <div class="warn">
-  <p>Importing a <code>.js</code> song <strong>runs it as code</strong> — that
+  <p>Importing a <code>.js</code> song <strong>runs it as code</strong>. That
   is what makes an ES module a song file. Only open files you trust.</p>
 </div>
 
@@ -572,7 +572,7 @@ back, as does dragging the file anywhere onto the page. Three formats load:</p>
 the URL's <code>#</code> fragment, so nothing is uploaded anywhere and no server
 sees it; whoever opens the link gets the song loaded in their own editor. Long
 songs make long links, and some chat clients mangle anything past a few thousand
-characters — the dialog says how long yours is, and for a big song sending the
+characters. The dialog says how long yours is, and for a big song sending the
 exported file is more reliable.</p>
 
 <p><strong>Export WAV</strong> renders the song to an ordinary 44.1 kHz WAV, for
@@ -580,7 +580,7 @@ when something outside the browser needs the audio.</p>
 
 <h2 id="ingame">Using a song in a game</h2>
 
-<p>An exported song is a plain ES module — no player, no wrapper, just data:</p>
+<p>An exported song is a plain ES module. There is no player, no wrapper, just data:</p>
 
 <pre><code>export default {
   songData: [ /* one entry per channel: instrument, patterns, notes */ ],
@@ -609,11 +609,11 @@ src.connect(ctx.destination);
 src.start();</code></pre>
 
 <p>A browser starts every <code>AudioContext</code> suspended until the page has
-had a real click or keypress, so call <code>ctx.resume()</code> from your first
-input handler — a title screen's "press any key" earns its keep. (It is the same
+had a real click or keypress. Call <code>ctx.resume()</code> from your first
+input handler. A title screen's "press any key" earns its keep. (It is the same
 rule this editor's own Start button exists for.)</p>
 
-<p>Rendering costs real time — seconds for a long song — and that
+<p>Rendering costs real time (seconds for a long song), and that
 <code>while</code> loop blocks the page for all of it.
 <code>generate()</code> renders one channel per call and returns how far along it
 is, so call it once per frame instead and you have a progress bar:</p>
@@ -629,7 +629,7 @@ const tick = () =&gt; {
 tick();</code></pre>
 
 <p>Render every sound the game needs up front, keep the buffers, and play each
-one from a fresh <code>BufferSource</code> — a source node is single-use, but the
+one from a fresh <code>BufferSource</code>. A source node is single-use, but the
 buffer behind it can be played any number of times at once. Route them through a
 <code>GainNode</code> for volume and a <code>StereoPannerNode</code> for
 position, and a couple of hundred bytes of song data covers your whole
@@ -652,7 +652,7 @@ for oscilloscope rendering.</p>
   <li>Reuse patterns instead of writing variations of the same bar. A repeated
   pattern number costs one character in the sequencer; a near-identical copy
   costs a whole pattern.</li>
-  <li>Fewer channels, fewer patterns, shorter patterns — in that order. Under a
+  <li>Fewer channels, fewer patterns, shorter patterns (in that order). Under a
   minifier and compression, the note data is what remains, and duplicated data
   compresses far better than unique data.</li>
   <li>An SFX is a one-channel song with a single sequencer step. A dozen of them
@@ -668,7 +668,7 @@ itself.</p>
 <table>
   <thead><tr><th>Keys</th><th>Does</th></tr></thead>
   <tbody>
-    <tr><td><kbd>Space</kbd></td><td>Play the selection or the current pattern; stop if playing</td></tr>
+    <tr><td><kbd>Space</kbd></td><td>Play the selection or the current pattern (stop if playing)</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>Space</kbd></td><td>Play the whole song from the top (works from any focus)</td></tr>
     <tr><td><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>Move between sequencer, pattern and FX grids</td></tr>
     <tr><td><kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd></td><td>Move the cursor (wraps at the edges)</td></tr>
@@ -683,7 +683,7 @@ itself.</p>
     <tr><td><kbd>Alt</kbd>+<kbd>↑</kbd> / <kbd>Alt</kbd>+<kbd>↓</kbd></td><td>Transpose the selection a semitone</td></tr>
     <tr><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd></td><td>Transpose the selection an octave</td></tr>
     <tr><td><kbd>-</kbd> / <kbd>=</kbd> (or <kbd>&lt;</kbd> / <kbd>&gt;</kbd>)</td><td>Octave down / up</td></tr>
-    <tr><td><kbd>0</kbd>–<kbd>9</kbd>, <kbd>A</kbd>–<kbd>Z</kbd></td><td>In the sequencer: place that pattern (with <kbd>Shift</kbd>, and step down a row)</td></tr>
+    <tr><td><kbd>0</kbd>–<kbd>9</kbd>, <kbd>A</kbd>–<kbd>Z</kbd></td><td>In the sequencer: place that pattern (with <kbd>Shift</kbd>, step down a row)</td></tr>
     <tr><td>note keys</td><td>In a pattern: play and write the note, or the chord the scale harmonizes it to in chord mode</td></tr>
     <tr><td><kbd>1</kbd>–<kbd>8</kbd></td><td>In a pattern, with a flavor set: write that chord pad</td></tr>
     <tr><td>right-click</td><td>Transpose and clipboard menu for the selection</td></tr>
@@ -695,10 +695,10 @@ itself.</p>
 
 <p>Voxby is a rewritten editor around the audio engine of
 <a href="https://gitlab.com/mbitsnbites/soundbox">SoundBox</a>, by Marcus
-Geelnard, whose synth, players, instrument presets and song format it keeps
-intact. The editing side — the multi-channel pattern view, the on-screen piano
+Geelnard. It keeps his synth, players, instrument presets and song format
+intact. The editing side (the multi-channel pattern view, the on-screen piano
 and its scale and chord helpers, the chord pads and chord following, the scope,
-the sharing links and the ES-module song format — is new; the sound is his.</p>
+the sharing links and the ES-module song format) is new; the sound is his.</p>
 
 <p>Voxby inherits SoundBox's licence, the
 <a href="gpl.txt">GNU General Public License v3</a>.</p>
@@ -709,7 +709,7 @@ licence</a>, which is what makes it safe to ship inside your own game.</p>
 
 <h3>Third-party code</h3>
 
-<h4>fflate — <a href="https://github.com/101arrowz/fflate">github.com/101arrowz/fflate</a></h4>
+<h4>fflate: <a href="https://github.com/101arrowz/fflate">github.com/101arrowz/fflate</a></h4>
 <div class="license">MIT License
 
 Copyright (c) 2020 Arjun Barrett
