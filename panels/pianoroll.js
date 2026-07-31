@@ -281,9 +281,9 @@ function onCanvasMouseUp(e) {
     }
 
     // No selection and no note - place note at clicked position
+    pushUndo();
     const note = pitchToNote(cell.pitch);
     if (placeNoteAtCursor(cell.row, note)) {
-      pushUndo();
       // Update cursor to clicked position (no auto-scroll since user already positioned view)
       state.pianoRoll.cursorRow = cell.row;
       state.pianoRoll.cursorPitch = cell.pitch;
@@ -652,38 +652,70 @@ function pushUndo() {
   const pattern = state.song.songData[state.selInstrument].c[pn - 1];
   if (!pattern) return;
 
-  // Save pattern state
-  state.pianoRoll.undoStack.push({
+  const newState = {
     notes: [...pattern.n],
+    fx: [...pattern.f],
     channel: state.selInstrument,
+    seqRow: state.selRow,
     pattern: pn
-  });
+  };
+
+  // Don't push if this state is identical to the last one (prevents duplicate entries)
+  // Also prevents pushing the current state (which would make undo do nothing)
+  if (state.undoStack.length > 0) {
+    const last = state.undoStack[state.undoStack.length - 1];
+    if (last.channel === newState.channel &&
+        last.seqRow === newState.seqRow &&
+        last.pattern === newState.pattern) {
+      // Deep compare arrays
+      let identical = true;
+      if (last.notes.length !== newState.notes.length || last.fx.length !== newState.fx.length) {
+        identical = false;
+      } else {
+        for (let i = 0; i < last.notes.length; i++) {
+          if (last.notes[i] !== newState.notes[i]) {
+            identical = false;
+            break;
+          }
+        }
+        if (identical) {
+          for (let i = 0; i < last.fx.length; i++) {
+            if (last.fx[i] !== newState.fx[i]) {
+              identical = false;
+              break;
+            }
+          }
+        }
+      }
+      if (identical) return; // Skip duplicate
+    }
+  }
+
+  state.undoStack.push(newState);
 
   // Limit undo stack to 50 entries
-  if (state.pianoRoll.undoStack.length > 50) {
-    state.pianoRoll.undoStack.shift();
+  if (state.undoStack.length > 50) {
+    state.undoStack.shift();
   }
 }
 
 function undo() {
-  if (state.pianoRoll.undoStack.length === 0) {
+  if (state.undoStack.length === 0) {
     flashFeedback('Nothing to undo');
     return;
   }
 
-  const undoState = state.pianoRoll.undoStack.pop();
+  const undoState = state.undoStack.pop();
 
   // Restore pattern state
-  const pn = state.song.songData[undoState.channel].p[state.selRow];
-  if (pn !== undoState.pattern) {
-    flashFeedback('Cannot undo - pattern changed');
+  const pattern = state.song.songData[undoState.channel].c[undoState.pattern - 1];
+  if (!pattern) {
+    flashFeedback('Cannot undo - pattern missing');
     return;
   }
 
-  const pattern = state.song.songData[undoState.channel].c[pn - 1];
-  if (!pattern) return;
-
   pattern.n = [...undoState.notes];
+  pattern.f = [...undoState.fx];
 
   state.pianoRoll.selectedNotes = [];
   state.notify && state.notify();
@@ -810,9 +842,10 @@ function onPianoRollKeyDown(e) {
       // Track this key as held
       heldNoteKeys.add(e.code);
 
-      // If this is the first note key, remember the row for chord building
+      // If this is the first note key, remember the row for chord building and push undo
       if (heldNoteKeys.size === 1) {
         chordRowStart = row;
+        pushUndo();
       }
 
       const noteOffset = noteKeyMap[e.code];

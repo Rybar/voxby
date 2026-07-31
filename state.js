@@ -79,6 +79,10 @@ export const state = {
   // --- view mode: tracker (traditional columns) or pianoroll (horizontal grid) ---
   viewMode: 'tracker',  // 'tracker' | 'pianoroll'
   channelsEnabled: Array(16).fill(true), // which channels are editable in piano roll
+
+  // Undo stack (shared between tracker and piano roll)
+  undoStack: [],
+
   pianoRoll: {
     scrollY: 0,        // vertical scroll position (semitones from bottom)
     cursorRow: 0,      // time position (pattern row)
@@ -86,7 +90,6 @@ export const state = {
     dragNote: null,    // {channel, col, row, originalPitch, originalRow} when dragging
     selectedNotes: [], // array of {row, pitch, col, channel} - actual notes selected (multi-channel)
     dragSelection: null, // {startX, startY, offsetRow, offsetPitch} when dragging selection
-    undoStack: [],     // undo history
   },
 
   // --- row layout (panels/layout.js). Heights are px, null meaning "use the

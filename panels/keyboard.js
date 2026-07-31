@@ -287,6 +287,8 @@ function isNoteEntryActive() {
 // release the right one on keyup even if the octave changed in between.
 const physicalLitByCode = new Map();
 function onPhysicalKeyDown(e) {
+  // Don't light up keys when modifiers are pressed (Ctrl+Z, etc)
+  if (e.ctrlKey || e.altKey || e.metaKey) return;
   if (physicalLitByCode.has(e.code) || !isNoteEntryActive()) return;
   const n = noteKeys()[e.code];
   if (n === undefined) return;

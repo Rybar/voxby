@@ -265,6 +265,7 @@ export function activeFxCell() {
 // stored nowhere.
 export function enterNoteAtCursor(note) {
   if (state.editMode !== 'pattern' || !focusedPatternNum()) return;
+  pushUndo();
   const row = pat.row, col = pat.col, channel = state.selInstrument;
   if (state.chordOn) {
     // A chord is a row-level unit (the same way insertRowAtCursor already
@@ -521,6 +522,7 @@ const PAD_KEYS = {
 function insertRowAtCursor(row) {
   const pn = focusedPatternNum();
   if (!pn) return;
+  pushUndo();
   const patternLen = state.song.patternLen;
   const col = state.song.songData[state.selInstrument].c[pn - 1];
   for (let c = 0; c < 4; c++) {
@@ -546,6 +548,7 @@ const NOTE_MIN = 1, NOTE_MAX = 255;
 function transposeSelection(delta) {
   const pn = focusedPatternNum();
   if (!pn) return;
+  pushUndo();
   const patternLen = state.song.patternLen;
   const col = state.song.songData[state.selInstrument].c[pn - 1];
   const moves = [];
@@ -611,6 +614,81 @@ export function getPlayRange() {
   return { firstRow: state.selRow, lastRow: state.selRow, firstCol: state.selInstrument, lastCol: state.selInstrument };
 }
 
+// --- undo ---
+function pushUndo() {
+  const pn = focusedPatternNum();
+  if (!pn) return;
+
+  const pattern = state.song.songData[state.selInstrument].c[pn - 1];
+  if (!pattern) return;
+
+  const newState = {
+    notes: [...pattern.n],
+    fx: [...pattern.f],
+    channel: state.selInstrument,
+    seqRow: state.selRow,
+    pattern: pn
+  };
+
+  // Don't push if this state is identical to the last one (prevents duplicate entries)
+  // Also prevents pushing the current state (which would make undo do nothing)
+  if (state.undoStack.length > 0) {
+    const last = state.undoStack[state.undoStack.length - 1];
+    if (last.channel === newState.channel &&
+        last.seqRow === newState.seqRow &&
+        last.pattern === newState.pattern) {
+      // Deep compare arrays
+      let identical = true;
+      if (last.notes.length !== newState.notes.length || last.fx.length !== newState.fx.length) {
+        identical = false;
+      } else {
+        for (let i = 0; i < last.notes.length; i++) {
+          if (last.notes[i] !== newState.notes[i]) {
+            identical = false;
+            break;
+          }
+        }
+        if (identical) {
+          for (let i = 0; i < last.fx.length; i++) {
+            if (last.fx[i] !== newState.fx[i]) {
+              identical = false;
+              break;
+            }
+          }
+        }
+      }
+      if (identical) return; // Skip duplicate
+    }
+  }
+
+  state.undoStack.push(newState);
+
+  // Limit undo stack to 50 entries
+  if (state.undoStack.length > 50) {
+    state.undoStack.shift();
+  }
+}
+
+function undo() {
+  if (state.undoStack.length === 0) return;
+
+  const undoState = state.undoStack.pop();
+
+  // Restore pattern state
+  const pattern = state.song.songData[undoState.channel].c[undoState.pattern - 1];
+  if (!pattern) return;
+
+  pattern.n = [...undoState.notes];
+  pattern.f = [...undoState.fx];
+
+  // Clear selection
+  setCursor(pat, 0, 0);
+  setCursor(fx, 0, 0);
+
+  render();
+  notify();
+}
+
 // --- copy/paste, generic across all three grids ---
 function copySelection(mode) {
   const grid = gridFor(mode), c = cursorFor(mode);
@@ -633,6 +711,7 @@ function pasteSelection(mode) {
 function doPaste(mode) {
   const c = cursorFor(mode);
   const isSingleCell = c.copyBuf && c.copyBuf.length === 1 && c.copyBuf[0].length === 1;
+  if (mode !== 'sequence') pushUndo();
   pasteSelection(mode);
   if (mode === 'sequence') syncSeqIntoState();
   // Fast path: single-cell paste in pattern mode
@@ -659,6 +738,7 @@ function handleNav(e, mode) {
     case 'Home': row = 0; break;
     case 'End': row = numrows - 1; break;
     case 'Backspace': case 'Delete':
+      if (mode !== 'sequence') pushUndo();
       forSelection(c, (col, row) => grid.clear(col, row));
       // Single cell: advance the cursor past it. A range stays selected --
       // freshly-cleared cells, still highlighted -- rather than collapsing onto
@@ -729,6 +809,8 @@ function onKeyDown(e) {
   }
   if (e.ctrlKey && e.code === 'KeyC') { copySelection(state.editMode); e.preventDefault(); return; }
   if (e.ctrlKey && e.code === 'KeyV') { doPaste(state.editMode); e.preventDefault(); return; }
+  // Don't handle Ctrl+Z in tracker mode if we're in piano roll (it has its own handler)
+  if (e.ctrlKey && e.code === 'KeyZ' && state.viewMode !== 'pianoroll') { undo(); e.preventDefault(); return; }
 
   if (state.editMode === 'sequence') {
     let code = null;
@@ -757,6 +839,7 @@ function onKeyDown(e) {
     // handleNav, whose Delete case would otherwise read the shift key as
     // "extend the selection".
     if (state.editMode === 'pattern' && e.shiftKey && (e.code === 'Delete' || e.code === 'Backspace')) {
+      pushUndo();
       writeChordRow(pat.row, []);
       setCursor(pat, pat.col, (pat.row + 1) % patGrid.numrows());
       render(); notify();
@@ -787,8 +870,9 @@ function onKeyDown(e) {
     // pattern grid when a pattern is actually focused. previewNote does the raw-
     // key-offset -> note-number math (octave + NOTE_OFFSET) and hands the result
     // back, so both sides agree on the exact value.
+    // Skip note entry in piano roll mode - it has its own handler
     const n = noteKeys()[e.code];
-    if (n !== undefined) {
+    if (n !== undefined && state.viewMode !== 'pianoroll') {
       const note = state.previewNote ? state.previewNote(n) : n + state.octave * 12 + engine.NOTE_OFFSET;
       enterNoteAtCursor(note);
       e.preventDefault();
