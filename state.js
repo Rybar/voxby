@@ -75,6 +75,16 @@ export const state = {
   // Name of the chord last entered, for the keyboard panel's readout. Purely
   // transient UI feedback -- not persisted.
   chordName: '',
+
+  // --- row layout (panels/layout.js). Heights are px, null meaning "use the
+  // row's natural/CSS default size" -- so a user who never touches a handle
+  // gets exactly today's layout. The tracks row (sequencer + patterns) is
+  // deliberately not represented here: it always fills whatever space these
+  // two leave it, floored at TRACKS_MIN, and is never collapsible. ---
+  kbRowH: null,
+  kbRowCollapsed: false,
+  bottomRowH: null,
+  bottomRowCollapsed: false,
 };
 
 // Same convention as theme.js's accent color, one key for the lot since
@@ -82,7 +92,8 @@ export const state = {
 // ignored rather than thrown on, and only known fields are copied across --
 // this object also holds `song`, which must never come from localStorage.
 const PREFS_KEY = 'soundbox-prefs';
-const PREF_FIELDS = ['beatRows', 'editStep', 'kbLayout', 'scaleMode', 'scaleRoot', 'flavor', 'voicing', 'smoothVoicing', 'chordOn', 'chordTones'];
+const PREF_FIELDS = ['beatRows', 'editStep', 'kbLayout', 'scaleMode', 'scaleRoot', 'flavor', 'voicing', 'smoothVoicing', 'chordOn', 'chordTones',
+  'kbRowH', 'kbRowCollapsed', 'bottomRowH', 'bottomRowCollapsed'];
 
 export function loadPrefs() {
   let saved;

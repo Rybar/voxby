@@ -23,6 +23,7 @@ import { initInstrumentPanel, refreshInstrumentPanel } from './panels/instrument
 import { initTrackerPanel, refreshTrackerPanel, followPlayback, stopFollowingPlayback, getPlayRange, setFollowRange } from './panels/tracker.js';
 import { initKeyboardPanel, refreshKeyboardPanel, previewNote, syncJammer, highlightPlaybackNotes, getJammer } from './panels/keyboard.js';
 import { initScopePanel, drawScope } from './panels/scope.js';
+import { initLayout } from './panels/layout.js';
 import { initTheme } from './theme.js';
 import { keyHandledByFocus } from './focus.js';
 import { DEMO_SONGS, SECTIONS } from './songs/index.js';
@@ -550,5 +551,6 @@ initInstrumentPanel();
 initTrackerPanel();
 initKeyboardPanel();
 initScopePanel();
+initLayout();
 refresh();
 loadSharedSong();

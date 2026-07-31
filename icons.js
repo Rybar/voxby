@@ -45,6 +45,11 @@ export const ICONS = {
   filterHighpass: '<path d="M2 16 Q7 16 7 8 T12 4 H18" fill="none" stroke="currentColor" stroke-width="1.6"/>',
   filterBandpass: '<path d="M2 16 Q6 16 8 6 Q10 16 18 16" fill="none" stroke="currentColor" stroke-width="1.6"/>',
 
+  // A downward chevron for a row's collapse toggle (panels/layout.js), which
+  // rotates 180deg via CSS when the row is collapsed so it points back the
+  // other way -- "expand".
+  chevron: '<path d="M4 7 L10 13 L16 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
+
   // Edit (copy/paste buttons)
   copy: '<rect x="3" y="5" width="10" height="12" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/>'
     + '<path d="M7 5 V3 H17 V15 H15" fill="none" stroke="currentColor" stroke-width="1.6"/>',

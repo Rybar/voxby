@@ -87,7 +87,15 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
 #top .title { font-size: 15px; text-transform: none; color: var(--text); letter-spacing: 0.5px;
               flex-shrink: 0; }
 
-#tracks { flex: 1; display: flex; gap: 1px; background: var(--border-dim); overflow: auto; min-height: 0; }
+/* #tracks (sequencer + patterns, "the pattern view") is the only row without
+   a fixed/JS-managed height, so it is also the only one that can shrink --
+   and TRACKS_MIN below is what stops it shrinking all the way to nothing at a
+   short viewport or high browser/OS zoom, which is what used to happen: with
+   #keyboard-row and #bottom both flex-shrink: 0 (never shrink) and #tracks
+   the sole flexible item, negative space landed entirely on #tracks with no
+   floor. panels/layout.js mirrors this same 140px as TRACKS_MIN so its own
+   resize-drag math agrees with what CSS will actually render. */
+#tracks { flex: 1; display: flex; gap: 1px; background: var(--border-dim); overflow: auto; min-height: 140px; }
 
 /* min-height: 0 counters the same flex intrinsic-sizing default that bit
    .instr-grid below (there for width, here for height): a flex item's
@@ -122,6 +130,30 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
 #bottom #scope-panel { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
 .panel.wip { display: flex; flex-direction: column; }
 .wip-note { margin: auto; color: var(--text-dim2); font-size: 11px; text-align: center; max-width: 16em; }
+
+/* Collapse toggle + drag handle for #keyboard-row and #bottom
+   (panels/layout.js). #tracks in between them has no toggle of its own --
+   see the #tracks comment above -- so it only ever grows by these two
+   rows collapsing or shrinking, never by collapsing itself.
+   position: relative on the rows lets .row-toggle sit absolutely in their
+   corner without becoming a flex item that eats into the row's own layout. */
+#keyboard-row, #bottom { position: relative; }
+.row-toggle { position: absolute; top: 3px; right: 4px; z-index: 3; padding: 2px; display: flex; }
+.row-toggle svg { transition: transform .15s; }
+.row-collapsed .row-toggle svg { transform: rotate(180deg); }
+/* !important because #bottom's own height: 320px rule below otherwise ties
+   with this on specificity depending on source order -- collapsed always has
+   to win. */
+#keyboard-row.row-collapsed, #bottom.row-collapsed { height: 27px !important; }
+.row-collapsed > .panel { display: none; }
+
+.row-handle { flex-shrink: 0; height: 6px; cursor: row-resize; background: var(--border-dim); }
+.row-handle:hover, .row-handle.dragging { background: var(--accent); }
+/* visibility, not display: none -- collapsing a row hides its own handle
+   (nothing to resize into a fixed collapsed strip) while keeping the layout's
+   total handle height constant, which is what panels/layout.js's maxFor()
+   assumes when computing how far the other row is allowed to grow. */
+.row-handle.row-handle-hidden { visibility: hidden; pointer-events: none; }
 
 /* sequencer + pattern/fx grids */
 .trk-controls { margin: 4px 0 6px; }
@@ -243,7 +275,10 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
    tracker.js's NOTE_KEYS currently maps in refreshKeyboardPanel() every time
    the octave selector moves. The key colors themselves are literal (real
    piano keys are white/black regardless of UI theme), not var(--bg*). */
-.kb-header { margin-bottom: 2px; gap: 10px; }
+/* padding-right clears #keyboard-row's .row-toggle (panels/layout.js),
+   absolutely positioned in the row's top-right corner -- without it the
+   octave buttons at this header's own right end sit directly under it. */
+.kb-header { margin-bottom: 2px; gap: 10px; padding-right: 28px; }
 .kb-header h3 { margin: 0; }
 .kb-header button { padding: 2px 9px; }
 .kb-header .mono { min-width: 1.2em; text-align: center; }
@@ -352,7 +387,10 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
    bitmap. #scope-canvas's background is var(--bg0); scope.js's own BG constant
    is a literal copy of that value for its fillRect calls, since canvas pixels
    can't inherit a CSS variable. */
-.scope-header { margin-bottom: 2px; }
+/* padding-right clears #bottom's .row-toggle the same way .kb-header does
+   above -- #scope-panel is #bottom's rightmost child, so its header's own
+   #scope-toggle button is the one that would otherwise sit under it. */
+.scope-header { margin-bottom: 2px; padding-right: 28px; }
 .scope-header h3 { margin: 0; }
 #scope-canvas { width: 100%; flex: 1; min-height: 0; background: var(--bg0); border: 1px solid var(--border-dim); border-radius: 2px; }
 
