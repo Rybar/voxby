@@ -39,7 +39,7 @@ import { SCALES, PITCH_NAMES, QUALITIES, slotOf, pitchName, scaleKeys, harmonyOf
 import { padOf, rankNext } from '../chords.js';
 import { openMenu } from '../menu.js';
 import { keyHandledByFocus } from '../focus.js';
-import { initPianoRoll } from './pianoroll.js';
+import { initPianoRoll, render as renderPianoRoll } from './pianoroll.js';
 
 const $ = id => document.getElementById(id);
 const NOTE_NAMES = ['C-', 'C#', 'D-', 'D#', 'E-', 'F-', 'F#', 'G-', 'G#', 'A-', 'A#', 'B-'];
@@ -1081,7 +1081,13 @@ function render() {
   refreshSongControls();
   renderSequencer();
   if (state.viewMode === 'pianoroll') {
-    initPianoRoll();
+    // Only init if piano roll doesn't exist yet
+    if (!$('pianoroll-canvas')) {
+      initPianoRoll();
+    } else {
+      // Just repaint, don't rebuild/scroll
+      renderPianoRoll();
+    }
   } else {
     // Ensure tracker patterns panel structure exists
     if (!$('pat-scroll')) {

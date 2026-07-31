@@ -109,6 +109,7 @@ export function initPianoRoll() {
   // Keyboard handlers (installed once, check viewMode before acting)
   if (!window.pianoRollKeyHandlerInstalled) {
     document.addEventListener('keydown', onPianoRollKeyDown);
+    document.addEventListener('keyup', onPianoRollKeyUp);
     window.pianoRollKeyHandlerInstalled = true;
   }
 
@@ -283,6 +284,7 @@ function onCanvasMouseUp(e) {
     const note = pitchToNote(cell.pitch);
     if (placeNoteAtCursor(cell.row, note)) {
       pushUndo();
+      // Update cursor to clicked position (no auto-scroll since user already positioned view)
       state.pianoRoll.cursorRow = cell.row;
       state.pianoRoll.cursorPitch = cell.pitch;
       render();
@@ -328,7 +330,8 @@ function getNoteAt(row, pitch) {
 }
 
 // Place a note at the cursor row. Returns true if successful.
-function placeNoteAtCursor(row, note) {
+// preview: if true, plays the entire chord through the jammer (for mouse clicks)
+function placeNoteAtCursor(row, note, preview = true) {
   const pn = state.song.songData[state.selInstrument].p[state.selRow];
   if (!pn) return false; // no pattern assigned
 
@@ -342,6 +345,24 @@ function placeNoteAtCursor(row, note) {
     if (!pattern.n[row + col * patternLen]) {
       pattern.n[row + col * patternLen] = note;
       state.notify && state.notify(); // mark dirty
+
+      // Preview the entire chord (all notes at this row) - only for mouse clicks
+      if (preview && state.previewNote) {
+        const allNotes = [];
+        for (let c = 0; c < 4; c++) {
+          const n = pattern.n[row + c * patternLen];
+          if (n) {
+            const pitch = noteToPitch(n);
+            const octave = Math.floor(pitch / 12);
+            const offset = pitch % 12;
+            allNotes.push(offset + (octave - state.octave) * 12);
+          }
+        }
+        // Play all notes together
+        for (const offset of allNotes) {
+          state.previewNote(offset);
+        }
+      }
       return true;
     }
   }
@@ -706,6 +727,10 @@ function transposeSelection(semitones) {
   flashFeedback(`Transposed ${direction} ${amount}`);
 }
 
+// Track held note keys for chord detection
+let heldNoteKeys = new Set();
+let chordRowStart = null;
+
 function onPianoRollKeyDown(e) {
   // Only handle keys when piano roll is active
   if (state.viewMode !== 'pianoroll') return;
@@ -781,16 +806,25 @@ function onPianoRollKeyDown(e) {
       'KeyZ': 0, 'KeyS': 1, 'KeyX': 2, 'KeyD': 3, 'KeyC': 4, 'KeyV': 5, 'KeyG': 6, 'KeyB': 7, 'KeyH': 8, 'KeyN': 9, 'KeyJ': 10, 'KeyM': 11,
       'KeyQ': 12, 'Digit2': 13, 'KeyW': 14, 'Digit3': 15, 'KeyE': 16, 'KeyR': 17, 'Digit5': 18, 'KeyT': 19, 'Digit6': 20, 'KeyY': 21, 'Digit7': 22, 'KeyU': 23, 'KeyI': 24,
     };
-    if (noteKeyMap[e.code] !== undefined) {
+    if (noteKeyMap[e.code] !== undefined && !e.repeat) {
+      // Track this key as held
+      heldNoteKeys.add(e.code);
+
+      // If this is the first note key, remember the row for chord building
+      if (heldNoteKeys.size === 1) {
+        chordRowStart = row;
+      }
+
       const noteOffset = noteKeyMap[e.code];
       const note = state.previewNote(noteOffset); // preview and get the actual note number
-      if (placeNoteAtCursor(row, note)) {
-        // Advance cursor by editStep (horizontal only, pitch stays same)
-        row = Math.min(patternLen - 1, row + state.editStep);
-        state.pianoRoll.cursorRow = row;
-        // No vertical scroll needed - pitch didn't change
-        render();
-      }
+
+      // Place note at the chord start row (not the current cursor row which may have moved)
+      const targetRow = chordRowStart !== null ? chordRowStart : row;
+      // Don't preview again - keyboard already previewed via state.previewNote above
+      placeNoteAtCursor(targetRow, note, false);
+
+      // Don't advance cursor yet - wait for all keys to be released
+      render();
       e.preventDefault();
       return;
     }
@@ -802,6 +836,9 @@ function onPianoRollKeyDown(e) {
       if (!e.shiftKey) {
         state.pianoRoll.selectedNotes = [];
       }
+      // Clear chord state when cursor moves
+      heldNoteKeys.clear();
+      chordRowStart = null;
       e.preventDefault();
       break;
     case 'ArrowLeft':
@@ -809,6 +846,9 @@ function onPianoRollKeyDown(e) {
       if (!e.shiftKey) {
         state.pianoRoll.selectedNotes = [];
       }
+      // Clear chord state when cursor moves
+      heldNoteKeys.clear();
+      chordRowStart = null;
       e.preventDefault();
       break;
     case 'ArrowUp':
@@ -816,6 +856,9 @@ function onPianoRollKeyDown(e) {
       if (!e.shiftKey) {
         state.pianoRoll.selectedNotes = [];
       }
+      // Clear chord state when cursor moves
+      heldNoteKeys.clear();
+      chordRowStart = null;
       e.preventDefault();
       break;
     case 'ArrowDown':
@@ -823,22 +866,33 @@ function onPianoRollKeyDown(e) {
       if (!e.shiftKey) {
         state.pianoRoll.selectedNotes = [];
       }
+      // Clear chord state when cursor moves
+      heldNoteKeys.clear();
+      chordRowStart = null;
       e.preventDefault();
       break;
     case 'Home':
       row = 0;
+      heldNoteKeys.clear();
+      chordRowStart = null;
       e.preventDefault();
       break;
     case 'End':
       row = patternLen - 1;
+      heldNoteKeys.clear();
+      chordRowStart = null;
       e.preventDefault();
       break;
     case 'PageUp':
       pitch = Math.min(lowestPitch + numSemitones - 1, pitch + 12); // up one octave
+      heldNoteKeys.clear();
+      chordRowStart = null;
       e.preventDefault();
       break;
     case 'PageDown':
       pitch = Math.max(lowestPitch, pitch - 12); // down one octave
+      heldNoteKeys.clear();
+      chordRowStart = null;
       e.preventDefault();
       break;
     default:
@@ -849,6 +903,29 @@ function onPianoRollKeyDown(e) {
   state.pianoRoll.cursorPitch = pitch;
   scrollCursorIntoView();
   render();
+}
+
+function onPianoRollKeyUp(e) {
+  // Only handle keys when piano roll is active
+  if (state.viewMode !== 'pianoroll') return;
+
+  const noteKeyMap = {
+    'KeyZ': 0, 'KeyS': 1, 'KeyX': 2, 'KeyD': 3, 'KeyC': 4, 'KeyV': 5, 'KeyG': 6, 'KeyB': 7, 'KeyH': 8, 'KeyN': 9, 'KeyJ': 10, 'KeyM': 11,
+    'KeyQ': 12, 'Digit2': 13, 'KeyW': 14, 'Digit3': 15, 'KeyE': 16, 'KeyR': 17, 'Digit5': 18, 'KeyT': 19, 'Digit6': 20, 'KeyY': 21, 'Digit7': 22, 'KeyU': 23, 'KeyI': 24,
+  };
+
+  // Remove key from held set
+  if (noteKeyMap[e.code] !== undefined) {
+    heldNoteKeys.delete(e.code);
+
+    // If all note keys are released, advance cursor
+    if (heldNoteKeys.size === 0 && chordRowStart !== null) {
+      const patternLen = state.song.patternLen;
+      state.pianoRoll.cursorRow = Math.min(patternLen - 1, chordRowStart + state.editStep);
+      chordRowStart = null;
+      render();
+    }
+  }
 }
 
 function scrollCursorIntoView() {
@@ -875,7 +952,7 @@ function getCurrentPatternNum() {
   return state.song.songData[state.selInstrument].p[state.selRow] || 0;
 }
 
-function render() {
+export function render() {
   const canvas = $('pianoroll-canvas');
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
