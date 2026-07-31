@@ -518,3 +518,8 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
 .menu-hint { color: var(--text-dim2); font-size: 10px; font-family: monospace; }
 .menu-item:hover .menu-hint { color: var(--text-dim); }
 .menu-sep { height: 1px; margin: 4px 2px; background: var(--border-dim); }
+
+/* Channel enable/disable toggles in sequencer header (piano roll mode) */
+#seq-thead th.channel-toggleable { cursor: pointer; user-select: none; }
+#seq-thead th.channel-toggleable:hover { background: var(--bg3); }
+#seq-thead th.channel-disabled { opacity: 0.35; text-decoration: line-through; }

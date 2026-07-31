@@ -78,12 +78,13 @@ export const state = {
 
   // --- view mode: tracker (traditional columns) or pianoroll (horizontal grid) ---
   viewMode: 'tracker',  // 'tracker' | 'pianoroll'
+  channelsEnabled: Array(16).fill(true), // which channels are editable in piano roll
   pianoRoll: {
     scrollY: 0,        // vertical scroll position (semitones from bottom)
     cursorRow: 0,      // time position (pattern row)
     cursorPitch: 60,   // note number (C4 = 60)
     dragNote: null,    // {channel, col, row, originalPitch, originalRow} when dragging
-    selectedNotes: [], // array of {row, pitch, col} - actual notes that are selected
+    selectedNotes: [], // array of {row, pitch, col, channel} - actual notes selected (multi-channel)
     dragSelection: null, // {startX, startY, offsetRow, offsetPitch} when dragging selection
     undoStack: [],     // undo history
   },
@@ -107,7 +108,7 @@ export const state = {
 // ignored rather than thrown on, and only known fields are copied across --
 // this object also holds `song`, which must never come from localStorage.
 const PREFS_KEY = 'soundbox-prefs';
-const PREF_FIELDS = ['beatRows', 'editStep', 'kbLayout', 'scaleMode', 'scaleRoot', 'flavor', 'voicing', 'smoothVoicing', 'chordOn', 'chordTones',
+const PREF_FIELDS = ['beatRows', 'editStep', 'kbLayout', 'scaleRoot', 'voicing', 'smoothVoicing', 'chordOn', 'chordTones',
   'kbRowH', 'kbRowCollapsed', 'bottomRowH', 'bottomRowCollapsed', 'masterVolume'];
 
 export function loadPrefs() {

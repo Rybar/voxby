@@ -215,7 +215,7 @@ function onCanvasMouseDown(e) {
   }
 
   if (e.shiftKey) {
-    // Shift+click: extend selection by rectangular region
+    // Shift+click: extend selection by rectangular region (all enabled channels)
     dragStart = cell;
     isDragging = true;
   } else {
@@ -272,6 +272,13 @@ function onCanvasMouseUp(e) {
       return;
     }
 
+    // Only allow note placement if focused channel is enabled
+    if (!state.channelsEnabled[state.selInstrument]) {
+      flashFeedback(`Channel ${state.selInstrument + 1} is disabled - enable it to place notes`);
+      dragStart = null;
+      return;
+    }
+
     // No selection and no note - place note at clicked position
     const note = pitchToNote(cell.pitch);
     if (placeNoteAtCursor(cell.row, note)) {
@@ -291,9 +298,9 @@ function onCanvasRightClick(e) {
   const cell = canvasToGrid(e.clientX, e.clientY);
   if (!cell) return;
 
-  // Delete note at clicked position
+  // Delete note at clicked position from ANY enabled channel
   const note = pitchToNote(cell.pitch);
-  deleteNoteAt(cell.row, note);
+  deleteNoteAtAnyChannel(cell.row, note);
 
   // Move cursor to deleted position
   state.pianoRoll.cursorRow = cell.row;
@@ -383,29 +390,65 @@ function deleteNoteAt(row, note) {
   }
 }
 
+function deleteNoteAtAnyChannel(row, note) {
+  pushUndo();
+
+  const patternLen = state.song.patternLen;
+  let deleted = false;
+
+  // Check all enabled channels for a note at this position
+  for (let channel = 0; channel < engine.MAX_CHANNELS; channel++) {
+    if (!state.channelsEnabled[channel]) continue;
+
+    const pn = state.song.songData[channel].p[state.selRow];
+    if (!pn) continue;
+
+    const pattern = state.song.songData[channel].c[pn - 1];
+    if (!pattern) continue;
+
+    // Find and clear the note at this pitch
+    for (let col = 0; col < 4; col++) {
+      if (pattern.n[row + col * patternLen] === note) {
+        pattern.n[row + col * patternLen] = 0;
+        deleted = true;
+        break; // Only delete one note per channel
+      }
+    }
+  }
+
+  if (deleted) {
+    state.notify && state.notify();
+  }
+}
+
 function selectNotesInRect(row0, pitch0, row1, pitch1) {
   const minRow = Math.min(row0, row1);
   const maxRow = Math.max(row0, row1);
   const minPitch = Math.min(pitch0, pitch1);
   const maxPitch = Math.max(pitch0, pitch1);
 
-  const pn = state.song.songData[state.selInstrument].p[state.selRow];
-  if (!pn) return;
-
-  const pattern = state.song.songData[state.selInstrument].c[pn - 1];
-  if (!pattern) return;
-
   const patternLen = state.song.patternLen;
   state.pianoRoll.selectedNotes = [];
 
-  // Find all notes within rectangle
-  for (let row = minRow; row <= maxRow; row++) {
-    for (let pitch = minPitch; pitch <= maxPitch; pitch++) {
-      const note = pitchToNote(pitch);
-      for (let col = 0; col < 4; col++) {
-        if (pattern.n[row + col * patternLen] === note) {
-          state.pianoRoll.selectedNotes.push({ row, pitch, col });
-          break;
+  // Find all notes within rectangle across ALL ENABLED channels
+  for (let channel = 0; channel < engine.MAX_CHANNELS; channel++) {
+    // Skip disabled channels
+    if (!state.channelsEnabled[channel]) continue;
+
+    const pn = state.song.songData[channel].p[state.selRow];
+    if (!pn) continue;
+
+    const pattern = state.song.songData[channel].c[pn - 1];
+    if (!pattern) continue;
+
+    for (let row = minRow; row <= maxRow; row++) {
+      for (let pitch = minPitch; pitch <= maxPitch; pitch++) {
+        const note = pitchToNote(pitch);
+        for (let col = 0; col < 4; col++) {
+          if (pattern.n[row + col * patternLen] === note) {
+            state.pianoRoll.selectedNotes.push({ row, pitch, col, channel });
+            break;
+          }
         }
       }
     }
@@ -417,45 +460,54 @@ function moveSelectedNotes(offsetRow, offsetPitch) {
 
   pushUndo();
 
-  const pn = state.song.songData[state.selInstrument].p[state.selRow];
-  if (!pn) return;
-
-  const pattern = state.song.songData[state.selInstrument].c[pn - 1];
-  if (!pattern) return;
-
   const patternLen = state.song.patternLen;
 
-  // Store notes to move
-  const notesToMove = state.pianoRoll.selectedNotes.map(n => ({
-    row: n.row,
-    pitch: n.pitch,
-    col: n.col,
-    note: pattern.n[n.row + n.col * patternLen]
-  }));
-
-  // Clear original positions
-  for (const n of notesToMove) {
-    pattern.n[n.row + n.col * patternLen] = 0;
+  // Group by channel
+  const byChannel = {};
+  for (const n of state.pianoRoll.selectedNotes) {
+    if (!byChannel[n.channel]) byChannel[n.channel] = [];
+    byChannel[n.channel].push(n);
   }
 
-  // Place at new positions
+  // Move notes within each channel
   const newSelection = [];
-  for (const n of notesToMove) {
-    const newRow = n.row + offsetRow;
-    const newPitch = n.pitch + offsetPitch;
+  for (const channel in byChannel) {
+    const ch = +channel;
+    const pn = state.song.songData[ch].p[state.selRow];
+    if (!pn) continue;
 
-    if (newRow < 0 || newRow >= patternLen) continue; // out of bounds
+    const pattern = state.song.songData[ch].c[pn - 1];
+    if (!pattern) continue;
 
-    const newNote = pitchToNote(newPitch);
+    // Store notes to move
+    const notesToMove = byChannel[ch].map(n => ({
+      row: n.row,
+      pitch: n.pitch,
+      col: n.col,
+      note: pattern.n[n.row + n.col * patternLen]
+    }));
 
-    // Find empty column at new position
-    let placed = false;
-    for (let col = 0; col < 4; col++) {
-      if (!pattern.n[newRow + col * patternLen]) {
-        pattern.n[newRow + col * patternLen] = newNote;
-        newSelection.push({ row: newRow, pitch: newPitch, col });
-        placed = true;
-        break;
+    // Clear original positions
+    for (const n of notesToMove) {
+      pattern.n[n.row + n.col * patternLen] = 0;
+    }
+
+    // Place at new positions
+    for (const n of notesToMove) {
+      const newRow = n.row + offsetRow;
+      const newPitch = n.pitch + offsetPitch;
+
+      if (newRow < 0 || newRow >= patternLen) continue; // out of bounds
+
+      const newNote = pitchToNote(newPitch);
+
+      // Find empty column at new position
+      for (let col = 0; col < 4; col++) {
+        if (!pattern.n[newRow + col * patternLen]) {
+          pattern.n[newRow + col * patternLen] = newNote;
+          newSelection.push({ row: newRow, pitch: newPitch, col, channel: ch });
+          break;
+        }
       }
     }
   }
@@ -469,15 +521,16 @@ function deleteSelection() {
 
   pushUndo();
 
-  const pn = state.song.songData[state.selInstrument].p[state.selRow];
-  if (!pn) return;
-
-  const pattern = state.song.songData[state.selInstrument].c[pn - 1];
-  if (!pattern) return;
-
   const patternLen = state.song.patternLen;
 
+  // Group by channel and delete from each
   for (const note of state.pianoRoll.selectedNotes) {
+    const pn = state.song.songData[note.channel].p[state.selRow];
+    if (!pn) continue;
+
+    const pattern = state.song.songData[note.channel].c[pn - 1];
+    if (!pattern) continue;
+
     pattern.n[note.row + note.col * patternLen] = 0;
   }
 
@@ -495,19 +548,19 @@ function copySelection() {
   const minRow = Math.min(...selected.map(n => n.row));
   const minPitch = Math.min(...selected.map(n => n.pitch));
 
-  const pn = state.song.songData[state.selInstrument].p[state.selRow];
-  if (!pn) return;
-
-  const pattern = state.song.songData[state.selInstrument].c[pn - 1];
-  if (!pattern) return;
-
   const patternLen = state.song.patternLen;
   const notes = [];
 
-  // Copy selected notes with relative positions
+  // Copy selected notes with relative positions AND channel info
   for (const n of selected) {
+    const pn = state.song.songData[n.channel].p[state.selRow];
+    if (!pn) continue;
+
+    const pattern = state.song.songData[n.channel].c[pn - 1];
+    if (!pattern) continue;
+
     const note = pattern.n[n.row + n.col * patternLen];
-    notes.push({ row: n.row - minRow, pitch: n.pitch - minPitch, note });
+    notes.push({ row: n.row - minRow, pitch: n.pitch - minPitch, note, channel: n.channel });
   }
 
   pianoRollClipboard = { notes };
@@ -520,12 +573,6 @@ function pasteAtCursor() {
 
   pushUndo();
 
-  const pn = state.song.songData[state.selInstrument].p[state.selRow];
-  if (!pn) return;
-
-  const pattern = state.song.songData[state.selInstrument].c[pn - 1];
-  if (!pattern) return;
-
   const patternLen = state.song.patternLen;
   const baseRow = state.pianoRoll.cursorRow;
   const basePitch = state.pianoRoll.cursorPitch;
@@ -533,11 +580,19 @@ function pasteAtCursor() {
   const newSelection = [];
   let placed = 0;
 
+  // Paste to original channels (preserves arrangement)
   for (const noteData of pianoRollClipboard.notes) {
     const targetRow = baseRow + noteData.row;
     const targetPitch = basePitch + noteData.pitch;
+    const channel = noteData.channel;
 
     if (targetRow < 0 || targetRow >= patternLen) continue; // out of bounds
+
+    const pn = state.song.songData[channel].p[state.selRow];
+    if (!pn) continue;
+
+    const pattern = state.song.songData[channel].c[pn - 1];
+    if (!pattern) continue;
 
     const targetNote = pitchToNote(targetPitch);
 
@@ -545,7 +600,7 @@ function pasteAtCursor() {
     for (let col = 0; col < 4; col++) {
       if (!pattern.n[targetRow + col * patternLen]) {
         pattern.n[targetRow + col * patternLen] = targetNote;
-        newSelection.push({ row: targetRow, pitch: targetPitch, col });
+        newSelection.push({ row: targetRow, pitch: targetPitch, col, channel });
         placed++;
         break;
       }
@@ -938,14 +993,14 @@ function drawMarquee(ctx, start, end, lowestPitch, numSemitones) {
 }
 
 function drawSelectedNotes(ctx, lowestPitch, numSemitones) {
-  const selectedSet = new Set(state.pianoRoll.selectedNotes.map(n => `${n.row},${n.pitch}`));
-
   for (const note of state.pianoRoll.selectedNotes) {
     const x = PIANO_KEY_WIDTH + note.row * CELL_WIDTH;
     const y = (numSemitones - 1 - (note.pitch - lowestPitch)) * cellHeight;
 
-    // Bright blue outline on selected notes
-    ctx.strokeStyle = 'rgba(100, 200, 255, 1.0)';
+    // Bright outline in channel color (or blue if channel disabled)
+    const isEnabled = state.channelsEnabled[note.channel];
+    const color = isEnabled ? CHANNEL_COLORS[note.channel % CHANNEL_COLORS.length] : '#66ccff';
+    ctx.strokeStyle = color;
     ctx.lineWidth = 2;
     ctx.strokeRect(x + 1, y + 1, CELL_WIDTH - 2, cellHeight - 2);
   }
@@ -1097,8 +1152,11 @@ function drawChannelNotes(ctx, channel, patternNum, patternLen, lowestPitch) {
   if (!pattern) return;
 
   const isFocused = channel === state.selInstrument;
-  const color = CHANNEL_COLORS[channel % CHANNEL_COLORS.length];
-  const opacity = isFocused ? 1.0 : 0.3;
+  const isEnabled = state.channelsEnabled[channel];
+
+  // Disabled channels are grey and very dim
+  const color = isEnabled ? CHANNEL_COLORS[channel % CHANNEL_COLORS.length] : '#888888';
+  const opacity = !isEnabled ? 0.15 : (isFocused ? 1.0 : 0.3);
 
   // Parse the color to apply opacity
   const rgb = hexToRgb(color);

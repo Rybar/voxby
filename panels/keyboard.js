@@ -435,6 +435,7 @@ export function initKeyboardPanel() {
     state.flavor = +$('kb-flavor').value;
     const scale = FLAVORS[state.flavor].scale;
     if (scale >= 0) state.scaleMode = scale;
+    else state.scaleMode = 0;
     resetChordContext();
     changed();
   };

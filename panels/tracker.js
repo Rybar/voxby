@@ -184,13 +184,18 @@ function focusedPatternNum() {
   return patternNumFor(state.selInstrument);
 }
 
+// Format pattern number as 0-9,A-Z for display
+function formatPatternNum(v) {
+  return v > 0 ? (v <= 10 ? '' + (v - 1) : String.fromCharCode(64 + v - 10)) : '';
+}
+
 const seqGrid = {
   numcols: () => engine.MAX_CHANNELS,
   numrows: () => Math.min(engine.MAX_SONG_ROWS, Math.max(64, state.song.endPattern + 32)),
   get: (col, row) => state.song.songData[col].p[row] || 0,
   set: (col, row, v) => { state.song.songData[col].p[row] = v; engine.recalcSongRanges(state.song); },
   clear: (col, row) => { state.song.songData[col].p[row] = 0; engine.recalcSongRanges(state.song); },
-  toHTML: v => v > 0 ? (v <= 10 ? '' + (v - 1) : String.fromCharCode(64 + v - 10)) : '',
+  toHTML: formatPatternNum,
 };
 const patGrid = {
   numcols: () => 4,
@@ -923,8 +928,17 @@ function renderSequencer() {
   const rows = seqGrid.numrows();
   let thead = '<tr><th></th>';
   for (let col = 0; col < engine.MAX_CHANNELS; col++) {
-    thead += `<th class="${col === state.selInstrument ? 'focused' : ''}"`
-      + ` title="Channel ${col + 1}. Click a cell in this column to edit this channel's patterns and instrument.">${col + 1}</th>`;
+    const enabled = state.channelsEnabled[col];
+    const classes = [];
+    if (col === state.selInstrument) classes.push('focused');
+    if (state.viewMode === 'pianoroll') {
+      classes.push('channel-toggleable');
+      if (!enabled) classes.push('channel-disabled');
+    }
+    const title = state.viewMode === 'pianoroll'
+      ? `Channel ${col + 1}. Click to ${enabled ? 'disable' : 'enable'} for editing.`
+      : `Channel ${col + 1}. Click a cell in this column to edit this channel's patterns and instrument.`;
+    thead += `<th class="${classes.join(' ')}" data-channel="${col}" title="${title}">${col + 1}</th>`;
   }
   thead += '</tr>';
   let tbody = '';
@@ -935,6 +949,21 @@ function renderSequencer() {
   }
   $('seq-thead').innerHTML = thead;
   $('seq-tbody').innerHTML = tbody;
+
+  // Attach channel toggle handlers in piano roll mode
+  if (state.viewMode === 'pianoroll') {
+    $('seq-thead').querySelectorAll('th.channel-toggleable').forEach(th => {
+      th.onclick = e => {
+        const ch = +th.dataset.channel;
+        state.channelsEnabled[ch] = !state.channelsEnabled[ch];
+        // Clear selection of any notes from this channel
+        if (!state.channelsEnabled[ch]) {
+          state.pianoRoll.selectedNotes = state.pianoRoll.selectedNotes.filter(n => n.channel !== ch);
+        }
+        state.notify && state.notify();
+      };
+    });
+  }
 }
 
 function patternNumFor(channel) {
@@ -972,7 +1001,7 @@ function renderPatterns() {
         ? 'Four note columns (four notes can sound at once) plus the narrow FX column. Play notes in with the piano or the computer keys. Alt+arrows transpose the selection; right-click for the rest.'
         : 'No pattern assigned — insert a pattern number in the sequencer above to edit notes here'
       }">`
-      + `<div class="pat-col-head" data-channel="${channel}"${pn ? ` title="Channel ${channel + 1} plays pattern ${pn} at this sequence row. Click to edit it."` : ''}>Ch ${channel + 1} · ${pn ? 'Pat ' + pn : String.fromCharCode(8212)}</div>`
+      + `<div class="pat-col-head" data-channel="${channel}"${pn ? ` title="Channel ${channel + 1} plays pattern ${pn} at this sequence row. Click to edit it."` : ''}>Ch ${channel + 1} · ${pn ? 'Pat ' + formatPatternNum(pn) : String.fromCharCode(8212)}</div>`
       + '<table class="trk-table"><tbody>';
     for (let row = 0; row < patternLen; row++) {
       html += `<tr class="${isBeatRow(row) ? 'beat' : ''}${row === pat.row ? ' curRow' : ''}">`;
