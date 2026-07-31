@@ -159,9 +159,8 @@ you have already written.</p>
   labelled with the computer key that plays them.</figcaption>
 </figure>
 
-<p>Notes go in at the pattern cursor from three places — the on-screen piano,
-the computer keyboard, or the entry pie — and all three sound the note as they
-write it. The computer keys are two overlapping octaves: <kbd>Z</kbd>
+<p>Notes go in at the pattern cursor from two places — the on-screen piano or
+the computer keyboard — and both sound the note as they write it. The computer keys are two overlapping octaves: <kbd>Z</kbd>
 <kbd>X</kbd> <kbd>C</kbd> <kbd>V</kbd> <kbd>B</kbd> <kbd>N</kbd> <kbd>M</kbd>
 with sharps on <kbd>S</kbd> <kbd>D</kbd> <kbd>G</kbd> <kbd>H</kbd> <kbd>J</kbd>,
 then <kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd> <kbd>R</kbd> <kbd>T</kbd>
@@ -218,22 +217,6 @@ chord that belongs on that degree. In Chromatic, press a digit
 get written; switching the root off gives a rootless voicing, and the remaining
 tones pack left into the first columns. The chord's name is spelled out next to
 the toggles as confirmation.</p>
-
-<h3>The entry pie</h3>
-
-<figure class="narrow">
-  <img src="help/entry-pie.png" alt="A radial menu of twelve notes ringed by chord qualities">
-  <figcaption>Double-click a note cell: the inner ring is the twelve notes, the
-  outer ring the chord qualities for whichever note you are on.</figcaption>
-</figure>
-
-<p><strong>Double-click</strong> a note cell to open the pie over it, then drag
-out and release to write what you land on — one gesture, no keyboard. Stay in
-the inner ring for a single note, carry on into the outer ring for a chord built
-on it. The notes it would write are outlined on the piano as you move, and you
-hear each one as you cross it. The scroll wheel (or <kbd>-</kbd> / <kbd>=</kbd>)
-changes octave without closing it; <kbd>Escape</kbd> or a right-click
-cancels.</p>
 
 <h2 id="editing">Selecting and editing</h2>
 
@@ -534,10 +517,9 @@ itself.</p>
     <tr><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd></td><td>Transpose the selection an octave</td></tr>
     <tr><td><kbd>-</kbd> / <kbd>=</kbd> (or <kbd>&lt;</kbd> / <kbd>&gt;</kbd>)</td><td>Octave down / up</td></tr>
     <tr><td><kbd>0</kbd>–<kbd>9</kbd>, <kbd>A</kbd>–<kbd>Z</kbd></td><td>In the sequencer: place that pattern (with <kbd>Shift</kbd>, and step down a row)</td></tr>
-    <tr><td>note keys</td><td>In a pattern: play and write the note; in chord mode, a digit straight after names the quality</td></tr>
-    <tr><td>double-click</td><td>Open the note/chord entry pie on that cell</td></tr>
+    <tr><td>note keys</td><td>In a pattern: play and write the note, or the chord the scale harmonizes it to in chord mode</td></tr>
     <tr><td>right-click</td><td>Transpose and clipboard menu for the selection</td></tr>
-    <tr><td><kbd>Escape</kbd></td><td>Close a dialog or the entry pie</td></tr>
+    <tr><td><kbd>Escape</kbd></td><td>Close a dialog</td></tr>
   </tbody>
 </table>
 
@@ -547,8 +529,8 @@ itself.</p>
 <a href="https://gitlab.com/mbitsnbites/soundbox">SoundBox</a>, by Marcus
 Geelnard, whose synth, players, instrument presets and song format it keeps
 intact. The editing side — the multi-channel pattern view, the on-screen piano
-and its scale and chord helpers, the entry pie, the scope, the sharing links and
-the ES-module song format — is new; the sound is his.</p>
+and its scale and chord helpers, the scope, the sharing links and the ES-module
+song format — is new; the sound is his.</p>
 
 <p>Voxby inherits SoundBox's licence, the
 <a href="gpl.txt">GNU General Public License v3</a>.</p>

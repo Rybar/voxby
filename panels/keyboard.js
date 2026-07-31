@@ -33,9 +33,8 @@
 // keyboard.js would close a cycle. keyboard.js importing tracker.js is fine
 // (tracker.js imports nothing from here), and that is what lets an on-screen key
 // click write into the pattern grid and not merely preview. The playback
-// highlighting and the pie's chord shadow use the same callback-field trick in
-// the other direction (state.highlightNotes, state.shadowNotes, both set by
-// main.js).
+// highlighting uses the same callback-field trick in
+// the other direction (state.highlightNotes, set by main.js).
 //
 // There is no MIDI input: SoundBox's was never separable from its old UI, and
 // nothing else here depends on it.
@@ -44,8 +43,9 @@ import * as engine from '../engine.js';
 import { state, savePrefs } from '../state.js';
 import { audioContext } from '../audio.js';
 import { previewInstrI } from './instrument.js';
-import { noteKeys, enterNoteAtCursor, chordNotesFor } from './tracker.js';
+import { noteKeys, enterNoteAtCursor, chordNotesFor, padChord, enterPadAtCursor, suggestedPads, resetChordContext } from './tracker.js';
 import { SCALES, PITCH_NAMES, degreeOfPitch } from '../scales.js';
+import { FLAVORS, padsOf } from '../chords.js';
 import { LAYOUTS, LAYOUT_TABLES, charFor, detectLayout } from '../layouts.js';
 import { typingInField } from '../focus.js';
 
@@ -195,14 +195,23 @@ export function highlightPlaybackNotes(notes) {
 // screen.css) keeps all three signals -- in-scale tint, chord shadow, key
 // lit -- legible at once on the same key. With no scale set there's no
 // quality to infer from one key, so chordNotesFor returns just that note and
-// nothing is shadowed until a digit names the chord. ---
+// nothing is shadowed. ---
 let shadowLit = [];
-function clearShadow() {
+// Wiping the outline off the keys, without saying anything about what is
+// hovered -- setShadow calls this to replace one chord's outline with the
+// next, and must not lose the pad identity that clearShadow below resets.
+function clearShadowKeys() {
   for (const el of shadowLit) el.classList.remove('kb-shadow');
   shadowLit = [];
 }
+// "Nothing is being previewed": the outline goes, and the hovered pad is
+// forgotten so re-entering the pad just left shadows it again.
+function clearShadow() {
+  clearShadowKeys();
+  hoverPad = -1;
+}
 function setShadow(notes) {
-  clearShadow();
+  clearShadowKeys();
   for (const note of notes) {
     const raw = note - engine.NOTE_OFFSET, oct = Math.floor(raw / 12);
     const el = keyEl(oct, raw - oct * 12);
@@ -217,15 +226,48 @@ function showShadow(octaveK, offsetInOctave) {
   setShadow(notes);
 }
 
-// The same outline, driven by an explicit note list instead of a hovered key --
-// registered on state.shadowNotes by main.js so the entry pie (panels/pie.js)
-// can show what the wedge under the cursor would write. No `length < 2` guard
-// here, unlike the hover path above: a single note is a deliberate pick in the
-// pie, and worth showing since it says which octave you are about to land in,
-// whereas on hover it would shadow every key the mouse crossed in chromatic
-// mode.
-export function shadowNotes(notes) {
-  setShadow(notes);
+// --- chord pads: one button per chord in the selected flavor (chords.js),
+// resolved into an actual chord by tracker.js's padChord so a pad and a
+// scale-harmonized keypress can never spell the same chord differently.
+//
+// The buttons are built once and only relabelled afterwards, rather than
+// re-rendered from state. Two reasons, both about the pointer: a press has to
+// land on the same element the mousedown did, and a button replaced under a
+// parked cursor would re-fire its own mouseover.
+//
+// Hovering outlines the chord on the piano but does not play it -- the pads sit
+// in a row, so reaching the one you want means crossing the ones you don't, and
+// auditioning those is noise rather than browsing. Pressing is what sounds it.
+const PAD_DIGITS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
+let hoverPad = -1;
+
+function padHover(i) {
+  if (i === hoverPad) return;
+  hoverPad = i;
+  const c = i < 0 ? null : padChord(i);
+  if (c) setShadow(c.notes); else clearShadow();
+}
+
+function refreshPads() {
+  const count = padsOf(state.flavor).length;
+  // Which pads tend to follow the one just played (chords.js's rankNext). Shown
+  // rather than enforced -- it is a hint about where a progression usually
+  // goes, and ignoring it is how you write something that isn't usual.
+  const suggested = new Set(suggestedPads());
+  $('kb-pads-hint').hidden = count > 0;
+  $('kb-smooth-label').classList.toggle('off', !count);
+  $('kb-shape-label').classList.toggle('off', !count);
+  for (const btn of $('kb-pads').querySelectorAll('.kb-pad')) {
+    const i = +btn.dataset.pad;
+    const c = i < count ? padChord(i) : null;
+    btn.hidden = !c;
+    btn.classList.toggle('suggest', !!c && suggested.has(i));
+    if (!c) continue;
+    btn.children[0].textContent = c.name;
+    btn.children[1].textContent = c.roman;
+    btn.title = `${c.name} \u2014 the ${c.roman} of this key. Click it, or press ${PAD_DIGITS[i]}.`
+      + (suggested.has(i) ? ' Often follows the chord you just played.' : '');
+  }
 }
 
 // Matches the guard tracker.js's onKeyDown uses (see focus.js): a focused
@@ -256,7 +298,7 @@ export function initKeyboardPanel() {
   $('keyboard-panel').classList.remove('wip');
   $('keyboard-panel').innerHTML = `
     <div class="row kb-header">
-      <h3 title="Note entry. Anything you play here — piano keys, computer keys, the entry pie — is heard live and written into the pattern cell the tracker cursor is on.">Keyboard</h3>
+      <h3 title="Note entry. Anything you play here — piano keys or computer keys — is heard live and written into the pattern cell the tracker cursor is on.">Keyboard</h3>
       <label title="Which characters your keyboard prints, for the key hints on the piano below. Auto asks the browser. The notes themselves are tied to physical key positions, so the fingering is the same on every layout — only the labels change.">Keys
         <select id="kb-layout">${LAYOUTS.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</select></label>
       <label id="kb-scale-label" title="Remap the computer keyboard to two straight rows of in-scale notes: Z-M and Q-P. The sharp keys (S D G H J / 2 3 5 6 7) go unused — that is the point.">Scale
@@ -265,18 +307,30 @@ export function initKeyboardPanel() {
         <button id="kb-root-down" type="button" title="Move the scale's root down a half step">-</button>
         <span class="mono" id="kb-root" title="The scale's root note — which note the Z and Q keys land on"></span>
         <button id="kb-root-up" type="button" title="Move the scale's root up a half step">+</button></span>
-      <label class="kb-chord-toggle" title="One keypress writes a chord across the pattern row's 4 note columns. With a scale set, the quality comes from the scale; otherwise press a digit right after the note (Q then 1 = Cmaj7, W then 6 = D6).">
+      <label class="kb-chord-toggle" title="One keypress writes a chord across the pattern row's 4 note columns, harmonized by the selected scale. With no scale set there is no quality to infer, so the bare note is written.">
         <input id="kb-chord" type="checkbox"> Chord</label>
-      <span class="kb-voicing" id="kb-voicing" title="Which chord tones get written (max 4). Switch the root off for a rootless voicing — the rest pack left into the pattern row's columns.">
+      <span class="kb-voicing" id="kb-voicing" title="Which chord tones get written (max 4), by the tone's function in the chord. Switch the root off for a rootless voicing — the rest pack left into the pattern row's columns.">
         ${['R', '3', '5', '7', '9', '11', '13'].map((label, i) =>
           `<label><input type="checkbox" class="kb-tone" data-tone="${i}"> ${label}</label>`).join('')}</span>
       <span class="mono kb-chord-name" id="kb-chord-name" title="The chord the last note you played spells out, given the scale and voicing set here"></span>
       <div class="spacer"></div>
-      <label title="Rows the pattern cursor moves after entering a note — a tracker's edit step. 1 = the next row, 0 = stay put, 4 = a beat at a time. Applies to typed notes, on-screen piano clicks and the double-click entry pie alike.">Step
+      <label title="Rows the pattern cursor moves after entering a note — a tracker's edit step. 1 = the next row, 0 = stay put, 4 = a beat at a time. Applies to typed notes and on-screen piano clicks alike.">Step
         <input id="kb-step" type="number" min="0" max="16"></label>
       <button id="kb-oct-down" type="button" title="Move the playable key range down an octave (&lt; or -)">-</button>
       <span class="mono" id="kb-octave" title="Octave the bottom-left computer key (Z) currently plays"></span>
       <button id="kb-oct-up" type="button" title="Move the playable key range up an octave (&gt; or =)">+</button>
+    </div>
+    <!-- The chord pads. Their own row rather than more of the header: eight
+         two-line buttons need the width, and sitting directly above the piano
+         is what makes the chord each one outlines legible as a shape. -->
+    <div class="row kb-chords">
+      <label title="A set of chords that sound good together, in the key set by Root. Picking one also sets the Scale to match, so the melody keys and the chords agree. Press a pad's digit or click it.">Flavor
+        <select id="kb-flavor">${FLAVORS.map((f, i) => `<option value="${i}">${f.name}</option>`).join('')}</select></label>
+      <div class="kb-pads" id="kb-pads"></div>
+      <label class="kb-shape" id="kb-shape-label" title="How far apart a pad chord's notes are placed. Close packs them inside one octave. Wide fans the same notes across two — a bass note with the rest above it, the way both hands play it. Quartal restacks the chord in fourths instead of thirds, for the open modal sound.">Voicing
+        <select id="kb-shape"><option value="close">Close</option><option value="wide">Wide</option><option value="quartal">Quartal</option></select></label>
+      <label class="kb-smooth" id="kb-smooth-label" title="Place each chord's notes near the one before it instead of always in root position — the same chord, voiced the way somebody playing it would. Off writes every chord from its root up.">
+        <input id="kb-smooth" type="checkbox"> Smooth</label>
     </div>
     <!-- One tip on the piano rather than 96 on the individual keys: each key
          already labels itself with its note and computer key, so a per-key
@@ -310,6 +364,24 @@ export function initKeyboardPanel() {
     labelSpans.set(el, el.querySelectorAll('.kb-label span'));
   });
 
+  $('kb-pads').innerHTML = PAD_DIGITS.map((d, i) =>
+    `<button class="kb-pad" type="button" data-pad="${i}" hidden><b></b><i></i><kbd>${d}</kbd></button>`).join('')
+    + `<span class="kb-pads-hint" id="kb-pads-hint">Pick a flavor to put a set of chords that fit together on the digit row.</span>`;
+  // mousedown, not click, and the same reason the piano uses it: entering a
+  // chord re-renders the panel, and a click needs its press and release on one
+  // surviving element.
+  $('kb-pads').addEventListener('mousedown', e => {
+    const btn = e.target.closest('.kb-pad');
+    if (btn) enterPadAtCursor(+btn.dataset.pad);
+  });
+  // On the container, so crossing a pad's inner <b>/<i>/<kbd> doesn't read as
+  // leaving the pad; padHover ignores a repeat of the pad already shown.
+  $('kb-pads').addEventListener('mouseover', e => {
+    const btn = e.target.closest('.kb-pad');
+    padHover(btn ? +btn.dataset.pad : -1);
+  });
+  $('kb-pads').addEventListener('mouseleave', () => padHover(-1));
+
   let mouseLit = null;
   piano.addEventListener('mousedown', e => {
     const key = e.target.closest('[data-offset]');
@@ -338,6 +410,19 @@ export function initKeyboardPanel() {
   const changed = () => { clearShadow(); savePrefs(); refreshKeyboardPanel(); state.notify && state.notify(); };
   $('kb-layout').onchange = () => { state.kbLayout = $('kb-layout').value; changed(); };
   $('kb-scale').onchange = () => { state.scaleMode = +$('kb-scale').value; changed(); };
+  // Picking a flavor sets the scale it plays over, so one choice arms the
+  // melody keys and the chord pads together. Deliberately one-way: changing the
+  // scale afterwards is a legitimate thing to want (a Dorian melody over pop
+  // chords is a choice, not a mistake) and doesn't change the flavor back.
+  $('kb-flavor').onchange = () => {
+    state.flavor = +$('kb-flavor').value;
+    const scale = FLAVORS[state.flavor].scale;
+    if (scale >= 0) state.scaleMode = scale;
+    resetChordContext();
+    changed();
+  };
+  $('kb-smooth').onchange = () => { state.smoothVoicing = $('kb-smooth').checked; changed(); };
+  $('kb-shape').onchange = () => { state.voicing = $('kb-shape').value; changed(); };
   $('kb-root-down').onclick = () => { state.scaleRoot = (state.scaleRoot + 11) % 12; changed(); };
   $('kb-root-up').onclick = () => { state.scaleRoot = (state.scaleRoot + 1) % 12; changed(); };
   $('kb-chord').onchange = () => { state.chordOn = $('kb-chord').checked; changed(); };
@@ -381,6 +466,9 @@ export function refreshKeyboardPanel() {
   const intervals = SCALES[state.scaleMode][1];
   $('kb-layout').value = state.kbLayout;
   $('kb-scale').value = state.scaleMode;
+  $('kb-flavor').value = state.flavor;
+  $('kb-smooth').checked = state.smoothVoicing;
+  $('kb-shape').value = state.voicing;
   $('kb-root').textContent = PITCH_NAMES[state.scaleRoot];
   $('kb-chord').checked = state.chordOn;
   // Guarded like tracker.js's BPM/rows fields: this one is typed into, and a
@@ -393,8 +481,16 @@ export function refreshKeyboardPanel() {
   // Dimmed rather than disabled: a root transpose with no scale, or a
   // voicing with chord mode off, has nothing to act on, but the settings
   // themselves are still worth reading at a glance.
-  $('kb-root-group').classList.toggle('off', !intervals);
-  $('kb-voicing').classList.toggle('off', !state.chordOn);
+  // Root is dimmed only when neither a scale nor a flavor is set: with pads on
+  // screen it names the key they are in, whether or not the melody keys are
+  // remapped.
+  $('kb-root-group').classList.toggle('off', !intervals && !state.flavor);
+  // The R/3/5/7 toggles pick tones out of a close voicing. A quartal stack is
+  // built from a mode rather than from the chord's own tones, so there is
+  // nothing for them to pick from and they say nothing about what a pad writes.
+  $('kb-voicing').classList.toggle('off',
+    (!state.chordOn && !state.flavor) || (!!state.flavor && state.voicing === 'quartal'));
+  refreshPads();
 
   // For each physical key, find which on-screen key it currently plays
   // (state.previewNote's own math: n + state.octave*12) and label that one

@@ -263,6 +263,46 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
                                 border: 1px solid var(--border); border-radius: 4px;
                                 padding: 2px 4px; font: inherit; font-size: 11px; }
 .kb-chord-name { color: var(--accent); min-width: 4.5em; font-size: 11px; }
+/* The chord pads (panels/keyboard.js, data in chords.js): one button per chord
+   in the selected flavor, on their own row between the header and the piano.
+   They share the row's width equally (flex: 1 1 0) and shrink rather than wrap
+   -- a pad that has moved to a second row no longer sits where the digit
+   printed on it says it does, and the digit row is the point of them.
+   `hidden` on the unused slots rather than not rendering them: the buttons are
+   built once and relabelled, so a flavor change never replaces an element the
+   pointer is on (see panels/keyboard.js). */
+.kb-chords { gap: 10px; margin-bottom: 3px; flex-wrap: nowrap; }
+.kb-chords > label { display: flex; align-items: center; gap: 5px;
+                     font-size: 10px; color: var(--text-dim); white-space: nowrap; }
+.kb-chords select { background: var(--bg2); color: inherit; border: 1px solid var(--border);
+                    border-radius: 4px; padding: 2px 4px; font: inherit; font-size: 11px; }
+.kb-pads { display: flex; gap: 4px; flex: 1; min-width: 0; }
+.kb-pad { position: relative; flex: 1 1 0; min-width: 0; padding: 3px 4px 4px;
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          border-radius: 5px; cursor: pointer; overflow: hidden; }
+/* Explicit, because the display above outranks the user-agent's
+   [hidden] { display: none } -- without this the slots past the flavor's pad
+   count draw as empty boxes. */
+.kb-pad[hidden] { display: none; }
+.kb-pad:active { background: var(--accent); }
+/* The chord's name is what you read; the roman numeral is what you learn from.
+   Both truncate rather than wrap -- two lines is the pad's whole height. */
+.kb-pad b { font-size: 12px; font-weight: 600; line-height: 1.25;
+            max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kb-pad i { font-style: normal; font-size: 9px; line-height: 1.25; color: var(--text-dim2);
+            max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kb-pad kbd { position: absolute; top: 0; right: 3px; font: inherit; font-size: 8px;
+              color: var(--text-dim2); }
+.kb-pad:active b, .kb-pad:active i, .kb-pad:active kbd { color: var(--accent-text); }
+/* The pads that tend to follow the one just played (chords.js's rankNext).
+   An accent bar along the top edge rather than a border color: the generic
+   button:hover already owns the border, and a suggestion that looked like a
+   hover would read as the pointer being somewhere it isn't. */
+.kb-pad.suggest { box-shadow: inset 0 2px 0 var(--accent); }
+.kb-pads-hint { font-size: 10px; color: var(--text-dim2); align-self: center; }
+.kb-chords .kb-smooth, .kb-chords .kb-shape { display: flex; align-items: center; gap: 4px;
+                        font-size: 10px; color: var(--text-dim); white-space: nowrap; }
+.kb-chords .off { opacity: 0.4; }
 .kb-piano { position: relative; height: 68px; }
 .kb-white { position: absolute; top: 0; height: 65px; box-sizing: border-box; background: #dfe1e6;
             border: 1px solid #111318; border-radius: 0 0 2px 2px; cursor: pointer; }
@@ -384,34 +424,9 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
                    padding: 20px 26px; text-align: center; }
 #drop-hint-panel p { color: var(--text-dim); margin: 6px 0 0; font-size: 12px; }
 
-/* The note/chord entry pie menu (panels/pie.js), opened by
-   double-clicking a pattern note cell. The overlay is full-viewport rather
-   than just the circle: it has to catch every mousemove/mouseup for the
-   duration of the gesture, and covering the grid is also what stops
-   tracker.js's drag-select rubber-banding along underneath. Tops the modal
-   stack -- a pie can be opened while nothing else is up, but nothing else
-   should ever land on top of one. */
-.pie { position: fixed; inset: 0; z-index: 12; cursor: crosshair; }
-.pie-svg { position: absolute; }
-/* Wedges. .dim is the quality ring before a note is locked -- present, so the
-   whole vocabulary is visible from the first frame, but clearly not yet live. */
-.pie-w { fill: var(--bg2); stroke: var(--bg0); stroke-width: 1; }
-.pie-w.dim { opacity: 0.4; }
-.pie-w.on { fill: var(--accent); }
-.pie-t { font-family: system-ui, sans-serif; text-anchor: middle; pointer-events: none;
-         fill: var(--text); font-size: 11px; }
-.pie-t.sub { fill: var(--text-dim2); font-size: 9px; }
-.pie-t.on, .pie-t.sub.on { fill: var(--accent-text); }
-.pie-hub { fill: var(--bg1); stroke: var(--border); }
-.pie-hub-t { font-family: monospace; font-size: 10px; text-anchor: middle;
-             pointer-events: none; fill: var(--accent); }
-.pie-hub-t.sub { fill: var(--text-dim2); font-size: 8px; }
-
 /* Generic popup menu (menu.js), used for the pattern grid's
-   right-click transpose menu. Overlay + positioned panel, same two-layer shape
-   as .pie above -- the full-viewport layer is what catches the click that
-   dismisses it. Sits just under .pie in the stack: a pie is a live gesture and
-   nothing should cover one, while a menu is only ever open on its own. */
+   right-click transpose menu. Overlay + positioned panel: the full-viewport
+   layer is what catches the click that dismisses it. */
 .menu-overlay { position: fixed; inset: 0; z-index: 11; }
 .menu { position: absolute; min-width: 200px; padding: 4px; background: var(--bg1);
         border: 1px solid var(--border); border-radius: 6px;

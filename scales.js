@@ -37,6 +37,10 @@ const MINOR = [0, 2, 3, 5, 7, 8, 10];
 // The index is what state.scaleMode persists, so inserting one in the middle
 // re-points an already-saved preference at its neighbour -- harmless for a
 // dev tool (pick again), but worth knowing before reordering this list.
+// 'Major' breaks the ordering for exactly that reason: it was added after the
+// rest (the chord flavors need a plain Ionian, which only Major *pentatonic*
+// covered before), and appending is what keeps every saved scaleMode pointing
+// at the scale it was saved for.
 export const SCALES = [
   ['Chromatic', null],                            // off: tracker.js's NOTE_KEYS
   ['Minor pentatonic', [0, 3, 5, 7, 10], MINOR],  // no half-steps; everything loops
@@ -46,6 +50,7 @@ export const SCALES = [
   ['Dorian', [0, 2, 3, 5, 7, 9, 10]],             // minor with a raised 6th -- jazzy
   ['Mixolydian', [0, 2, 4, 5, 7, 9, 10]],         // major with a flat 7th -- bluesy
   ['Harmonic minor', [0, 2, 3, 5, 7, 8, 11]],     // raised 7th -- dark/dramatic
+  ['Major', MAJOR],                               // plain Ionian
 ];
 
 // The intervals chords are built from for a given SCALES index: the parent
@@ -58,6 +63,17 @@ export function harmonyOf(mode) {
 
 export const PITCH_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
+// The same twelve spelled downwards. Which of the two a note wants depends on
+// the harmony around it, which nothing here tracks in general -- but a chord
+// that knows it is a *flat* degree of its key does know: the ♭VII of C is B♭,
+// never A#. chords.js's pads say so in their roman numerals, and that is the
+// one place this is used. (The key's own root is still spelled sharp: naming
+// E♭ minor's tonic correctly needs a key signature, which is a bigger idea
+// than this table.)
+export const FLAT_NAMES = ['C', 'D♭', 'D', 'E♭', 'E', 'F', 'G♭', 'G', 'A♭', 'A', 'B♭', 'B'];
+export const pitchName = (pitchClass, flat) =>
+  (flat ? FLAT_NAMES : PITCH_NAMES)[((pitchClass % 12) + 12) % 12];
+
 // Two straight rows of in-scale notes, replacing the chromatic layout's
 // white-keys-below/black-keys-above shape. Degree numbering is *continuous*
 // across the two rows -- the top row picks up where the bottom leaves off,
@@ -65,7 +81,7 @@ export const PITCH_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A'
 // the 20 keys, a 7-note scale ~2.9). The chromatic layout's sharp keys
 // (S D G H J / 2 3 5 6 7) go unmapped in scale mode: having no way to hit an
 // out-of-scale note is the entire point, and the digit row picks up chord
-// duty instead (see CHORD_QUALITIES).
+// duty instead (see chords.js).
 const ROW_BOTTOM = ['KeyZ', 'KeyX', 'KeyC', 'KeyV', 'KeyB', 'KeyN', 'KeyM', 'Comma', 'Period', 'Slash'];
 const ROW_TOP = ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT', 'KeyY', 'KeyU', 'KeyI', 'KeyO', 'KeyP'];
 
@@ -110,80 +126,171 @@ export function diatonicChord(intervals, root, pitchClass) {
   return [0, 2, 4, 6].map(k => degreeOffset(intervals, root, d + k) - base);
 }
 
-// Chord qualities by digit, for the two-keypress flow: a note key names the
-// root, a digit pressed straight after names the quality (Q then 1 = Cmaj7,
-// W then 6 = D6). Grouped so it's learnable: 7ths, triads, sixths, altered,
-// sus. Ordered root/3rd/5th/7th to match the four voicing toggles and the
-// four note columns a pattern row has.
-// Pie-only chords (no digit binding) follow the digit entries.
-export const CHORD_QUALITIES = {
-  // Digit-row chords (two-keypress flow + pie menu)
-  Digit1: ['maj7', [0, 4, 7, 11]],
-  Digit2: ['m7', [0, 3, 7, 10]],
-  Digit3: ['7', [0, 4, 7, 10]],
-  Digit4: ['m', [0, 3, 7]],
-  Digit5: ['M', [0, 4, 7]],
-  Digit6: ['6', [0, 4, 7, 9]],
-  Digit7: ['m6', [0, 3, 7, 9]],
-  Digit8: ['m7♭5', [0, 3, 6, 10]],
-  Digit9: ['dim7', [0, 3, 6, 9]],
-  Digit0: ['sus4', [0, 5, 7, 10]],
-
-  // Additional triads (pie menu only)
-  dim3: ['dim', [0, 3, 6]],
-  aug3: ['aug', [0, 4, 8]],
+// The chord vocabulary: quality name -> [display label, semitone intervals].
+// Keyed by name so a caller can ask for `'maj7'` by writing 'maj7' -- the
+// chord flavors in chords.js are lists of (degree, quality name) pairs, and
+// nameChord below searches this one table.
+//
+// It used to be keyed by KeyboardEvent.code ('Digit1'...'Digit0'), from when
+// the digit row was its only binding: a note key named the root and a digit
+// pressed straight after named the quality. That flow is gone (the digit row
+// now writes chord pads outright), and with it the distortion the digit keying
+// forced -- there are only ten digits, so the qualities past the tenth were
+// split off into a second-class group and the two the readout needed but no
+// digit could reach lived in a separate table again. All one table now.
+//
+// Labels carry ♭/♯ where the name does; the key stays ASCII so flavor data
+// can be typed without them.
+export const QUALITIES = {
+  // Triads (sus4 carries a 7th: it is the one everybody actually plays, and
+  // the bare [0,5,7] is a fifth with a fourth in it rather than a chord)
+  M: ['', [0, 4, 7]],   // a plain major triad is spelled by its letter alone
+  m: ['m', [0, 3, 7]],
+  dim: ['dim', [0, 3, 6]],
+  aug: ['aug', [0, 4, 8]],
   sus2: ['sus2', [0, 2, 7]],
+  sus4: ['sus4', [0, 5, 7, 10]],
 
-  // Extended chords - 9ths
-  dom9: ['9', [0, 4, 7, 10, 14]],
+  // Sevenths and sixths
+  maj7: ['maj7', [0, 4, 7, 11]],
+  m7: ['m7', [0, 3, 7, 10]],
+  '7': ['7', [0, 4, 7, 10]],
+  '6': ['6', [0, 4, 7, 9]],
+  m6: ['m6', [0, 3, 7, 9]],
+  m7b5: ['m7♭5', [0, 3, 6, 10]],
+  dim7: ['dim7', [0, 3, 6, 9]],
+  mMaj7: ['mMaj7', [0, 3, 7, 11]],   // harmonic minor's tonic
+  maj7s5: ['maj7♯5', [0, 4, 8, 11]], // its III+
+
+  // Ninths
+  '9': ['9', [0, 4, 7, 10, 14]],
   maj9: ['maj9', [0, 4, 7, 11, 14]],
-  min9: ['m9', [0, 3, 7, 10, 14]],
+  m9: ['m9', [0, 3, 7, 10, 14]],
 
-  // Extended chords - 11ths
-  dom11: ['11', [0, 4, 7, 10, 14, 17]],
+  // Elevenths
+  '11': ['11', [0, 4, 7, 10, 14, 17]],
   maj11: ['maj11', [0, 4, 7, 11, 14, 17]],
-  min11: ['m11', [0, 3, 7, 10, 14, 17]],
+  m11: ['m11', [0, 3, 7, 10, 14, 17]],
 
-  // Extended chords - 13ths
-  dom13: ['13', [0, 4, 7, 10, 14, 17, 21]],
+  // Thirteenths
+  '13': ['13', [0, 4, 7, 10, 14, 17, 21]],
   maj13: ['maj13', [0, 4, 7, 11, 14, 17, 21]],
-  min13: ['m13', [0, 3, 7, 10, 14, 17, 21]],
+  m13: ['m13', [0, 3, 7, 10, 14, 17, 21]],
 
-  // Add chords
+  // Adds
   add9: ['add9', [0, 4, 7, 14]],
   madd9: ['madd9', [0, 3, 7, 14]],
   add11: ['add11', [0, 4, 7, 17]],
 
-  // Altered chords
-  aug7: ['7♯5', [0, 4, 8, 10]],
-  sev_b9: ['7♭9', [0, 4, 7, 10, 13]],
-  sev_sh9: ['7♯9', [0, 4, 7, 10, 15]],
-  sev_sh11: ['7♯11', [0, 4, 7, 10, 18]],
+  // Altered dominants
+  '7s5': ['7♯5', [0, 4, 8, 10]],
+  '7b9': ['7♭9', [0, 4, 7, 10, 13]],
+  '7s9': ['7♯9', [0, 4, 7, 10, 15]],
+  '7s11': ['7♯11', [0, 4, 7, 10, 18]],
 };
 
-// Qualities the readout can name but no digit produces: the two chords
-// harmonic minor throws off that nothing else does. Kept out of
-// CHORD_QUALITIES because that table is bound to the digit row, and there
-// are only ten digits -- these two aren't worth a slot each.
-const EXTRA_NAMES = [
-  ['mMaj7', [0, 3, 7, 11]],  // harmonic minor's tonic
-  ['maj7♯5', [0, 4, 8, 11]], // its III+
-];
+// --- quartal voicing: the chord stacked in fourths instead of thirds. The
+// McCoy Tyner / "So What" sound -- open, modal, and much wider than a close
+// voicing (four fourths span an octave and a half, where a close 7th chord
+// spans less than one).
+//
+// A quartal stack can't be built from the chord's own tones: the fourths above
+// a Dm7's D are G and C, and G is not in the chord. It comes from the *mode the
+// chord implies*, which the chord's own third and seventh are enough to name --
+// a minor seventh implies Dorian, a dominant implies Mixolydian, a major
+// seventh implies Ionian. That is why this needs no scale passed in and works
+// for the borrowed chords a flavor is full of, where the key's own scale would
+// have nothing to say.
+//
+// A fourth is three steps of a 7-note mode, so the stack is degrees d, d+3,
+// d+6, d+9 -- scale fourths, which come out as a mix of perfect and augmented
+// exactly where the mode says they should.
+const DORIAN_M = [0, 2, 3, 5, 7, 9, 10];
+const MIXO_M = [0, 2, 4, 5, 7, 9, 10];
+const LOCRIAN_M = [0, 1, 3, 5, 6, 8, 10];
 
-// Readout for the chord just entered -- the only feedback that confirms a
-// two-keypress entry did what was meant, and the only way to know what a
-// diatonic stack actually spelled. Matches the deltas against the quality
-// tables (normalized into one octave, since a diatonic stack can run past
-// it); anything neither table names falls back to listing its intervals.
+// Semitone offsets from the chord's root, `count` notes stacked in fourths.
+//
+// Major-quality chords anchor the stack on their third rather than their root:
+// the fourth above a major chord's root is its avoid note (F over C), while
+// starting a step up gives E-A-D-G, the rootless voicing every pianist reaches
+// for on a major chord. Everything else anchors on the root, where the fourth
+// above is a chord tone or a colour the mode wants anyway.
+//
+// Not every chord survives being restacked. A stack of fourths is built from a
+// mode, and a mode has a plain fifth -- so a diminished or augmented chord
+// comes back with its defining note quietly replaced, and the pad would be
+// lying about which chord it just played. Those fall back to wideVoicing
+// below, which is wider still and made of the chord's own notes.
+export function quartalVoicing(chordIntervals, count = 4) {
+  const has = iv => chordIntervals.some(i => i % 12 === iv);
+  const minorThird = has(3), majorThird = has(4);
+  const mode = minorThird && has(6) ? LOCRIAN_M
+    : minorThird ? DORIAN_M
+    : majorThird && has(10) ? MIXO_M
+    : majorThird ? MAJOR
+    : DORIAN_M;   // sus and other third-less chords: fourths all the way up,
+                  // which is the one stack that adds no third of its own
+  // Degree 2 of a major scale is its third; every other mode above anchors at 0.
+  const anchor = mode === MAJOR ? 2 : 0;
+  const stack = Array.from({ length: count }, (_, k) => degreeOffset(mode, 0, anchor + k * 3));
+
+  // Does the stack still say what the chord says? The third is what makes a
+  // chord major or minor, and an altered fifth is the entire content of a
+  // diminished or augmented one. A seventh is negotiable -- dropping it is how
+  // the classic rootless major voicing works -- so it isn't checked.
+  const inStack = iv => stack.some(n => n % 12 === iv);
+  // A sus chord's identity is the note standing in for the third, so that one
+  // has to survive too -- Csus2 restacked comes back as a Cm7 with no D in it.
+  // Only where there is no third at all: a 13th chord has a ninth as well, and
+  // insisting the stack keep that would rule out every dominant quartal voicing.
+  const sus = !minorThird && !majorThird
+    && (has(2) && !inStack(2) || has(5) && !inStack(5));
+  const keeps = !sus && (!minorThird || inStack(3)) && (!majorThird || inStack(4))
+    && (!has(6) || inStack(6)) && (!has(8) || inStack(8));
+  return keeps ? stack : wideVoicing(chordIntervals, count);
+}
+
+// The same chord, opened out across octaves: every other voice lifted one, so
+// a four-note chord spans close to two octaves instead of sitting inside one.
+// C-E-G-B becomes C-G-E-B, which is how the chord is actually played when both
+// hands are on the keyboard -- a bass note with the rest fanned out above it,
+// rather than four notes bunched together in the middle.
+//
+// Works on any ascending list, so it takes either intervals from a root (the
+// quartal fallback above) or absolute notes that have already been through the
+// R/3/5/7 toggles (panels/tracker.js's pad voicing) -- lifting alternate voices
+// is the same operation either way.
+export function wideVoicing(notes, count = 4) {
+  return notes.slice(0, count).map((n, i) => n + (i % 2 ? 12 : 0)).sort((a, b) => a - b);
+}
+
+// Which voicing toggle a chord tone answers to: R/3/5/7/9/11/13, indexed by
+// the tone's semitone interval. Functional, not positional -- what makes an
+// interval "the third" is the slot it fills in the stack, not where it happens
+// to sit in a particular chord's array. 5 is the sus'd third, 6 and 8 are the
+// flat and sharp fifth, 9 is a sixth (dim7's too), and 12 folds back onto the
+// root as an octave doubling.
+//
+// The positional reading this replaces was right only for chords with no gaps:
+// add9 is [0,4,7,14], so its fourth tone consulted the "7" toggle while the
+// "9" toggle could never do anything at all, in that chord or any other.
+export const TONE_SLOT = [0, 1, 1, 1, 1, 1, 2, 2, 2, 3, 3, 3, 0, 4, 4, 4, 5, 5, 5, 6, 6, 6];
+export const slotOf = interval => TONE_SLOT[interval] ?? 6;
+
+// Readout for the chord just entered -- the only way to know what a diatonic
+// stack actually spelled, and what the keyboard panel's chord name shows.
+// Matches the deltas against QUALITIES (normalized into one octave, since a
+// diatonic stack can run past it); anything the table doesn't name falls back
+// to listing its intervals.
 export function nameChord(rootPitch, deltas) {
   const name = PITCH_NAMES[((rootPitch % 12) + 12) % 12];
   if (deltas.length < 2) return name;
   const norm = set => [...new Set(set.map(d => ((d % 12) + 12) % 12))].sort((a, b) => a - b).join(',');
   const mine = norm(deltas);
-  for (const code in CHORD_QUALITIES) {
-    const [label, iv] = CHORD_QUALITIES[code];
+  for (const key in QUALITIES) {
+    const [label, iv] = QUALITIES[key];
     if (norm(iv) === mine) return name + label;
   }
-  for (const [label, iv] of EXTRA_NAMES) if (norm(iv) === mine) return name + label;
   return name + ' ' + deltas.slice(1).join('-');
 }

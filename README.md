@@ -11,8 +11,8 @@ It is a rewritten editor around the audio engine of Marcus Geelnard's
 [SoundBox](https://gitlab.com/mbitsnbites/soundbox), whose synth, players,
 instrument presets and song format it keeps intact. What is new is the editing
 side: every channel's pattern side by side instead of one at a time, an
-on-screen piano with scale/chord-aware note entry, a radial note+chord entry
-menu, an oscilloscope, transpose and clipboard operations, songs exported as
+on-screen piano with scale/chord-aware note entry, an oscilloscope, transpose
+and clipboard operations, songs exported as
 `export default {...}` ES modules (and re-importable), and share links that
 carry a whole song in the URL.
 
@@ -37,7 +37,7 @@ dev-tool server and covered by its headless-Chrome test suites
 
 | | |
 |---|---|
-| `main.js`, `panels/`, `state.js`, `menu.js`, `theme.js`, `icons.js` | the editor: entry point, one module per panel (instrument, tracker, keyboard, scope, entry pie), UI state, generic popup menu, theming, inline SVG icons |
+| `main.js`, `panels/`, `state.js`, `menu.js`, `theme.js`, `icons.js` | the editor: entry point, one module per panel (instrument, tracker, keyboard, scope), UI state, generic popup menu, theming, inline SVG icons |
 | `engine.js` | song data model — binary/JS import and export, no DOM |
 | `scales.js`, `layouts.js` | scale/chord tables for note entry; keyboard-layout tables for the piano's key hints |
 | `songs/` | song library, each a plain ES module |

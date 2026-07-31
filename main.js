@@ -15,12 +15,13 @@
 // by clearing the unsaved-changes flag.
 
 import * as engine from './engine.js';
+import * as scales from './scales.js';
 import { state, markClean, isDirty } from './state.js';
 import { audioContext } from './audio.js';
 import { svgIcon } from './icons.js';
 import { initInstrumentPanel, refreshInstrumentPanel } from './panels/instrument.js';
 import { initTrackerPanel, refreshTrackerPanel, followPlayback, stopFollowingPlayback, getPlayRange, setFollowRange } from './panels/tracker.js';
-import { initKeyboardPanel, refreshKeyboardPanel, previewNote, syncJammer, highlightPlaybackNotes, shadowNotes, getJammer } from './panels/keyboard.js';
+import { initKeyboardPanel, refreshKeyboardPanel, previewNote, syncJammer, highlightPlaybackNotes, getJammer } from './panels/keyboard.js';
 import { initScopePanel, drawScope } from './panels/scope.js';
 import { initTheme } from './theme.js';
 import { keyHandledByFocus } from './focus.js';
@@ -32,7 +33,7 @@ import { DEMO_SONGS, SECTIONS } from './songs/index.js';
 // heuristics. getAudioState exposes the shared
 // audioContext's .state so tests can confirm the startup gate actually
 // resumed it, without importing audio.js themselves.
-window.soundbox = { state, engine, loadSong, loadDemoSong, DEMO_SONGS, importSongFile, getJammer, getAudioState: () => audioContext.state };
+window.soundbox = { state, engine, scales, loadSong, loadDemoSong, DEMO_SONGS, importSongFile, getJammer, getAudioState: () => audioContext.state };
 
 const $ = id => document.getElementById(id);
 
@@ -86,9 +87,6 @@ state.previewNote = previewNote;
 // sounding during song playback -- a callback rather than a direct import, for
 // the same reason.
 state.highlightNotes = highlightPlaybackNotes;
-// Lets the entry pie (panels/pie.js, opened from tracker.js) outline the notes
-// it's about to write on the on-screen piano -- same callback-field reasoning.
-state.shadowNotes = shadowNotes;
 
 function loadSong(song) {
   state.song = song;

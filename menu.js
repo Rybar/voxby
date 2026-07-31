@@ -3,10 +3,10 @@
 // and a list of {label, hint, run} items, so anything else wanting a context
 // menu reuses this rather than growing a second one.
 //
-// Same overlay technique as panels/pie.js -- a full-viewport div that catches
+// The overlay technique: a full-viewport div that catches
 // the dismissing click, with the actual menu positioned inside it -- but the
 // items are real <button>s here, since a list wants keyboard/hover semantics
-// for free where the pie's wedges needed geometry.
+// for free.
 
 const CLOSE_EVENTS = ['mousedown', 'wheel', 'contextmenu'];
 

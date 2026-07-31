@@ -44,12 +44,6 @@ export const state = {
   // (tracker calling out to keyboard instead of keyboard calling into
   // tracker). Takes an array of SoundBox note numbers.
   highlightNotes: null,
-  // Set to panels/keyboard.js's shadowNotes at boot. Lets the
-  // entry pie outline the notes it's about to write on the on-screen piano,
-  // reusing the chord shadow the piano already draws on hover. Same
-  // callback-field reasoning as the two above -- the pie hangs off
-  // panels/tracker.js, which can't import keyboard.js.
-  shadowNotes: null,
 
   // --- note-input preferences. Deliberately *not* song data: which scale you play in and how many rows
   // a beat is are per-musician settings, so they persist to localStorage
@@ -58,15 +52,19 @@ export const state = {
   beatRows: 4,          // highlight every Nth grid row (was a hardcoded 4)
   // Rows the pattern cursor advances after an entry -- a tracker's classic
   // edit step: 1 = the next row, 0 = stay put, 4 = a beat at a time. Applies to
-  // every note entry path -- typed, on-screen piano, pie -- so they can't drift
-  // apart.
+  // every note entry path -- typed and on-screen piano alike -- so they can't
+  // drift apart.
   editStep: 1,
   // Which characters the physical keyboard prints, for the on-screen piano's
   // key hints only -- note entry stays positional (see layouts.js).
   // 'auto' asks the browser; the rest are layouts.js's static tables.
   kbLayout: 'auto',
   scaleMode: 0,         // index into scales.js's SCALES; 0 = Chromatic = off
-  scaleRoot: 0,         // scale transpose in half steps, 0-11
+  scaleRoot: 0,         // scale transpose in half steps, 0-11, and the key the
+                        // chord pads are in
+  flavor: 0,            // index into chords.js's FLAVORS; 0 = None = no pads
+  voicing: 'close',     // pad chord shape: 'close' (thirds) or 'quartal' (fourths)
+  smoothVoicing: true,  // voice-lead each pad chord to the one before it
   chordOn: false,       // one keypress writes a chord (see panels/tracker.js)
   chordTones: [true, true, true, true, false, false, false],   // which of R/3/5/7/9/11/13 to write (max 4)
   // Name of the chord last entered, for the keyboard panel's readout. Purely
@@ -79,7 +77,7 @@ export const state = {
 // ignored rather than thrown on, and only known fields are copied across --
 // this object also holds `song`, which must never come from localStorage.
 const PREFS_KEY = 'soundbox-prefs';
-const PREF_FIELDS = ['beatRows', 'editStep', 'kbLayout', 'scaleMode', 'scaleRoot', 'chordOn', 'chordTones'];
+const PREF_FIELDS = ['beatRows', 'editStep', 'kbLayout', 'scaleMode', 'scaleRoot', 'flavor', 'voicing', 'smoothVoicing', 'chordOn', 'chordTones'];
 
 export function loadPrefs() {
   let saved;

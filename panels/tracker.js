@@ -34,8 +34,9 @@
 
 import * as engine from '../engine.js';
 import { state, savePrefs } from '../state.js';
-import { SCALES, PITCH_NAMES, CHORD_QUALITIES, scaleKeys, harmonyOf, diatonicChord, nameChord } from '../scales.js';
-import { openPie } from './pie.js';
+import { SCALES, PITCH_NAMES, QUALITIES, slotOf, pitchName, scaleKeys, harmonyOf,
+  diatonicChord, nameChord, quartalVoicing, wideVoicing } from '../scales.js';
+import { padOf, rankNext } from '../chords.js';
 import { openMenu } from '../menu.js';
 import { keyHandledByFocus } from '../focus.js';
 
@@ -196,10 +197,8 @@ export function enterNoteAtCursor(note) {
     // silence a note that's already decaying.
     previewNotes(notes.filter(n => n !== note));
     state.chordName = name;
-    lastEntry = { row, note };
   } else {
     patGrid.set(pat.col, row, note);
-    lastEntry = null;
   }
   advanceCursor(row);
   render(); notify();
@@ -213,27 +212,25 @@ function advanceCursor(row) {
 }
 
 // --- chord entry. The data model holds 4 notes per row (n[row + col*patternLen],
-// columns 0-3), so a chord is always root/3rd/5th/7th: at most 4 tones, exactly
-// the 4 columns available. Only where those intervals come from differs between
-// the two modes.
-//
-// `lastEntry` is what makes the two-keypress flow work without a mode
-// switch: a note key writes and advances as always, and a digit pressed
-// straight afterwards rewrites *that same row* with the named quality
-// instead of advancing again. Any other key, click or nav clears it, so a
-// digit outside that window keeps its normal meaning (a sharp, in the
-// chromatic layout).
-let lastEntry = null;
+// columns 0-3), so a chord is at most 4 tones, exactly the 4 columns available.
+// Only where those intervals come from differs between the two modes.
 
 const pitchOf = note => (((note - engine.NOTE_OFFSET) % 12) + 12) % 12;
 
-// Drops the chord tones whose R/3/5/7 toggle is off and packs what's left to
-// the left, so a rootless voicing lands in columns 0-2 rather than leaving a
-// hole where the root would have been. Never returns empty -- with every
-// toggle off, the played note itself still goes in.
-function voiced(notes) {
-  const keep = notes.filter((n, i) => state.chordTones[i]);
-  return keep.length ? keep : [notes[0]];
+// Turns `root` plus a chord's intervals into absolute notes, dropping the tones
+// whose R/3/5/7/9/11/13 toggle is off and packing what's left to the left, so a
+// rootless voicing lands in columns 0-2 rather than leaving a hole where the
+// root would have been. Never returns empty -- with every toggle off, the
+// played note itself still goes in -- and never returns more than the 4 notes a
+// row can hold.
+//
+// Which toggle a tone answers to is scales.js's slotOf(), the interval's
+// function in the stack, rather than its index in this particular chord: those
+// agree for a plain R/3/5/7 stack but not for anything with a gap in it (add9
+// is [0,4,7,14], whose 9th used to consult the "7" toggle).
+function voiced(root, intervals) {
+  const keep = intervals.filter(iv => state.chordTones[slotOf(iv)]);
+  return (keep.length ? keep : [intervals[0]]).slice(0, 4).map(iv => root + iv);
 }
 
 const bareNote = note => ({ notes: [note], name: PITCH_NAMES[pitchOf(note)] });
@@ -242,34 +239,39 @@ const bareNote = note => ({ notes: [note], name: PITCH_NAMES[pitchOf(note)] });
 // *harmony* scale -- harmonyOf(), not the input scale, so a 5-note pentatonic
 // still spells real 7th chords (see scales.js). With no scale, or a note the
 // harmony scale doesn't contain (the blues b5, an out-of-key click), there's
-// no quality to infer, so this is just the note -- a digit, or the pie's
-// quality ring, can still turn it into a chord.
+// no quality to infer, so this is just the note.
 // The name is taken from the full chord, before voicing drops anything.
 function diatonicAt(note) {
   const intervals = harmonyOf(state.scaleMode);
   const deltas = intervals && diatonicChord(intervals, state.scaleRoot, pitchOf(note));
   return deltas
-    ? { notes: voiced(deltas.map(d => note + d)), name: nameChord(pitchOf(note), deltas) }
+    ? { notes: voiced(note, deltas), name: nameChord(pitchOf(note), deltas) }
     : bareNote(note);
 }
 
 // What one keypress on `note` writes: the diatonic chord if chord mode is on,
-// the bare note otherwise. The pie menu deliberately calls diatonicAt/chordFor
-// directly instead -- opening it *is* the request for a chord, so it doesn't
-// also need the checkbox on.
+// the bare note otherwise.
 function chordAt(note) {
   return state.chordOn ? diatonicAt(note) : bareNote(note);
 }
 
-// The one place a (note, quality) pair becomes actual notes plus a name, shared by the digit row and the pie's quality ring so the two can't
-// spell the same chord differently. `quality` is 'auto' for whatever the scale
-// harmonizes the note to, a CHORD_QUALITIES key ('Digit1'...) for a named one,
-// or anything else (null) for the bare note.
-export function chordFor(note, quality) {
+// The one place a (note, quality) pair becomes actual notes plus a name, so no
+// two callers can spell the same chord differently. `quality` is 'auto' for
+// whatever the scale harmonizes the note to, a QUALITIES key ('maj7', 'm7',
+// ...) for a named one, or anything else (null) for the bare note. `flat`
+// spells the root downwards (B♭ rather than A#) for a caller that knows the
+// chord is a flat degree of its key -- the chord pads, and nothing else.
+//
+// Nothing calls this at the moment: the digit-row quality flow that used to was
+// retired with the entry pie, and the chord pads that replace both are the next
+// stage (plans/soundbox-chord-flavors.md). Kept rather than deleted and rewritten
+// because it is the shared spelling point the pads have to go through to stay
+// consistent with what a scale-harmonized keypress writes.
+export function chordFor(note, quality, flat) {
   if (quality === 'auto') return diatonicAt(note);
-  const q = CHORD_QUALITIES[quality];
+  const q = QUALITIES[quality];
   if (!q) return bareNote(note);
-  return { notes: voiced(q[1].map(semi => note + semi)), name: PITCH_NAMES[pitchOf(note)] + q[0] };
+  return { notes: voiced(note, q[1]), name: pitchName(pitchOf(note), flat) + q[0] };
 }
 
 // What one keypress on `note` would write right now -- read by
@@ -299,51 +301,123 @@ function previewNotes(notes) {
   for (const note of notes) state.previewNote(note - state.octave * 12 - engine.NOTE_OFFSET);
 }
 
-// The digit half of the two-keypress flow. Rewrites the row the last note
-// went into and leaves the cursor where it is (it already advanced past that
-// row), so pressing another digit re-picks the quality on the same row
-// rather than walking down the pattern.
-function applyChordQuality(code) {
-  if (!CHORD_QUALITIES[code] || !lastEntry) return false;
-  const { notes, name } = chordFor(lastEntry.note, code);
-  writeChordRow(lastEntry.row, notes);
-  previewNotes(notes);
-  state.chordName = name;
+// --- chord pads (chords.js). A pad is a degree plus a quality, so which actual
+// chord it is depends on the key (state.scaleRoot) and the register
+// (state.octave) at the moment it is pressed -- resolved here rather than
+// baked into the pad, which is what lets a root transpose move the whole set
+// at once. It goes through chordFor() like everything else, so a pad and a
+// scale-harmonized keypress that land on the same chord spell it identically.
+//
+// Read by panels/keyboard.js (which draws the strip and handles clicks and
+// hover) as well as by the digit row below. ---
+export function padChord(i) {
+  const pad = padOf(state.flavor, i);
+  if (!pad) return null;
+  const note = pad[0] + state.scaleRoot + state.octave * 12 + engine.NOTE_OFFSET;
+  // A pad whose roman numeral is flat is a flat degree, so its root is spelled
+  // flat: the ♭VII pad in C reads B♭, not A#.
+  const c = chordFor(note, pad[1], pad[2][0] === '♭');
+  // How the chord is spread out, which is a separate question from which chord
+  // it is -- the name is the same whichever of these wrote the notes.
+  //
+  // Wide re-arranges the tones the R/3/5/7 toggles already chose, so it stacks
+  // on top of them. Quartal doesn't: it is built from a mode rather than from
+  // the chord's own notes, so there is nothing for those toggles to pick from
+  // and the keyboard panel dims them while it is on.
+  const quartal = state.voicing === 'quartal';
+  const notes = quartal ? quartalVoicing(QUALITIES[pad[1]][1]).map(iv => note + iv)
+    : state.voicing === 'wide' ? wideVoicing(c.notes)
+    : c.notes;
+  // Only a close voicing gets inverted by the voice leading: wide and quartal
+  // are shapes, and rotating a tone out of one takes it apart.
+  return { ...c, notes: smoothed(notes, state.voicing !== 'close'), roman: pad[2], note };
+}
+
+// --- voice leading. Root position for every chord is the loudest tell of
+// beginner chord writing: each one leaps to wherever its root happens to be,
+// and the progression lurches rather than moves. Real playing keeps the notes
+// that two chords share where they are and moves the rest as little as
+// possible, which is what this searches for.
+//
+// The candidates are the chord's own inversions (rotating tones up an octave
+// one at a time) at three registers, scored by how far each tone sits from the
+// nearest tone of the chord before it. Searching around the chord's *own* root
+// position rather than around the previous chord is what stops a long
+// progression drifting off the end of the keyboard: every chord lands within
+// an octave of where it would have been anyway.
+//
+// Pads only, not the scale-harmonized keypresses of chord mode. There the
+// played note is the melody note and has to stay where it was put -- moving it
+// would be answering a different question than the one the key press asked.
+//
+// `keepShape` drops the inversions and leaves only the octave shifts, for the
+// voicings whose shape is the entire point of asking for them -- fourths all
+// the way up, or a chord fanned across two octaves. Rotating a tone out of one
+// to save two semitones of movement would hand back a chord nobody asked for.
+function smoothed(notes, keepShape) {
+  const prev = lastChordNotes;
+  if (!state.smoothVoicing || !prev || notes.length < 2) return notes;
+  let best = notes, bestCost = Infinity;
+  const inversions = keepShape ? 1 : notes.length;
+  for (let inv = 0; inv < inversions; inv++) {
+    const rotated = notes.map((n, i) => (i < inv ? n + 12 : n)).sort((a, b) => a - b);
+    for (let oct = -1; oct <= 1; oct++) {
+      const cand = rotated.map(n => n + oct * 12);
+      if (cand[0] < NOTE_MIN || cand[cand.length - 1] > NOTE_MAX) continue;
+      const cost = cand.reduce((sum, n) => sum + Math.min(...prev.map(p => Math.abs(p - n))), 0);
+      if (cost < bestCost) { bestCost = cost; best = cand; }
+    }
+  }
+  return best;
+}
+
+// What the chord pads know about each other: which pad was played last, and
+// how it was voiced. Both are entry context rather than song data -- nothing
+// here is saved, and reloading a song starts the next chord from scratch.
+let lastPad = -1, lastChordNotes = null;
+
+// The pads worth trying next, for the strip's suggestion highlight. Empty
+// until a pad has been played, which is also what makes the highlight legible:
+// it appears in response to something, rather than being on from the start.
+export function suggestedPads() {
+  return rankNext(state.flavor, lastPad);
+}
+
+// Called when the flavor changes: pad 3 of Pop says nothing about pad 3 of
+// Jazz, and voice-leading the first chord of a new set to the last chord of
+// the old one is leading from somewhere the user has left.
+export function resetChordContext() {
+  lastPad = -1;
+  lastChordNotes = null;
+}
+
+// Sounds the pad and, in pattern edit mode, writes it across the row's 4 note
+// columns and advances by the edit step. Sounding it either way is deliberate:
+// pressing a pad in fx or sequence mode is still someone asking to hear that
+// chord, and going silent there would read as the pad being broken.
+export function enterPadAtCursor(i) {
+  const c = padChord(i);
+  if (!c) return false;
+  previewNotes(c.notes);
+  state.chordName = c.name;
+  lastPad = i;
+  lastChordNotes = c.notes;
+  if (state.editMode === 'pattern' && focusedPatternNum()) {
+    const row = pat.row;
+    writeChordRow(row, c.notes);
+    advanceCursor(row);
+  }
   render(); notify();
   return true;
 }
 
-// --- entry pie menu (see panels/pie.js). Everything musical the
-// pie asks for is answered from the functions above, so a pie pick and a
-// keypress cannot write different things. The voicing toggles apply here even
-// with chord mode off: opening the pie and choosing a quality is an explicit
-// request for that chord, and R/3/5/7 is how you say which of its tones you
-// want. ---
-function openEntryPie(x, y) {
-  const row = pat.row;
-  openPie(x, y, {
-    noteFor: pitch => pitch + state.octave * 12 + engine.NOTE_OFFSET,
-    chordFor,
-    // Auditions the hovered wedge and outlines it on the on-screen piano at
-    // the same time (state.shadowNotes -- keyboard.js's own chord shadow,
-    // reached through a callback field since tracker.js can't import it).
-    preview(notes) {
-      previewNotes(notes);
-      state.shadowNotes && state.shadowNotes(notes);
-    },
-    commit(notes, name, root) {
-      writeChordRow(row, notes);
-      state.chordName = name;
-      // Leaves the two-keypress window open on the row the pie just wrote, so
-      // a digit straight after re-picks the quality exactly as it would after
-      // a typed note.
-      lastEntry = { row, note: root };
-      advanceCursor(row);
-      render(); notify();
-    },
-    octaveChanged() { render(); notify(); },
-  });
-}
+// The digit row, when a flavor is set. Digits 1-9 then 0 are pads 0-9; a digit
+// with no pad behind it (every flavor is 8 long, so 9 and 0) falls through and
+// keeps its chromatic meaning as a sharp, rather than being silently eaten.
+const PAD_KEYS = {
+  Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3, Digit5: 4,
+  Digit6: 5, Digit7: 6, Digit8: 7, Digit9: 8, Digit0: 9,
+};
 
 // Enter in a note/fx column inserts an empty row at the cursor,
 // pushing that row and everything below it down one -- the whole pattern
@@ -389,7 +463,6 @@ function transposeSelection(delta) {
   });
   if (!moves.length || moves.some(([, v]) => v < NOTE_MIN || v > NOTE_MAX)) return;
   for (const [i, v] of moves) col.n[i] = v;
-  lastEntry = null;   // the row's contents are no longer what a digit would requalify
   render(); notify();
 }
 
@@ -410,7 +483,6 @@ function patternsContextMenu(e) {
     state.selInstrument = t.channel;
     state.editMode = 'pattern';
     setCursor(pat, t.col, t.row);
-    lastEntry = null;
     render(); notify();
   }
   openMenu(e.clientX, e.clientY, [
@@ -457,12 +529,10 @@ function pasteSelection(mode) {
       grid.set(col, row, c.copyBuf[i][j]);
 }
 // The whole paste, shared by Ctrl+V and the right-click menu so the two can't
-// drift. lastEntry goes because the row a digit would requalify
-// has just been overwritten by something else.
+// drift.
 function doPaste(mode) {
   pasteSelection(mode);
   if (mode === 'sequence') syncSeqIntoState();
-  lastEntry = null;
   render(); notify();
 }
 
@@ -495,13 +565,12 @@ function handleNav(e, mode) {
     if (e.shiftKey) extendSelection(c, col, row);
     else setCursor(c, col, row);
   }
-  lastEntry = null;   // moving off the row ends the chord-quality window
   return true;
 }
 
-// Shared by the octave keys below, the keyboard panel's own +/- buttons (via
-// state.notify) and the pie's wheel/octave keys, so all three clamp the same
-// way. 1-8 is the engine's playable range (see panels/keyboard.js).
+// Shared by the octave keys below and the keyboard panel's own +/- buttons
+// (via state.notify), so both clamp the same way. 1-8 is the engine's playable
+// range (see panels/keyboard.js).
 export function shiftOctave(d) {
   state.octave = Math.min(8, Math.max(1, state.octave + d));
   render(); notify();
@@ -522,7 +591,6 @@ function onKeyDown(e) {
 
   if (e.code === 'Tab') {
     e.preventDefault();
-    lastEntry = null;
     const i = EDIT_MODES.indexOf(state.editMode);
     state.editMode = EDIT_MODES[(i + (e.shiftKey ? -1 : 1) + 3) % 3];
     render(); notify();
@@ -555,7 +623,6 @@ function onKeyDown(e) {
     }
   } else if (state.editMode === 'pattern' || state.editMode === 'fx') {
     if (e.code === 'Enter' || e.code === 'NumpadEnter') {
-      lastEntry = null;
       insertRowAtCursor(state.editMode === 'pattern' ? pat.row : fx.row);
       render(); notify();
       e.preventDefault();
@@ -569,7 +636,6 @@ function onKeyDown(e) {
     // handleNav, whose Delete case would otherwise read the shift key as
     // "extend the selection".
     if (state.editMode === 'pattern' && e.shiftKey && (e.code === 'Delete' || e.code === 'Backspace')) {
-      lastEntry = null;
       writeChordRow(pat.row, []);
       setCursor(pat, pat.col, (pat.row + 1) % patGrid.numrows());
       render(); notify();
@@ -586,12 +652,11 @@ function onKeyDown(e) {
       e.preventDefault();
       return;
     }
-    // The second keypress of a chord entry, checked before the note lookup
-    // below because the digit row doubles as sharps in the chromatic layout.
-    // The collision is scoped to exactly this window -- chord mode on, and a
-    // note entered with nothing since -- so outside it a digit is still a
-    // note, and with chord mode off it always is.
-    if (state.chordOn && lastEntry && applyChordQuality(e.code)) {
+    // The chord pads own the digit row while a flavor is set, checked before
+    // the note lookup below because the digit row doubles as sharps in the
+    // chromatic layout. A digit past the end of the pad set falls through and
+    // stays a sharp (see PAD_KEYS).
+    if (state.flavor > 0 && PAD_KEYS[e.code] !== undefined && enterPadAtCursor(PAD_KEYS[e.code])) {
       e.preventDefault();
       return;
     }
@@ -640,7 +705,6 @@ const primary = e => e.button === 0;
 function seqMouseDown(e) {
   const t = cellTarget(e);
   if (!t || !primary(e)) return;
-  lastEntry = null;
   state.editMode = 'sequence';
   if (e.shiftKey) extendSelection(seq, t.col, t.row);
   else setCursor(seq, t.col, t.row);
@@ -651,7 +715,6 @@ function seqMouseDown(e) {
 function patternsMouseDown(e) {
   const t = cellTarget(e);
   if (!t || !primary(e)) return;
-  lastEntry = null;
   // Shift+click extends the selection from its anchor to the clicked
   // cell -- the mouse equivalent of shift+arrow, which likewise moves only the
   // col1/row1 corner and leaves the active cell where it is. Restricted to the
@@ -672,17 +735,6 @@ function patternsMouseDown(e) {
     dragMode = 'pattern';
   }
   render(); notify();
-  // The second press of a double-click on a note cell opens the
-  // entry pie. Bound to mousedown rather than dblclick deliberately -- dblclick
-  // only fires after the second release, by which point a drag-out-and-release
-  // pick is impossible; here the button is still down, so the whole pick can be
-  // one gesture (releasing without moving leaves the pie up to click at
-  // instead). dragMode is cleared because this press already armed a
-  // drag-select that the pie is taking over from.
-  if (e.detail >= 2 && !e.shiftKey && dragMode === 'pattern' && focusedPatternNum()) {
-    dragMode = null;
-    openEntryPie(e.clientX, e.clientY);
-  }
 }
 function onMouseOver(e) {
   if (!dragMode) return;
@@ -963,7 +1015,7 @@ export function initTrackerPanel() {
   $('patterns-panel').classList.remove('wip');
   $('patterns-panel').innerHTML =
     `<h3 title="The notes in the patterns playing at the sequencer's current row — every channel side by side. The highlighted column is the one you are editing.">Patterns</h3>
-     <div class="pat-scroll" id="pat-scroll" title="Four note columns per channel (four notes can sound at once) plus the narrow FX column. Play notes in with the piano, the computer keys, or double-click a cell for the note/chord pie. Alt+arrows transpose the selection; right-click for the rest."></div>`;
+     <div class="pat-scroll" id="pat-scroll" title="Four note columns per channel (four notes can sound at once) plus the narrow FX column. Play notes in with the piano or the computer keys. Alt+arrows transpose the selection; right-click for the rest."></div>`;
 
   $('song-bpm').oninput = () => {
     const bpm = +$('song-bpm').value;
