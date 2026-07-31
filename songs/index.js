@@ -20,7 +20,6 @@ export const DEMO_SONGS = [
   { section: 'SFX', file: 'pot-break.js', name: 'Pot break', desc: '4 channels · 1.6s' },
   { section: 'SFX', file: 'spawn.js', name: 'Spawn', desc: '1 channel · 4.0s' },
   { section: 'SFX', file: 'tada.js', name: 'Tada', desc: '1 channel · 4.4s' },
-,
 ];
 
 export const SECTIONS = ['Songs', 'SFX'];

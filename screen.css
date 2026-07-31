@@ -250,7 +250,7 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
 /* The note-input controls (scale / root transpose / chord + its voicing
    toggles), sharing the header with the octave buttons. .off is the "this setting has nothing to act on right now"
    state -- dimmed rather than disabled, so it still reads at a glance. */
-.kb-header label, .kb-header .kb-root, .kb-header .kb-voicing {
+.kb-header label, .kb-header .kb-root, .kb-header .kb-follow, .kb-header .kb-voicing {
   display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--text-dim); }
 .kb-header .kb-voicing { gap: 7px; }
 .kb-header .kb-voicing label { gap: 3px; }
@@ -263,6 +263,7 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
                                 border: 1px solid var(--border); border-radius: 4px;
                                 padding: 2px 4px; font: inherit; font-size: 11px; }
 .kb-chord-name { color: var(--accent); min-width: 4.5em; font-size: 11px; }
+.kb-follow-name { color: var(--accent); min-width: 3.2em; font-size: 11px; }
 /* The chord pads (panels/keyboard.js, data in chords.js): one button per chord
    in the selected flavor, on their own row between the header and the piano.
    They share the row's width equally (flex: 1 1 0) and shrink rather than wrap
@@ -320,6 +321,13 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
             background: #14161b; border: 1px solid #000; border-radius: 0 0 2px 2px;
             cursor: pointer; }
 .kb-black.kb-in-scale { background: #2f5476; }
+/* The chord being followed (panels/tracker.js's followedChord), a step
+   stronger than the scale tint it sits on top of -- same hue family, so the
+   two read as "in the key" and "in the chord" rather than as two unrelated
+   states. After the .kb-in-scale rules so it wins at equal specificity, and
+   still before .active, which a struck key needs to win outright. */
+.kb-white.kb-in-chord { background: #57a0e2; }
+.kb-black.kb-in-chord { background: #1d6bb0; }
 .kb-black.active { background: var(--accent); }
 /* The chord a hovered key would enter, previewed on its own
    notes (panels/keyboard.js's showShadow). An inset ring plus a soft glow --

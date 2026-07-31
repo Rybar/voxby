@@ -35,7 +35,7 @@
 import * as engine from '../engine.js';
 import { state, savePrefs } from '../state.js';
 import { SCALES, PITCH_NAMES, QUALITIES, slotOf, pitchName, scaleKeys, harmonyOf,
-  diatonicChord, nameChord, quartalVoicing, wideVoicing } from '../scales.js';
+  diatonicChord, nameChord, qualityOf, quartalVoicing, wideVoicing, splitKeys, CHROMATIC } from '../scales.js';
 import { padOf, rankNext } from '../chords.js';
 import { openMenu } from '../menu.js';
 import { keyHandledByFocus } from '../focus.js';
@@ -67,7 +67,72 @@ export const NOTE_KEYS = {
 // change the scale or its root.
 export function noteKeys() {
   const intervals = SCALES[state.scaleMode][1];
+  // Chord following splits the rows: the chord under your resting hand, the
+  // key a row up (see followedChord below). It overrides the scale layout
+  // rather than combining with it, since both want the same twenty keys.
+  const chord = followedChord();
+  if (chord) {
+    return splitKeys(chord.intervals, chord.root, intervals || CHROMATIC, state.scaleRoot);
+  }
   return intervals ? scaleKeys(intervals, state.scaleRoot) : NOTE_KEYS;
+}
+
+// --- chord following: what the melody keys play is decided by whatever chord
+// is sounding underneath them, read live out of another channel's pattern.
+//
+// This needs nothing added to the song. A chord is already four notes on one
+// row, patternLen is global so every channel's rows line up one to one, and
+// patternNumFor() gives any channel's pattern at the current sequence row --
+// so "the chord playing right now" is a scan up the followed channel's own
+// note columns from the row the cursor is on. Nothing is stored, nothing is
+// exported, and a song written with this on is byte-identical to one written
+// without it. It is a keyboard mapping, exactly like the scale presets.
+//
+// Which of a chord's notes is its root, and the intervals from it. The bass
+// note cannot simply be assumed to be the root: voice leading inverts chords
+// freely, so a wide or smoothed F7 can perfectly well sit with its fifth at the
+// bottom -- read that way it comes out as an unnamable pile of intervals, and
+// the key rows would start on a note the chord isn't built on.
+//
+// So each rotation is tried in turn, bass note first, and the first one the
+// chord vocabulary can name wins. Bass first because a chord's bass usually
+// *is* its root, and because it settles the genuinely ambiguous sets in the
+// conventional way -- D F A C is a Dm7 when D is in the bass and an F6 when F
+// is. Nothing nameable (an accidental cluster, hand-typed notes) falls back to
+// reading the bass as the root, which is no worse than not looking.
+//
+// Returns the chord's root pitch class and its intervals from that root, ready
+// for degreeOffset -- or null for "no chord here", which every caller reads as
+// "carry on as normal": following switched off, the followed channel silent at
+// this point in the song, the cursor above the first chord of the pattern, or a
+// single note, which is not a chord to follow.
+function rootOf(pitches, bass) {
+  const from = cand => pitches.map(pc => (((pc - cand) % 12) + 12) % 12).sort((a, b) => a - b);
+  for (const cand of [bass, ...pitches.filter(pc => pc !== bass)]) {
+    const intervals = from(cand);
+    if (qualityOf(intervals) !== null) return { root: cand, intervals };
+  }
+  return { root: bass, intervals: from(bass) };
+}
+
+export function followedChord() {
+  const ch = state.followChannel;
+  if (ch < 0 || ch >= engine.MAX_CHANNELS) return null;
+  const pn = patternNumFor(ch);
+  if (!pn) return null;
+  const patternLen = state.song.patternLen;
+  const col = state.song.songData[ch].c[pn - 1];
+  for (let row = Math.min(pat.row, patternLen - 1); row >= 0; row--) {
+    const notes = [];
+    for (let c = 0; c < 4; c++) if (col.n[row + c * patternLen]) notes.push(col.n[row + c * patternLen]);
+    if (!notes.length) continue;
+    notes.sort((a, b) => a - b);
+    const pitches = [...new Set(notes.map(pitchOf))];
+    if (pitches.length < 2) return null;   // one pitch class is a note, not a chord
+    const { root, intervals } = rootOf(pitches, pitchOf(notes[0]));
+    return { row, root, intervals, name: nameChord(root, intervals) };
+  }
+  return null;
 }
 
 function toHex(n, count) {

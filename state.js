@@ -63,6 +63,11 @@ export const state = {
   scaleRoot: 0,         // scale transpose in half steps, 0-11, and the key the
                         // chord pads are in
   flavor: 0,            // index into chords.js's FLAVORS; 0 = None = no pads
+  // Channel whose chords the melody keys follow, or -1 for off. Deliberately
+  // not persisted, unlike the settings below it: a channel number means
+  // something only within one song's arrangement, where a scale or a flavor is
+  // a musical preference that travels.
+  followChannel: -1,
   voicing: 'close',     // pad chord shape: 'close' (thirds) or 'quartal' (fourths)
   smoothVoicing: true,  // voice-lead each pad chord to the one before it
   chordOn: false,       // one keypress writes a chord (see panels/tracker.js)

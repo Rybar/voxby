@@ -29,7 +29,8 @@
     <li><a href="#window">The window</a></li>
     <li><a href="#sequencer">Sequencer</a></li>
     <li><a href="#patterns">Patterns</a></li>
-    <li><a href="#notes">Playing notes in</a></li>
+    <li><a href="#notes">Playing notes in</a>
+      <ul><li><a href="#pads">Chord pads</a></li><li><a href="#follow">Follow</a></li></ul></li>
     <li><a href="#editing">Selecting and editing</a></li>
     <li><a href="#fx">The FX track</a></li>
     <li><a href="#instruments">Instruments</a></li>
@@ -197,26 +198,106 @@ half steps; the octave buttons still move the whole set.</p>
 <h3>Chords</h3>
 
 <p>Tick <strong>Chord</strong> and one keypress writes a whole chord across the
-row's four note columns. In a scale, the quality comes from the scale — the
-chord that belongs on that degree. In Chromatic, press a digit
-<em>immediately after</em> the note to name the quality yourself:</p>
+row's four note columns, taking its quality from the scale — the chord that
+belongs on the degree you played. With no scale set there is nothing to infer a
+quality from, so you get the bare note.</p>
 
-<table>
-  <thead><tr><th>Key</th><th>Chord</th><th>Key</th><th>Chord</th></tr></thead>
-  <tbody>
-    <tr><td><kbd>1</kbd></td><td>maj7</td><td><kbd>6</kbd></td><td>6</td></tr>
-    <tr><td><kbd>2</kbd></td><td>m7</td><td><kbd>7</kbd></td><td>m6</td></tr>
-    <tr><td><kbd>3</kbd></td><td>7 (dominant)</td><td><kbd>8</kbd></td><td>m7♭5</td></tr>
-    <tr><td><kbd>4</kbd></td><td>m (minor triad)</td><td><kbd>9</kbd></td><td>dim7</td></tr>
-    <tr><td><kbd>5</kbd></td><td>M (major triad)</td><td><kbd>0</kbd></td><td>sus4</td></tr>
-  </tbody>
-</table>
+<p>The <strong>R 3 5 7 9 11 13</strong> toggles pick which of a chord's tones
+actually get written; four is the most a row can hold. Switch the root off for a
+rootless voicing and the rest pack left into the first columns. The chord's name
+is spelled out next to the toggles as confirmation.</p>
 
-<p>So <kbd>Q</kbd> then <kbd>1</kbd> writes a Cmaj7, and <kbd>W</kbd> then
-<kbd>6</kbd> a D6. The <strong>R 3 5 7</strong> toggles pick which chord tones
-get written; switching the root off gives a rootless voicing, and the remaining
-tones pack left into the first columns. The chord's name is spelled out next to
-the toggles as confirmation.</p>
+<h3 id="pads">Chord pads</h3>
+
+<figure class="wide">
+  <img src="help/chord-pads.png" alt="The chord pad strip, showing the Lo-fi flavor">
+  <figcaption>A flavor fills the strip with chords that go together. The digit
+  in each pad's corner plays it; the numeral underneath says which degree of the
+  key it is.</figcaption>
+</figure>
+
+<p>Picking a <strong>Flavor</strong> puts a set of chords that sound good
+together on the digit row. Press <kbd>1</kbd>–<kbd>8</kbd>, or click a pad, and
+that whole chord goes in at the cursor. Hovering a pad outlines its notes on the
+piano without playing it, so you can see what you are about to commit to.</p>
+
+<p>Each pad shows two things: the chord's name (<code>Cm9</code>) and the degree
+of the key it is (<code>i9</code>). The second one is worth reading even if it
+means nothing to you yet — the same numeral in another key is the same chord
+doing the same job, which is most of what there is to know about chord
+progressions.</p>
+
+<p>A flavor is a hand-written set, not something derived from the scale, and
+that is the point: what makes a genre sound like itself is usually the chords
+that <em>aren't</em> strictly in the key — the ♭VII in a rock progression, the
+V7 in a minor one, the tritone substitution in jazz. There are ten to choose
+from, from Pop and Chiptune through Lo-fi and Jazz to Spooky and Andalusian.</p>
+
+<p>Picking a flavor also sets the <strong>Scale</strong> to the one it plays
+over, so the melody keys and the chords agree without your having to arrange it.
+Changing the scale afterwards is allowed and does not change the flavor back.
+<strong>Root</strong> sets the key, and moves every pad at once.</p>
+
+<p>After you play a chord, a few pads pick up an accent bar along their top
+edge: those are the chords that most often follow the one you just played. It is
+a hint, not a rule — every other pad still works, and ignoring the suggestion is
+how you write something that isn't predictable.</p>
+
+<h3>Voicing</h3>
+
+<p>A chord's <em>voicing</em> is how its notes are spread out, not which chord
+it is — the name on the pad never changes when you switch these.</p>
+
+<ul>
+  <li><strong>Close</strong> stacks the notes in thirds, packed inside one
+  octave. Compact and neutral.</li>
+  <li><strong>Wide</strong> lifts every other note an octave, so the same chord
+  fans across nearly two — a bass note with the rest above it, the way it falls
+  under two hands on a keyboard.</li>
+  <li><strong>Quartal</strong> restacks the chord in fourths instead of thirds,
+  for the open, modal sound. A few chords cannot survive that (a diminished or
+  augmented chord would come back with its defining note quietly swapped), so
+  those are opened out from their own notes instead.</li>
+</ul>
+
+<p><strong>Smooth</strong> places each chord's notes near the ones before them
+rather than always starting from the root. It is the difference between a
+progression that lurches from chord to chord and one that moves — and it is the
+single most audible thing separating chords entered by hand from chords played
+by somebody who knows how. Leave it on unless you want the root in the bass
+every time.</p>
+
+<p>Wide re-arranges whatever the R 3 5 7 toggles picked, so the two work
+together. Quartal replaces them — it is built from the mode the chord implies
+rather than from the chord's own notes — which is why those toggles dim when it
+is on.</p>
+
+<h3 id="follow">Follow</h3>
+
+<figure class="wide">
+  <img src="help/follow.png" alt="The keyboard panel following a chord, with the chord's keys tinted on the piano">
+  <figcaption>Following a chord: the header names it, the bottom key row plays
+  its notes, and the piano tints them a shade stronger than the scale.</figcaption>
+</figure>
+
+<p>Once there are chords on one channel, point <strong>Follow</strong> at it and
+write your melody on another. The bottom key row (<kbd>Z</kbd>–<kbd>M</kbd>)
+becomes the notes of whatever chord is sounding at the cursor row, so every key
+under your resting hand belongs in that chord; the top row
+(<kbd>Q</kbd>–<kbd>P</kbd>) stays the scale, for passing notes between them.</p>
+
+<p>It re-reads as you move down the pattern: cross into the next chord and the
+bottom row changes with it. The header names the chord it has found, and the
+piano tints that chord's keys a shade stronger than the scale's.</p>
+
+<p>Nothing about this is stored. It reads the chords out of a channel that
+already holds them and writes ordinary notes into ordinary columns — a song
+written with Follow on is identical to one written without it. It is a keyboard
+mapping, the same as Scale is.</p>
+
+<p>It falls back to the plain scale layout whenever there is no chord to follow:
+the channel silent at that point in the song, the cursor above the pattern's
+first chord, or a single note, which is not a chord.</p>
 
 <h2 id="editing">Selecting and editing</h2>
 
@@ -518,6 +599,7 @@ itself.</p>
     <tr><td><kbd>-</kbd> / <kbd>=</kbd> (or <kbd>&lt;</kbd> / <kbd>&gt;</kbd>)</td><td>Octave down / up</td></tr>
     <tr><td><kbd>0</kbd>–<kbd>9</kbd>, <kbd>A</kbd>–<kbd>Z</kbd></td><td>In the sequencer: place that pattern (with <kbd>Shift</kbd>, and step down a row)</td></tr>
     <tr><td>note keys</td><td>In a pattern: play and write the note, or the chord the scale harmonizes it to in chord mode</td></tr>
+    <tr><td><kbd>1</kbd>–<kbd>8</kbd></td><td>In a pattern, with a flavor set: write that chord pad</td></tr>
     <tr><td>right-click</td><td>Transpose and clipboard menu for the selection</td></tr>
     <tr><td><kbd>Escape</kbd></td><td>Close a dialog</td></tr>
   </tbody>
@@ -529,8 +611,8 @@ itself.</p>
 <a href="https://gitlab.com/mbitsnbites/soundbox">SoundBox</a>, by Marcus
 Geelnard, whose synth, players, instrument presets and song format it keeps
 intact. The editing side — the multi-channel pattern view, the on-screen piano
-and its scale and chord helpers, the scope, the sharing links and the ES-module
-song format — is new; the sound is his.</p>
+and its scale and chord helpers, the chord pads and chord following, the scope,
+the sharing links and the ES-module song format — is new; the sound is his.</p>
 
 <p>Voxby inherits SoundBox's licence, the
 <a href="gpl.txt">GNU General Public License v3</a>.</p>

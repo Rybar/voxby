@@ -100,6 +100,27 @@ export function scaleKeys(intervals, root) {
   return map;
 }
 
+// The two rows given different note sets instead of one continuous run: the
+// bottom row (the one a hand rests on) gets `low`, the top row gets `high`.
+// Used by chord-following note entry, where the bottom row is the chord
+// currently sounding and the top row is the key it sits in -- safe notes under
+// your fingers, the rest of the scale a row up for passing tones.
+//
+// Each row restarts at its own degree 0, so the continuity scaleKeys promises
+// is deliberately given up here. It has to be: the two rows are answering
+// different questions, and running the top row on from wherever ten chord tones
+// happened to end would put the scale in an arbitrary octave.
+export function splitKeys(low, lowRoot, high, highRoot) {
+  const map = {};
+  ROW_BOTTOM.forEach((code, d) => { map[code] = degreeOffset(low, lowRoot, d); });
+  ROW_TOP.forEach((code, d) => { map[code] = degreeOffset(high, highRoot, d); });
+  return map;
+}
+
+// The fallback "scale" for the top row when none is set: all twelve notes, so
+// the row is a chromatic run up from the root rather than nothing at all.
+export const CHROMATIC = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+
 // Which degree of the scale a pitch class is (0-11, 0 = C -- the engine's
 // note space starts on a C, see engine.NOTE_OFFSET), or -1 if it's out of
 // the scale. Drives both the in-scale key tint on the on-screen piano and
@@ -283,14 +304,24 @@ export const slotOf = interval => TONE_SLOT[interval] ?? 6;
 // Matches the deltas against QUALITIES (normalized into one octave, since a
 // diatonic stack can run past it); anything the table doesn't name falls back
 // to listing its intervals.
+const normIntervals = set => [...new Set(set.map(d => ((d % 12) + 12) % 12))].sort((a, b) => a - b).join(',');
+
+// The quality label for a set of intervals from a root, or null if nothing in
+// the vocabulary matches. Normalized into one octave, since a diatonic stack or
+// a wide voicing can run well past it.
+//
+// Separate from nameChord because "can this be named at all" is a question of
+// its own: panels/tracker.js's chord following asks it of each rotation of a
+// chord in turn, to work out which of its notes is the root.
+export function qualityOf(deltas) {
+  const mine = normIntervals(deltas);
+  for (const key in QUALITIES) if (normIntervals(QUALITIES[key][1]) === mine) return QUALITIES[key][0];
+  return null;
+}
+
 export function nameChord(rootPitch, deltas) {
   const name = PITCH_NAMES[((rootPitch % 12) + 12) % 12];
   if (deltas.length < 2) return name;
-  const norm = set => [...new Set(set.map(d => ((d % 12) + 12) % 12))].sort((a, b) => a - b).join(',');
-  const mine = norm(deltas);
-  for (const key in QUALITIES) {
-    const [label, iv] = QUALITIES[key];
-    if (norm(iv) === mine) return name + label;
-  }
-  return name + ' ' + deltas.slice(1).join('-');
+  const label = qualityOf(deltas);
+  return label === null ? name + ' ' + deltas.slice(1).join('-') : name + label;
 }

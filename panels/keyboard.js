@@ -43,7 +43,8 @@ import * as engine from '../engine.js';
 import { state, savePrefs } from '../state.js';
 import { audioContext } from '../audio.js';
 import { previewInstrI } from './instrument.js';
-import { noteKeys, enterNoteAtCursor, chordNotesFor, padChord, enterPadAtCursor, suggestedPads, resetChordContext } from './tracker.js';
+import { noteKeys, enterNoteAtCursor, chordNotesFor, padChord, enterPadAtCursor, suggestedPads,
+  resetChordContext, followedChord } from './tracker.js';
 import { SCALES, PITCH_NAMES, degreeOfPitch } from '../scales.js';
 import { FLAVORS, padsOf } from '../chords.js';
 import { LAYOUTS, LAYOUT_TABLES, charFor, detectLayout } from '../layouts.js';
@@ -303,6 +304,10 @@ export function initKeyboardPanel() {
         <select id="kb-layout">${LAYOUTS.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</select></label>
       <label id="kb-scale-label" title="Remap the computer keyboard to two straight rows of in-scale notes: Z-M and Q-P. The sharp keys (S D G H J / 2 3 5 6 7) go unused — that is the point.">Scale
         <select id="kb-scale">${SCALES.map(([name], i) => `<option value="${i}">${name}</option>`).join('')}</select></label>
+      <span class="kb-follow" id="kb-follow-group" title="Play a melody over the chords on another channel. The bottom key row (Z-M) becomes whatever chord is sounding on that channel at the cursor row, so every key under your hand is a chord tone; the top row (Q-P) stays the scale, for passing notes. Nothing is stored in the song — it only changes what the keys play.">Follow
+        <select id="kb-follow"><option value="-1">Off</option>${
+          Array.from({ length: engine.MAX_CHANNELS }, (_, i) => `<option value="${i}">Ch ${i + 1}</option>`).join('')}</select>
+        <span class="mono kb-follow-name" id="kb-follow-name" title="The chord the melody keys are following: the most recent row with notes at or above the cursor, on the followed channel"></span></span>
       <span class="kb-root" id="kb-root-group" title="Transpose the scale in half steps. Independent of the octave buttons, which keep moving the whole key set.">Root
         <button id="kb-root-down" type="button" title="Move the scale's root down a half step">-</button>
         <span class="mono" id="kb-root" title="The scale's root note — which note the Z and Q keys land on"></span>
@@ -364,8 +369,13 @@ export function initKeyboardPanel() {
     labelSpans.set(el, el.querySelectorAll('.kb-label span'));
   });
 
+  // The generic title is what an unfilled slot keeps: refreshPads only writes a
+  // specific one onto the pads a flavor actually fills, and every control in
+  // this editor is expected to answer a hover (test-basic.mjs checks it).
   $('kb-pads').innerHTML = PAD_DIGITS.map((d, i) =>
-    `<button class="kb-pad" type="button" data-pad="${i}" hidden><b></b><i></i><kbd>${d}</kbd></button>`).join('')
+    `<button class="kb-pad" type="button" data-pad="${i}" hidden
+       title="Chord pad ${d} — pick a Flavor to fill the strip with chords that go together"
+       ><b></b><i></i><kbd>${d}</kbd></button>`).join('')
     + `<span class="kb-pads-hint" id="kb-pads-hint">Pick a flavor to put a set of chords that fit together on the digit row.</span>`;
   // mousedown, not click, and the same reason the piano uses it: entering a
   // chord re-renders the panel, and a click needs its press and release on one
@@ -410,6 +420,9 @@ export function initKeyboardPanel() {
   const changed = () => { clearShadow(); savePrefs(); refreshKeyboardPanel(); state.notify && state.notify(); };
   $('kb-layout').onchange = () => { state.kbLayout = $('kb-layout').value; changed(); };
   $('kb-scale').onchange = () => { state.scaleMode = +$('kb-scale').value; changed(); };
+  // Not saved to prefs (see state.js): a channel number is arrangement, not
+  // taste. The notify() is what relabels the piano for the new mapping.
+  $('kb-follow').onchange = () => { state.followChannel = +$('kb-follow').value; clearShadow(); refreshKeyboardPanel(); state.notify && state.notify(); };
   // Picking a flavor sets the scale it plays over, so one choice arms the
   // melody keys and the chord pads together. Deliberately one-way: changing the
   // scale afterwards is a legitimate thing to want (a Dorian melody over pop
@@ -464,9 +477,15 @@ export function refreshKeyboardPanel() {
   // The scale's intervals drive both the key tint below and whether the root
   // transpose means anything, so they're read once here rather than per key.
   const intervals = SCALES[state.scaleMode][1];
+  // The chord the melody keys are following, if any -- both the readout and
+  // the piano's second tint below come off this one lookup.
+  const followed = followedChord();
+  $('kb-follow-name').textContent = state.followChannel < 0 ? '' : followed ? followed.name : '—';
+  $('kb-follow-group').classList.toggle('off', state.followChannel >= 0 && !followed);
   $('kb-layout').value = state.kbLayout;
   $('kb-scale').value = state.scaleMode;
   $('kb-flavor').value = state.flavor;
+  $('kb-follow').value = state.followChannel;
   $('kb-smooth').checked = state.smoothVoicing;
   $('kb-shape').value = state.voicing;
   $('kb-root').textContent = PITCH_NAMES[state.scaleRoot];
@@ -517,5 +536,10 @@ export function refreshKeyboardPanel() {
     // physical key rows currently reach. keyIndex's key is octave*12 + offset,
     // so % 12 is the pitch class (offset 0 is C, per engine.NOTE_OFFSET).
     el.classList.toggle('kb-in-scale', !!intervals && degreeOfPitch(intervals, state.scaleRoot, key % 12) >= 0);
+    // A second, stronger tint for the notes of the chord being followed. Layered
+    // over the scale tint rather than replacing it, so the shape of the key and
+    // the shape of the chord inside it are both visible at once.
+    el.classList.toggle('kb-in-chord',
+      !!followed && degreeOfPitch(followed.intervals, followed.root, key % 12) >= 0);
   }
 }
