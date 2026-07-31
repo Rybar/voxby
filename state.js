@@ -128,6 +128,48 @@ export function savePrefs() {
   localStorage.setItem(PREFS_KEY, JSON.stringify(out));
 }
 
+// Auto-save song WIP + undo stacks to localStorage
+const AUTOSAVE_KEY = 'soundbox-autosave';
+const AUTOSAVE_DEBOUNCE_MS = 500;
+let autosaveTimer = null;
+
+export function saveAutosave() {
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => {
+    try {
+      const data = {
+        song: state.song,
+        undoStack: state.undoStack,
+        redoStack: state.redoStack,
+        selInstrument: state.selInstrument,
+        selRow: state.selRow,
+        octave: state.octave,
+        viewMode: state.viewMode,
+        timestamp: Date.now(),
+      };
+      localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(data));
+    } catch (e) {
+      // Quota exceeded or serialization error - fail silently
+      console.warn('Auto-save failed:', e);
+    }
+  }, AUTOSAVE_DEBOUNCE_MS);
+}
+
+export function loadAutosave() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(AUTOSAVE_KEY));
+    if (!saved || !saved.song) return null;
+    // Return the saved data for main.js to decide whether to restore
+    return saved;
+  } catch {
+    return null;
+  }
+}
+
+export function clearAutosave() {
+  localStorage.removeItem(AUTOSAVE_KEY);
+}
+
 loadPrefs();
 
 export function markClean() {

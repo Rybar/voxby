@@ -16,7 +16,7 @@
 
 import * as engine from './engine.js';
 import * as scales from './scales.js';
-import { state, markClean, isDirty } from './state.js';
+import { state, markClean, isDirty, saveAutosave, loadAutosave, clearAutosave } from './state.js';
 import { audioContext, masterGain } from './audio.js';
 import { svgIcon } from './icons.js';
 import { initInstrumentPanel, refreshInstrumentPanel } from './panels/instrument.js';
@@ -74,6 +74,7 @@ function refresh() {
   refreshTrackerPanel();
   refreshKeyboardPanel();
   syncJammer();
+  saveAutosave();
 }
 // The tracker panel calls this after any cursor move or edit that isn't itself a
 // full song load (a state.song reassignment already goes through loadSong() ->
@@ -90,10 +91,11 @@ state.previewNote = previewNote;
 // the same reason.
 state.highlightNotes = highlightPlaybackNotes;
 
-function loadSong(song) {
+function loadSong(song, skipAutosave = false) {
   state.song = song;
   markClean();
   refresh();
+  if (skipAutosave) clearAutosave();
 }
 
 // --- generic modal shell, reused for the open-song picker, the about and
@@ -208,7 +210,7 @@ document.addEventListener('keydown', e => {
 // --- new / open ---
 $('new-song').onclick = async () => {
   if (!await confirmDiscard('Starting a new song discards the one you have open. Export JS first if you want to keep it.')) return;
-  loadSong(engine.makeNewSong());
+  loadSong(engine.makeNewSong(), true);
 };
 
 // Each library entry is fetched on click (a dynamic import — see songs/index.js
@@ -257,7 +259,7 @@ function openSongDialog() {
       const song = await loadDemoSong(entry).catch(() => undefined);
       if (!song) { noticeModal('Could not open', `${entry.name} failed to load.`); return; }
       stopSong();
-      loadSong(song);
+      loadSong(song, true);
       closeModal();
     };
   }
@@ -296,7 +298,7 @@ async function importSongFile(file) {
     return;
   }
   stopSong();
-  loadSong(song);
+  loadSong(song, true);
   closeModal();
 }
 
@@ -400,7 +402,7 @@ function loadSharedSong() {
       probably truncated on its way here. Ask whoever sent it for the exported .js file instead.`);
     return;
   }
-  loadSong(song);
+  loadSong(song, true);
 }
 
 // --- export ---
@@ -629,4 +631,51 @@ $('view-mode').onchange = () => {
 };
 
 refresh();
-loadSharedSong();
+
+// Check for both shared song URL and auto-saved state
+const sharedMatch = /[#&]s=([\w-]+)/.exec(location.hash);
+const autosaved = loadAutosave();
+const hasValidAutosave = autosaved && (Date.now() - (autosaved.timestamp || 0)) < 7 * 24 * 60 * 60 * 1000;
+
+console.log('Boot check:', { hasSharedURL: !!sharedMatch, hasAutosave: !!autosaved, isValid: hasValidAutosave, age: autosaved ? Date.now() - autosaved.timestamp : null });
+
+// If both exist, prompt user to choose
+if (sharedMatch && hasValidAutosave) {
+  (async () => {
+    const useShared = await confirmModal(
+      'Load shared song or restore work in progress?',
+      `You have unsaved work from ${new Date(autosaved.timestamp).toLocaleString()}, but this URL contains a shared song. Which would you like to load?`,
+      'Load shared song'
+    );
+    if (useShared) {
+      loadSharedSong();
+    } else {
+      // Load auto-saved state
+      state.song = autosaved.song;
+      state.undoStack = autosaved.undoStack || [];
+      state.redoStack = autosaved.redoStack || [];
+      if (autosaved.selInstrument !== undefined) state.selInstrument = autosaved.selInstrument;
+      if (autosaved.selRow !== undefined) state.selRow = autosaved.selRow;
+      if (autosaved.octave !== undefined) state.octave = autosaved.octave;
+      if (autosaved.viewMode !== undefined) state.viewMode = autosaved.viewMode;
+      markClean();
+      refresh();
+      // Clear the hash so reloading doesn't re-prompt
+      history.replaceState(null, '', location.pathname + location.search);
+    }
+  })();
+} else if (sharedMatch) {
+  // Only shared song, load it
+  loadSharedSong();
+} else if (hasValidAutosave) {
+  // Only auto-save, restore it
+  state.song = autosaved.song;
+  state.undoStack = autosaved.undoStack || [];
+  state.redoStack = autosaved.redoStack || [];
+  if (autosaved.selInstrument !== undefined) state.selInstrument = autosaved.selInstrument;
+  if (autosaved.selRow !== undefined) state.selRow = autosaved.selRow;
+  if (autosaved.octave !== undefined) state.octave = autosaved.octave;
+  if (autosaved.viewMode !== undefined) state.viewMode = autosaved.viewMode;
+  markClean();
+  refresh();
+}
