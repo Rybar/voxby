@@ -73,6 +73,24 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
 .theme-picker input[type=color] { width: 28px; height: 22px; padding: 0; margin-left: 2px;
   border: 1px solid var(--border); border-radius: 4px; background: none; cursor: pointer; vertical-align: middle; }
 
+/* Master volume control + horizontal peak meter in #top's transport bar.
+   The meter shows live output level with a smooth decay (falls gradually
+   rather than instantly) and color zones: green (safe, -18dB to -6dB),
+   yellow (hot, -6dB to 0dB), red (clipping, above 0dB). The fill is a
+   linear-gradient that transitions through those zones, so the meter's
+   width directly shows which zone the peak landed in. */
+.volume-control { display: flex; align-items: center; gap: 6px; color: var(--text-dim); font-size: 10px; }
+.volume-control input[type=range] { width: 80px; }
+.level-meter { width: 120px; height: 6px; background: var(--bg0); border-radius: 3px;
+  border: 1px solid var(--border-dim); overflow: hidden; position: relative; }
+.level-meter-fill { height: 100%; width: 0%; border-radius: 2px; transition: width 0.05s ease-out;
+  background: linear-gradient(to right,
+    #34c759 0%, #34c759 50%,      /* green: -inf to -6dB */
+    #ffcc00 50%, #ffcc00 83.33%,  /* yellow: -6dB to 0dB */
+    #ff3b30 83.33%, #ff3b30 100%  /* red: 0dB+ */
+  );
+}
+
 /* Full-width bars top and bottom (file/transport, instrument/keyboard);
    the tracks row between them is where the screen's real estate goes —
    sequencer + as many pattern+fx columns as fit, scrolling horizontally

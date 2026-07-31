@@ -17,12 +17,12 @@
 import * as engine from './engine.js';
 import * as scales from './scales.js';
 import { state, markClean, isDirty } from './state.js';
-import { audioContext } from './audio.js';
+import { audioContext, masterGain } from './audio.js';
 import { svgIcon } from './icons.js';
 import { initInstrumentPanel, refreshInstrumentPanel } from './panels/instrument.js';
 import { initTrackerPanel, refreshTrackerPanel, followPlayback, stopFollowingPlayback, getPlayRange, setFollowRange } from './panels/tracker.js';
 import { initKeyboardPanel, refreshKeyboardPanel, previewNote, syncJammer, highlightPlaybackNotes, getJammer } from './panels/keyboard.js';
-import { initScopePanel, drawScope } from './panels/scope.js';
+import { initScopePanel, drawScope, getLastPeak } from './panels/scope.js';
 import { initLayout } from './panels/layout.js';
 import { initTheme } from './theme.js';
 import { keyHandledByFocus } from './focus.js';
@@ -404,8 +404,30 @@ function loadSharedSong() {
 
 // --- export ---
 $('export-js').onclick = () => {
-  downloadFile(new Blob([engine.songToJS(state.song)], { type: 'text/plain' }), 'song.js');
-  markClean();
+  const code = engine.songToJS(state.song);
+  openModal(`<h3>Export JS</h3>
+    <p class="hint">Choose how to export the song as JavaScript.</p>
+    <div class="row">
+      <button id="export-save-file" title="Download song.js to disk">Save .js file</button>
+      <button id="export-open-tab" title="View the exported JavaScript code">Open code in new tab</button>
+      <button id="picker-cancel" title="Close without exporting">Cancel</button>
+    </div>`);
+  $('export-save-file').onclick = () => {
+    downloadFile(new Blob([code], { type: 'text/plain' }), 'song.js');
+    markClean();
+    closeModal();
+  };
+  $('export-open-tab').onclick = () => {
+    const win = window.open('about:blank', '_blank');
+    if (win) {
+      win.document.write('<html><head><title>Exported Song</title></head><body><pre style="white-space:pre-wrap;word-wrap:break-word;font-family:monospace;"></pre></body></html>');
+      win.document.querySelector('pre').textContent = code;
+      win.document.close();
+    }
+    markClean();
+    closeModal();
+  };
+  $('picker-cancel').onclick = closeModal;
 };
 
 // doneFn receives (wave, player, live): the CPlayer instance, because the scope
@@ -488,7 +510,7 @@ function startPlayback(range) {
       const source = audioContext.createBufferSource();
       source.buffer = buffer;
       source.loop = $('loop-playback').checked;
-      source.connect(audioContext.destination);
+      source.connect(masterGain);
       // Fires on natural end (non-looping) as well as an explicit stop() --
       // stopSong() clears onended before calling stop() itself, so this
       // only ever runs for a song that actually played out on its own.
@@ -538,13 +560,41 @@ document.addEventListener('keydown', e => {
 // guesses is more interesting: both nodes really are connected to the shared
 // context's destination at once, so panels/scope.js sums them and what you see
 // is what you hear. getJammer() returns null until the first note is previewed
+// Level meter: reads the peak from scope.js's getLastPeak() every frame and
+// updates the meter fill width. The meter decays smoothly (falls gradually
+// rather than instantly dropping to zero) so brief peaks stay visible.
+let meterPeak = 0;
+const METER_DECAY = 0.92; // per-frame multiplier when no new peak arrives
+function updateLevelMeter() {
+  const currentPeak = getLastPeak();
+  // Rise instantly to new peaks, decay gradually when quiet
+  meterPeak = Math.max(currentPeak, meterPeak * METER_DECAY);
+  // Convert linear peak (0.0-1.0+) to percentage for the meter fill.
+  // The gradient's zones are at 50% (green/yellow) and 83.33% (yellow/red),
+  // which correspond to -6dB and 0dB respectively (roughly 0.5 and 1.0 linear).
+  // Scale so 0dB (1.0 peak) hits 83.33%, and clipping (>1.0) goes beyond.
+  const percent = Math.min(100, meterPeak * 83.33);
+  $('level-meter-fill').style.width = percent + '%';
+}
+
 // and currentPlayer is null when nothing plays; scope.js filters those out.
 (function tick() {
   const t = state.playing ? (audioContext.currentTime - playStartTime) % playDuration : 0;
   if (state.playing) followPlayback(t);
   drawScope([state.playing ? currentPlayer : null, getJammer()], t);
+  updateLevelMeter();
   requestAnimationFrame(tick);
 })();
+
+// Master volume control
+masterGain.gain.value = state.masterVolume;
+$('master-volume').value = Math.round(state.masterVolume * 100);
+$('master-volume').oninput = () => {
+  const v = +$('master-volume').value / 100;
+  state.masterVolume = v;
+  masterGain.gain.value = v;
+  savePrefs();
+};
 
 initTheme();
 initInstrumentPanel();

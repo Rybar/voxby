@@ -85,6 +85,9 @@ export const state = {
   kbRowCollapsed: false,
   bottomRowH: null,
   bottomRowCollapsed: false,
+
+  // Master volume (0-1, persisted). Applied via audio.js's masterGain.gain.value.
+  masterVolume: 0.7,
 };
 
 // Same convention as theme.js's accent color, one key for the lot since
@@ -93,7 +96,7 @@ export const state = {
 // this object also holds `song`, which must never come from localStorage.
 const PREFS_KEY = 'soundbox-prefs';
 const PREF_FIELDS = ['beatRows', 'editStep', 'kbLayout', 'scaleMode', 'scaleRoot', 'flavor', 'voicing', 'smoothVoicing', 'chordOn', 'chordTones',
-  'kbRowH', 'kbRowCollapsed', 'bottomRowH', 'bottomRowCollapsed'];
+  'kbRowH', 'kbRowCollapsed', 'bottomRowH', 'bottomRowCollapsed', 'masterVolume'];
 
 export function loadPrefs() {
   let saved;

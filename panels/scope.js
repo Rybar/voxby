@@ -97,18 +97,24 @@ function readSamples(sources, t, n) {
 // passages pump. Falling fast / rising slowly keeps transients honest --
 // a note's attack immediately drops the gain, while the recovery back up is
 // gradual enough to still read as a decay.
+//
+// Now also returns the detected peak (0.0-1.0+) for main.js's level meter.
+// This runs on the *pre-autogain* samples, so it reflects what actually
+// reaches the speakers, not the normalized display.
 const AUTOGAIN_FLOOR = 0.01, AUTOGAIN_MAX = 25;
-let smoothedGain = 1;
+let smoothedGain = 1, lastPeak = 0;
 function autoGain(data, n) {
   let peak = 0;
   for (let i = 0; i < n; i++) {
     const s = Math.abs(data[i * 2]);
     if (s > peak) peak = s;
   }
+  lastPeak = peak;
   const target = peak > AUTOGAIN_FLOOR ? Math.min(1 / peak, AUTOGAIN_MAX) : 1;
   smoothedGain += (target - smoothedGain) * (target < smoothedGain ? 0.5 : 0.12);
   return smoothedGain;
 }
+export function getLastPeak() { return lastPeak; }
 
 function drawOscilloscope(ctx, w, h, data) {
   const gain = autoGain(data, w);
@@ -204,7 +210,8 @@ function drawSpectrogram(ctx, w, h, data) {
 // making sound right now (a CPlayer and/or a CJammer -- see this file's top
 // comment), summed by readSamples above. Accepts either an array or a single
 // source; nulls are filtered out, and no live source at all draws a blank
-// canvas.
+// canvas. Peak detection runs in autoGain() above; main.js reads it back
+// via getLastPeak() to drive the level meter.
 export function drawScope(sources, t) {
   const canvas = $('scope-canvas');
   if (!canvas) return;
@@ -218,7 +225,7 @@ export function drawScope(sources, t) {
   }
 
   fillBg(ctx, w, h);
-  if (!live.length) return;
+  if (!live.length) { lastPeak = 0; return; }
   if (MODES[modeIndex] === 'spectrometer') drawSpectrometer(ctx, w, h, readSamples(live, t, SPEC_N));
   else drawOscilloscope(ctx, w, h, readSamples(live, t, w));
 }

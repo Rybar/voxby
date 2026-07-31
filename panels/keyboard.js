@@ -41,7 +41,7 @@
 
 import * as engine from '../engine.js';
 import { state, savePrefs } from '../state.js';
-import { audioContext } from '../audio.js';
+import { audioContext, masterGain } from '../audio.js';
 import { previewInstrI } from './instrument.js';
 import { noteKeys, enterNoteAtCursor, chordNotesFor, padChord, enterPadAtCursor, suggestedPads,
   resetChordContext, followedChord } from './tracker.js';
@@ -130,7 +130,11 @@ function setLit(el, source, on) {
 
 let jammer = null;
 function ensureJammer() {
-  if (!jammer) { jammer = new CJammer(); jammer.start(audioContext); }
+  if (!jammer) {
+    jammer = new CJammer();
+    // Pass masterGain as the destination so the jammer respects the master volume slider
+    jammer.start(audioContext, masterGain);
+  }
   return jammer;
 }
 

@@ -235,7 +235,19 @@ export function activeFxCell() {
   const [cmd, val] = fxGrid.get(0, fx.row);
   return {
     cmd, val,
-    set(prop, value) { fxGrid.set(0, fx.row, [prop + 1, value]); render(); },
+    set(prop, value) {
+      fxGrid.set(0, fx.row, [prop + 1, value]);
+      // Fast path: update just the FX cell's text content
+      const channel = state.selInstrument, row = fx.row;
+      if (patRowEls.length > 0 && patRowEls[channel] && patRowEls[channel][row]) {
+        const pn = patternNumFor(channel);
+        const fxCell = patRowEls[channel][row].children[4]; // FX is column 4
+        if (fxCell && pn) {
+          const f = state.song.songData[channel].c[pn - 1].f;
+          fxCell.textContent = fxGrid.toHTML([f[row], f[row + state.song.patternLen]]);
+        }
+      }
+    },
   };
 }
 
@@ -247,7 +259,7 @@ export function activeFxCell() {
 // stored nowhere.
 export function enterNoteAtCursor(note) {
   if (state.editMode !== 'pattern' || !focusedPatternNum()) return;
-  const row = pat.row;
+  const row = pat.row, col = pat.col, channel = state.selInstrument;
   if (state.chordOn) {
     // A chord is a row-level unit (the same way insertRowAtCursor already
     // treats a row), so it fills from column 0 rightward rather than from
@@ -262,11 +274,20 @@ export function enterNoteAtCursor(note) {
     // silence a note that's already decaying.
     previewNotes(notes.filter(n => n !== note));
     state.chordName = name;
+    // Chord writes all 4 columns, so fast path doesn't apply - full render
+    advanceCursor(row);
+    render(); notify();
   } else {
-    patGrid.set(pat.col, row, note);
+    // Single note: fast path
+    patGrid.set(col, row, note);
+    const oldRow = row, oldCol = col;
+    advanceCursor(row);
+    const newRow = pat.row, newCol = pat.col;
+    // Update just the cell that changed and move the cursor
+    updatePatternCell(channel, col, row);
+    moveCursor(oldCol, oldRow, newCol, newRow);
+    notify();
   }
-  advanceCursor(row);
-  render(); notify();
 }
 
 // How far an entry moves the cursor is state.editStep, a tracker's edit step
@@ -545,10 +566,18 @@ function patternsContextMenu(e) {
   e.preventDefault();
   dragMode = null;
   if (state.editMode !== 'pattern' || t.channel !== state.selInstrument || !isSelected(pat, t.col, t.row)) {
+    const oldChannel = state.selInstrument, oldMode = state.editMode;
+    const oldCol = pat.col, oldRow = pat.row;
     state.selInstrument = t.channel;
     state.editMode = 'pattern';
     setCursor(pat, t.col, t.row);
-    render(); notify();
+    // Fast path: if staying in pattern mode on the same channel, just move cursor
+    if (oldMode === 'pattern' && oldChannel === t.channel) {
+      moveCursor(oldCol, oldRow, t.col, t.row);
+      notify();
+    } else {
+      render(); notify();
+    }
   }
   openMenu(e.clientX, e.clientY, [
     { label: 'Select all', hint: 'Ctrl+A', run: () => { selectAll(pat, patGrid); render(); } },
@@ -596,9 +625,17 @@ function pasteSelection(mode) {
 // The whole paste, shared by Ctrl+V and the right-click menu so the two can't
 // drift.
 function doPaste(mode) {
+  const c = cursorFor(mode);
+  const isSingleCell = c.copyBuf && c.copyBuf.length === 1 && c.copyBuf[0].length === 1;
   pasteSelection(mode);
   if (mode === 'sequence') syncSeqIntoState();
-  render(); notify();
+  // Fast path: single-cell paste in pattern mode
+  if (mode === 'pattern' && isSingleCell) {
+    updatePatternCell(state.selInstrument, pat.col, pat.row);
+    notify();
+  } else {
+    render(); notify();
+  }
 }
 
 // --- keyboard navigation (arrows/home/end/backspace/delete), generic across the
@@ -638,7 +675,8 @@ function handleNav(e, mode) {
 // range (see panels/keyboard.js).
 export function shiftOctave(d) {
   state.octave = Math.min(8, Math.max(1, state.octave + d));
-  render(); notify();
+  // No pattern content changes, just an input preference — skip render
+  notify();
 }
 
 function onKeyDown(e) {
@@ -656,9 +694,21 @@ function onKeyDown(e) {
 
   if (e.code === 'Tab') {
     e.preventDefault();
+    const oldMode = state.editMode;
     const i = EDIT_MODES.indexOf(state.editMode);
     state.editMode = EDIT_MODES[(i + (e.shiftKey ? -1 : 1) + 3) % 3];
-    render(); notify();
+    // Fast path: just move the cursor highlight between grids/columns
+    if (oldMode === 'pattern' && state.editMode === 'fx') {
+      // Pattern → FX: keep same row, move to fx column (col 4)
+      moveCursor(pat.col, pat.row, 4, pat.row);
+    } else if (oldMode === 'fx' && state.editMode === 'pattern') {
+      // FX → Pattern: keep same row, move back to last pattern col
+      moveCursor(4, fx.row, pat.col, pat.row);
+    } else {
+      // Sequence ↔ Pattern/FX: different grids, needs full render
+      render();
+    }
+    notify();
     return;
   }
 
@@ -740,9 +790,30 @@ function onKeyDown(e) {
     }
   }
 
+  // Capture cursor position before handleNav moves it, for fast-path rendering below
+  const oldNavCol = pat.col, oldNavRow = pat.row;
+  const oldNavSingleCell = pat.col1 === pat.col2 && pat.row1 === pat.row2;
+
   if (handleNav(e, state.editMode)) {
     if (state.editMode === 'sequence') syncSeqIntoState();
-    render(); notify();
+
+    // Fast path: simple operations in pattern mode that don't need a full grid rebuild.
+    // Arrow keys/Home/End with no shift → just move cursor highlight (no cell content changes).
+    // Delete/Backspace on a single cell → update one cell + move cursor.
+    const isArrowOrHomeEnd = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.code);
+    const isDelete = e.code === 'Delete' || e.code === 'Backspace';
+    const fastPathOK = state.editMode === 'pattern' && !e.shiftKey && oldNavSingleCell
+      && (isArrowOrHomeEnd || isDelete);
+
+    if (fastPathOK) {
+      const channel = state.selInstrument;
+      const newCol = pat.col, newRow = pat.row;
+      if (isDelete) updatePatternCell(channel, oldNavCol, oldNavRow);
+      moveCursor(oldNavCol, oldNavRow, newCol, newRow);
+      notify();
+    } else {
+      render(); notify();
+    }
     e.preventDefault();
   }
 }
@@ -786,9 +857,12 @@ function patternsMouseDown(e) {
   // focused channel: one pattern cursor is shared by all of them, so an anchor in
   // one channel and a corner in another describes no real rectangle. Shift+click
   // on an unfocused channel therefore just focuses it, like a plain click.
+  const oldChannel = state.selInstrument, oldMode = state.editMode;
+  const oldCol = pat.col, oldRow = pat.row;
   const extend = e.shiftKey && t.channel === state.selInstrument;
   if (!extend) state.selInstrument = t.channel;
-  if (e.target.closest('.trk-fx')) {
+  const isFX = e.target.closest('.trk-fx');
+  if (isFX) {
     state.editMode = 'fx';
     if (extend) extendSelection(fx, 0, t.row);
     else setCursor(fx, 0, t.row);
@@ -799,7 +873,13 @@ function patternsMouseDown(e) {
     else setCursor(pat, t.col, t.row);
     dragMode = 'pattern';
   }
-  render(); notify();
+  // Fast path: single-cell click (no shift) within the same channel and mode
+  if (!extend && oldChannel === t.channel && oldMode === state.editMode) {
+    moveCursor(oldCol, oldRow, isFX ? 4 : t.col, t.row);
+    notify();
+  } else {
+    render(); notify();
+  }
 }
 function onMouseOver(e) {
   if (!dragMode) return;
@@ -921,6 +1001,44 @@ function scrollCursorIntoView() {
     ? $('seq-tbody').querySelector('td.cursor')
     : $('pat-scroll').querySelector('.pat-col.focused td.cursor');
   if (el) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+
+// Fast path for single-cell updates during note entry: mutates the DOM cell's
+// text and classes without rebuilding the whole grid. Caller is responsible
+// for moving the cursor (advanceCursor already did) and knowing this path is
+// safe -- it skips refreshSongControls/renderSequencer entirely, so it cannot
+// be used when those need updating.
+function updatePatternCell(channel, col, row) {
+  if (patRowEls.length === 0) { render(); return; } // grid not rendered yet
+  const rows = patRowEls[channel];
+  if (!rows || !rows[row]) { render(); return; } // pattern changed
+  const pn = patternNumFor(channel);
+  const cell = rows[row].children[col];
+  if (!cell) { render(); return; }
+  cell.textContent = pn ? patGrid.toHTML(state.song.songData[channel].c[pn - 1].n[row + col * state.song.patternLen]) : '';
+}
+
+// Moves the cursor cell highlight from (oldCol, oldRow) to (newCol, newRow) on
+// the focused channel without rebuilding the grid. Used by advanceCursor's
+// fast path after a note write.
+function moveCursor(oldCol, oldRow, newCol, newRow) {
+  const channel = state.selInstrument;
+  if (patRowEls.length === 0) { render(); return; }
+  const rows = patRowEls[channel];
+  if (!rows || !rows[oldRow] || !rows[newRow]) { render(); return; }
+  // Remove old cursor/curRow classes
+  if (oldRow >= 0 && rows[oldRow]) {
+    rows[oldRow].classList.remove('curRow');
+    if (oldCol >= 0 && oldCol < 5) rows[oldRow].children[oldCol].classList.remove('cursor', 'selected');
+  }
+  // Add new cursor/curRow classes
+  if (newRow >= 0 && rows[newRow]) {
+    rows[newRow].classList.add('curRow');
+    if (newCol >= 0 && newCol < 5) {
+      rows[newRow].children[newCol].classList.add('cursor');
+      rows[newRow].children[newCol].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+  }
 }
 
 function render() {

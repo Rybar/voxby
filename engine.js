@@ -988,8 +988,8 @@ export const songToJS = function (song) {
   var jsData = "";
 
   jsData += "// This music has been exported by Voxby, a tracker built on SoundBox.\n";
-  jsData += "// You can use it with http://sb.bitsnbites.eu/player-small.js in your\n";
-  jsData += "// own product; see http://sb.bitsnbites.eu/demo.html for an example.\n\n";
+  jsData += "// You can use it with https://sb.bitsnbites.eu/player-small.js in your\n";
+  jsData += "// own product; see https://sb.bitsnbites.eu/demo.html for an example.\n\n";
 
   jsData += "// Song data\n";
   jsData += "export default {\n";

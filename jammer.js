@@ -48,6 +48,7 @@ var CJammer = function () {
   // Web Audio context.
   var mAudioContext;
   var mScriptNode;
+  var mDestination;  // The node the jammer connects to (masterGain or .destination)
   var mSampleRate;
   var mRateScale;
 
@@ -320,8 +321,14 @@ var CJammer = function () {
   // gate modal is that unlock gesture now, so this file no longer needs
   // (and doesn't install) its own "resume on first click" listener like
   // upstream SoundBox did.
-  this.start = function (ctx) {
+  //
+  // `destination` param added for master volume support: the jammer now
+  // connects to an intermediate GainNode (panels/keyboard.js's jammerGain)
+  // instead of directly to ctx.destination, so the master volume slider
+  // (main.js) can scale both rendered songs and live jamming at once.
+  this.start = function (ctx, destination) {
     mAudioContext = ctx;
+    mDestination = destination || ctx.destination;
 
     // Backwards compat (e.g. Safari).
     if (!mAudioContext.createScriptProcessor) {
@@ -360,8 +367,8 @@ var CJammer = function () {
       mLastRight = rightBuf;
     };
 
-    // Connect the script node to the output.
-    mScriptNode.connect(mAudioContext.destination);
+    // Connect the script node to the output (or the destination passed to start()).
+    mScriptNode.connect(mDestination);
   };
 
   this.stop = function () {
