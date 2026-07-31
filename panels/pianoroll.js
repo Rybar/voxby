@@ -1,0 +1,1171 @@
+// Piano roll panel: horizontal note grid showing time (rows) horizontally and
+// pitch vertically. Alternative to the tracker view, toggled from the top bar.
+//
+// Shows ALL channels simultaneously with per-channel colors. The focused channel
+// (state.selInstrument) renders at full opacity; others at 30% to provide
+// context without clutter.
+//
+// Phase 1: Read-only rendering - draw the grid and all notes from all channels.
+// Future phases: cursor, note entry, dragging, selection, clipboard.
+
+import * as engine from '../engine.js';
+import { state } from '../state.js';
+
+const $ = id => document.getElementById(id);
+
+// Per-channel color palette (16 vibrant, distinguishable hues)
+const CHANNEL_COLORS = [
+  '#ff4444', '#44ff44', '#4444ff', '#ffff44',
+  '#ff44ff', '#44ffff', '#ff8844', '#88ff44',
+  '#8844ff', '#ffff88', '#ff88ff', '#88ffff',
+  '#ff4488', '#88ff88', '#8888ff', '#ffaa44'
+];
+
+// Grid dimensions
+const PIANO_KEY_WIDTH = 50;    // left margin for note labels
+const CELL_WIDTH = 16;         // horizontal pixels per pattern row
+let cellHeight = 9;            // vertical pixels per semitone (adjustable)
+const OCTAVE_RANGE = [1, 8];   // which octaves to show (C1 to B8 = 96 semitones)
+
+// Note names for labels
+const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+function isBlackKey(pitch) {
+  const n = pitch % 12;
+  return n === 1 || n === 3 || n === 6 || n === 8 || n === 10; // C#, D#, F#, G#, A#
+}
+
+// Convert SoundBox note number to pitch (MIDI-style, C4 = 60)
+// SoundBox's note numbers are offset by engine.NOTE_OFFSET (87)
+function noteToPitch(note) {
+  if (!note) return null;
+  return note - engine.NOTE_OFFSET;
+}
+
+// Convert pitch back to SoundBox note number
+function pitchToNote(pitch) {
+  return pitch + engine.NOTE_OFFSET;
+}
+
+// Get the note name with octave (e.g. "C4", "A#6")
+function pitchName(pitch) {
+  const octave = Math.floor(pitch / 12);
+  const name = NOTE_NAMES[pitch % 12];
+  return name + octave;
+}
+
+export function initPianoRoll() {
+  const panel = $('patterns-panel');
+  if (!panel) return;
+
+  // Create canvas container with flex wrapper and scrolling
+  panel.innerHTML = `
+    <div class="pianoroll-header">
+      <h3>Piano Roll</h3>
+      <label class="zoom-control" title="Vertical zoom: adjust row height">
+        Zoom: <input id="pianoroll-zoom" type="range" min="6" max="20" step="1" value="${cellHeight}">
+      </label>
+      <div class="spacer"></div>
+      <span class="hint" id="pianoroll-hint">All channels · Focused: Ch ${state.selInstrument + 1} · Pattern ${getCurrentPatternNum() || '—'}</span>
+    </div>
+    <div id="pianoroll-scroll" style="flex: 1; min-height: 0; overflow: auto; position: relative;">
+      <canvas id="pianoroll-canvas"></canvas>
+    </div>`;
+
+  const canvas = $('pianoroll-canvas');
+  const scroll = $('pianoroll-scroll');
+
+  // Size canvas to grid dimensions (not viewport)
+  const numSemitones = (OCTAVE_RANGE[1] - OCTAVE_RANGE[0] + 1) * 12;
+  const gridHeight = numSemitones * cellHeight;
+  const patternLen = state.song.patternLen;
+  // Grid width: piano keys + pattern area, extend beyond viewport for scrolling
+  const gridWidth = PIANO_KEY_WIDTH + patternLen * CELL_WIDTH + 200; // +200px extra space
+
+  canvas.width = gridWidth;
+  canvas.height = gridHeight;
+  canvas.style.width = gridWidth + 'px';
+  canvas.style.height = gridHeight + 'px';
+  canvas.style.display = 'block';
+
+  // Zoom control
+  $('pianoroll-zoom').oninput = () => {
+    const oldPitch = state.pianoRoll.cursorPitch;
+    cellHeight = +$('pianoroll-zoom').value;
+    initPianoRoll(); // re-render with new height
+    scrollToPitch(oldPitch); // maintain view position
+  };
+
+  // Mouse handlers
+  canvas.addEventListener('mousedown', onCanvasMouseDown);
+  canvas.addEventListener('mousemove', onCanvasMouseMove);
+  canvas.addEventListener('mouseup', onCanvasMouseUp);
+  canvas.addEventListener('contextmenu', onCanvasRightClick);
+
+  // Scroll to middle octave initially (C4 region)
+  const middlePitch = 60; // C4
+  scrollToPitch(middlePitch);
+
+  // Keyboard handlers (installed once, check viewMode before acting)
+  if (!window.pianoRollKeyHandlerInstalled) {
+    document.addEventListener('keydown', onPianoRollKeyDown);
+    window.pianoRollKeyHandlerInstalled = true;
+  }
+
+  render();
+}
+
+function scrollToPitch(pitch) {
+  const scroll = $('pianoroll-scroll');
+  if (!scroll) return;
+
+  const numSemitones = (OCTAVE_RANGE[1] - OCTAVE_RANGE[0] + 1) * 12;
+  const lowestPitch = OCTAVE_RANGE[0] * 12;
+  const y = (numSemitones - 1 - (pitch - lowestPitch)) * cellHeight;
+
+  // Center the pitch in the viewport
+  scroll.scrollTop = y - scroll.clientHeight / 2 + cellHeight / 2;
+}
+
+// Convert canvas pixel coordinates to (row, pitch)
+function canvasToGrid(x, y) {
+  const canvas = $('pianoroll-canvas');
+  if (!canvas) return null;
+
+  const rect = canvas.getBoundingClientRect();
+  const canvasX = x - rect.left;
+  const canvasY = y - rect.top;
+
+  const patternLen = state.song.patternLen;
+  const numSemitones = (OCTAVE_RANGE[1] - OCTAVE_RANGE[0] + 1) * 12;
+  const lowestPitch = OCTAVE_RANGE[0] * 12;
+
+  // Check if within grid bounds
+  if (canvasX < PIANO_KEY_WIDTH) return null;
+
+  const row = Math.floor((canvasX - PIANO_KEY_WIDTH) / CELL_WIDTH);
+  const pitch = lowestPitch + (numSemitones - 1 - Math.floor(canvasY / cellHeight));
+
+  if (row < 0 || row >= patternLen || pitch < lowestPitch || pitch >= lowestPitch + numSemitones) {
+    return null;
+  }
+
+  return { row, pitch };
+}
+
+let hoverCell = null;
+let mousePos = null;
+let dragStart = null;
+let isDragging = false;
+
+function onCanvasMouseMove(e) {
+  const canvas = $('pianoroll-canvas');
+  if (canvas) {
+    const rect = canvas.getBoundingClientRect();
+    mousePos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+
+  hoverCell = canvasToGrid(e.clientX, e.clientY);
+
+  // Handle dragging selection to move notes
+  if (isDragging && state.pianoRoll.dragSelection && hoverCell) {
+    const dx = e.clientX - state.pianoRoll.dragSelection.startX;
+    const dy = e.clientY - state.pianoRoll.dragSelection.startY;
+
+    state.pianoRoll.dragSelection.offsetRow = Math.round(dx / CELL_WIDTH);
+    state.pianoRoll.dragSelection.offsetPitch = -Math.round(dy / cellHeight);
+  }
+  // Handle drag selection (rectangular)
+  else if (isDragging && dragStart && hoverCell) {
+    // Build selection from drag rectangle
+    selectNotesInRect(dragStart.row, dragStart.pitch, hoverCell.row, hoverCell.pitch);
+  }
+
+  // Update hint text with hover info
+  const hint = $('pianoroll-hint');
+  if (hint && hoverCell) {
+    hint.textContent = `Row ${hoverCell.row} · ${pitchName(hoverCell.pitch)} · Ch ${state.selInstrument + 1}`;
+  } else if (hint) {
+    hint.textContent = `All channels · Focused: Ch ${state.selInstrument + 1} · Pattern ${getCurrentPatternNum() || '—'}`;
+  }
+
+  render();
+}
+
+function onCanvasMouseDown(e) {
+  const cell = canvasToGrid(e.clientX, e.clientY);
+  if (!cell) return;
+
+  if (e.button !== 0) return; // only left button
+
+  // Check if clicking on a selected note to start dragging
+  const clickedSelected = state.pianoRoll.selectedNotes.some(n => n.row === cell.row && n.pitch === cell.pitch);
+
+  if (clickedSelected && !e.shiftKey) {
+    // Start dragging the selection
+    state.pianoRoll.dragSelection = {
+      startX: e.clientX,
+      startY: e.clientY,
+      offsetRow: 0,
+      offsetPitch: 0
+    };
+    isDragging = true;
+    dragStart = null;
+    return;
+  }
+
+  if (e.shiftKey) {
+    // Shift+click: extend selection by rectangular region
+    dragStart = cell;
+    isDragging = true;
+  } else {
+    // Clear selection and start new drag
+    state.pianoRoll.selectedNotes = [];
+    dragStart = cell;
+    isDragging = true;
+  }
+}
+
+function onCanvasMouseUp(e) {
+  if (!isDragging) return;
+  isDragging = false;
+
+  const cell = canvasToGrid(e.clientX, e.clientY);
+
+  // Finish dragging selection - commit the move
+  if (state.pianoRoll.dragSelection) {
+    const offset = state.pianoRoll.dragSelection;
+    if (offset.offsetRow !== 0 || offset.offsetPitch !== 0) {
+      moveSelectedNotes(offset.offsetRow, offset.offsetPitch);
+    }
+    state.pianoRoll.dragSelection = null;
+    render();
+    dragStart = null;
+    return;
+  }
+
+  if (!cell || !dragStart) {
+    dragStart = null;
+    return;
+  }
+
+  // If drag was just a click (same cell), handle note placement/cursor
+  if (dragStart.row === cell.row && dragStart.pitch === cell.pitch) {
+    // Check if clicking on an existing note - if so, just move cursor
+    const existingNote = getNoteAt(cell.row, cell.pitch);
+    if (existingNote) {
+      state.pianoRoll.selectedNotes = []; // clear selection
+      state.pianoRoll.cursorRow = cell.row;
+      state.pianoRoll.cursorPitch = cell.pitch;
+      render();
+      dragStart = null;
+      return;
+    }
+
+    // If there are selected notes, just deselect them (don't place a note)
+    if (state.pianoRoll.selectedNotes.length > 0) {
+      state.pianoRoll.selectedNotes = [];
+      state.pianoRoll.cursorRow = cell.row;
+      state.pianoRoll.cursorPitch = cell.pitch;
+      render();
+      dragStart = null;
+      return;
+    }
+
+    // No selection and no note - place note at clicked position
+    const note = pitchToNote(cell.pitch);
+    if (placeNoteAtCursor(cell.row, note)) {
+      pushUndo();
+      state.pianoRoll.cursorRow = cell.row;
+      state.pianoRoll.cursorPitch = cell.pitch;
+      render();
+    }
+  }
+
+  dragStart = null;
+}
+
+function onCanvasRightClick(e) {
+  e.preventDefault(); // prevent context menu
+
+  const cell = canvasToGrid(e.clientX, e.clientY);
+  if (!cell) return;
+
+  // Delete note at clicked position
+  const note = pitchToNote(cell.pitch);
+  deleteNoteAt(cell.row, note);
+
+  // Move cursor to deleted position
+  state.pianoRoll.cursorRow = cell.row;
+  state.pianoRoll.cursorPitch = cell.pitch;
+  render();
+}
+
+// Check if a note exists at (row, pitch) in the focused channel
+function getNoteAt(row, pitch) {
+  const pn = state.song.songData[state.selInstrument].p[state.selRow];
+  if (!pn) return null;
+
+  const pattern = state.song.songData[state.selInstrument].c[pn - 1];
+  if (!pattern) return null;
+
+  const note = pitchToNote(pitch);
+  const patternLen = state.song.patternLen;
+
+  for (let col = 0; col < 4; col++) {
+    if (pattern.n[row + col * patternLen] === note) {
+      return { col, note };
+    }
+  }
+  return null;
+}
+
+// Place a note at the cursor row. Returns true if successful.
+function placeNoteAtCursor(row, note) {
+  const pn = state.song.songData[state.selInstrument].p[state.selRow];
+  if (!pn) return false; // no pattern assigned
+
+  const pattern = state.song.songData[state.selInstrument].c[pn - 1];
+  if (!pattern) return false;
+
+  const patternLen = state.song.patternLen;
+
+  // Find first empty column at this row
+  for (let col = 0; col < 4; col++) {
+    if (!pattern.n[row + col * patternLen]) {
+      pattern.n[row + col * patternLen] = note;
+      state.notify && state.notify(); // mark dirty
+      return true;
+    }
+  }
+
+  // All 4 columns full - flash feedback
+  flashFeedback('All 4 note columns full at this row');
+  return false;
+}
+
+function flashFeedback(message) {
+  const hint = $('pianoroll-hint');
+  if (!hint) return;
+  const original = hint.textContent;
+  hint.textContent = message;
+  hint.style.color = '#ff4444';
+  setTimeout(() => {
+    hint.textContent = original;
+    hint.style.color = '';
+  }, 1000);
+}
+
+function deleteNoteAtCursor() {
+  const row = state.pianoRoll.cursorRow;
+  const pitch = state.pianoRoll.cursorPitch;
+  const note = pitchToNote(pitch);
+  deleteNoteAt(row, note);
+}
+
+function deleteNoteAt(row, note) {
+  const pn = state.song.songData[state.selInstrument].p[state.selRow];
+  if (!pn) return;
+
+  const pattern = state.song.songData[state.selInstrument].c[pn - 1];
+  if (!pattern) return;
+
+  const patternLen = state.song.patternLen;
+
+  // Find and clear the note at this pitch
+  for (let col = 0; col < 4; col++) {
+    if (pattern.n[row + col * patternLen] === note) {
+      pattern.n[row + col * patternLen] = 0;
+      state.notify && state.notify();
+      render();
+      return;
+    }
+  }
+}
+
+function selectNotesInRect(row0, pitch0, row1, pitch1) {
+  const minRow = Math.min(row0, row1);
+  const maxRow = Math.max(row0, row1);
+  const minPitch = Math.min(pitch0, pitch1);
+  const maxPitch = Math.max(pitch0, pitch1);
+
+  const pn = state.song.songData[state.selInstrument].p[state.selRow];
+  if (!pn) return;
+
+  const pattern = state.song.songData[state.selInstrument].c[pn - 1];
+  if (!pattern) return;
+
+  const patternLen = state.song.patternLen;
+  state.pianoRoll.selectedNotes = [];
+
+  // Find all notes within rectangle
+  for (let row = minRow; row <= maxRow; row++) {
+    for (let pitch = minPitch; pitch <= maxPitch; pitch++) {
+      const note = pitchToNote(pitch);
+      for (let col = 0; col < 4; col++) {
+        if (pattern.n[row + col * patternLen] === note) {
+          state.pianoRoll.selectedNotes.push({ row, pitch, col });
+          break;
+        }
+      }
+    }
+  }
+}
+
+function moveSelectedNotes(offsetRow, offsetPitch) {
+  if (state.pianoRoll.selectedNotes.length === 0) return;
+
+  pushUndo();
+
+  const pn = state.song.songData[state.selInstrument].p[state.selRow];
+  if (!pn) return;
+
+  const pattern = state.song.songData[state.selInstrument].c[pn - 1];
+  if (!pattern) return;
+
+  const patternLen = state.song.patternLen;
+
+  // Store notes to move
+  const notesToMove = state.pianoRoll.selectedNotes.map(n => ({
+    row: n.row,
+    pitch: n.pitch,
+    col: n.col,
+    note: pattern.n[n.row + n.col * patternLen]
+  }));
+
+  // Clear original positions
+  for (const n of notesToMove) {
+    pattern.n[n.row + n.col * patternLen] = 0;
+  }
+
+  // Place at new positions
+  const newSelection = [];
+  for (const n of notesToMove) {
+    const newRow = n.row + offsetRow;
+    const newPitch = n.pitch + offsetPitch;
+
+    if (newRow < 0 || newRow >= patternLen) continue; // out of bounds
+
+    const newNote = pitchToNote(newPitch);
+
+    // Find empty column at new position
+    let placed = false;
+    for (let col = 0; col < 4; col++) {
+      if (!pattern.n[newRow + col * patternLen]) {
+        pattern.n[newRow + col * patternLen] = newNote;
+        newSelection.push({ row: newRow, pitch: newPitch, col });
+        placed = true;
+        break;
+      }
+    }
+  }
+
+  state.pianoRoll.selectedNotes = newSelection;
+  state.notify && state.notify();
+}
+
+function deleteSelection() {
+  if (state.pianoRoll.selectedNotes.length === 0) return;
+
+  pushUndo();
+
+  const pn = state.song.songData[state.selInstrument].p[state.selRow];
+  if (!pn) return;
+
+  const pattern = state.song.songData[state.selInstrument].c[pn - 1];
+  if (!pattern) return;
+
+  const patternLen = state.song.patternLen;
+
+  for (const note of state.pianoRoll.selectedNotes) {
+    pattern.n[note.row + note.col * patternLen] = 0;
+  }
+
+  state.pianoRoll.selectedNotes = [];
+  state.notify && state.notify();
+  render();
+}
+
+let pianoRollClipboard = null;
+
+function copySelection() {
+  if (state.pianoRoll.selectedNotes.length === 0) return;
+
+  const selected = state.pianoRoll.selectedNotes;
+  const minRow = Math.min(...selected.map(n => n.row));
+  const minPitch = Math.min(...selected.map(n => n.pitch));
+
+  const pn = state.song.songData[state.selInstrument].p[state.selRow];
+  if (!pn) return;
+
+  const pattern = state.song.songData[state.selInstrument].c[pn - 1];
+  if (!pattern) return;
+
+  const patternLen = state.song.patternLen;
+  const notes = [];
+
+  // Copy selected notes with relative positions
+  for (const n of selected) {
+    const note = pattern.n[n.row + n.col * patternLen];
+    notes.push({ row: n.row - minRow, pitch: n.pitch - minPitch, note });
+  }
+
+  pianoRollClipboard = { notes };
+
+  flashFeedback(`Copied ${notes.length} note${notes.length !== 1 ? 's' : ''}`);
+}
+
+function pasteAtCursor() {
+  if (!pianoRollClipboard) return;
+
+  pushUndo();
+
+  const pn = state.song.songData[state.selInstrument].p[state.selRow];
+  if (!pn) return;
+
+  const pattern = state.song.songData[state.selInstrument].c[pn - 1];
+  if (!pattern) return;
+
+  const patternLen = state.song.patternLen;
+  const baseRow = state.pianoRoll.cursorRow;
+  const basePitch = state.pianoRoll.cursorPitch;
+
+  const newSelection = [];
+  let placed = 0;
+
+  for (const noteData of pianoRollClipboard.notes) {
+    const targetRow = baseRow + noteData.row;
+    const targetPitch = basePitch + noteData.pitch;
+
+    if (targetRow < 0 || targetRow >= patternLen) continue; // out of bounds
+
+    const targetNote = pitchToNote(targetPitch);
+
+    // Find empty column
+    for (let col = 0; col < 4; col++) {
+      if (!pattern.n[targetRow + col * patternLen]) {
+        pattern.n[targetRow + col * patternLen] = targetNote;
+        newSelection.push({ row: targetRow, pitch: targetPitch, col });
+        placed++;
+        break;
+      }
+    }
+  }
+
+  // Keep pasted notes selected so they can be moved
+  state.pianoRoll.selectedNotes = newSelection;
+
+  state.notify && state.notify();
+  render();
+  flashFeedback(`Pasted ${placed} note${placed !== 1 ? 's' : ''}`);
+}
+
+function selectAll() {
+  const patternLen = state.song.patternLen;
+  const numSemitones = (OCTAVE_RANGE[1] - OCTAVE_RANGE[0] + 1) * 12;
+  const lowestPitch = OCTAVE_RANGE[0] * 12;
+
+  selectNotesInRect(0, lowestPitch, patternLen - 1, lowestPitch + numSemitones - 1);
+  render();
+}
+
+function pushUndo() {
+  const pn = state.song.songData[state.selInstrument].p[state.selRow];
+  if (!pn) return;
+
+  const pattern = state.song.songData[state.selInstrument].c[pn - 1];
+  if (!pattern) return;
+
+  // Save pattern state
+  state.pianoRoll.undoStack.push({
+    notes: [...pattern.n],
+    channel: state.selInstrument,
+    pattern: pn
+  });
+
+  // Limit undo stack to 50 entries
+  if (state.pianoRoll.undoStack.length > 50) {
+    state.pianoRoll.undoStack.shift();
+  }
+}
+
+function undo() {
+  if (state.pianoRoll.undoStack.length === 0) {
+    flashFeedback('Nothing to undo');
+    return;
+  }
+
+  const undoState = state.pianoRoll.undoStack.pop();
+
+  // Restore pattern state
+  const pn = state.song.songData[undoState.channel].p[state.selRow];
+  if (pn !== undoState.pattern) {
+    flashFeedback('Cannot undo - pattern changed');
+    return;
+  }
+
+  const pattern = state.song.songData[undoState.channel].c[pn - 1];
+  if (!pattern) return;
+
+  pattern.n = [...undoState.notes];
+
+  state.pianoRoll.selectedNotes = [];
+  state.notify && state.notify();
+  render();
+  flashFeedback('Undo');
+}
+
+function transposeSelection(semitones) {
+  if (state.pianoRoll.selectedNotes.length === 0) return;
+
+  pushUndo();
+
+  const pn = state.song.songData[state.selInstrument].p[state.selRow];
+  if (!pn) return;
+
+  const pattern = state.song.songData[state.selInstrument].c[pn - 1];
+  if (!pattern) return;
+
+  const patternLen = state.song.patternLen;
+  const newSelection = [];
+
+  // Transpose each selected note
+  for (const note of state.pianoRoll.selectedNotes) {
+    const oldNote = pattern.n[note.row + note.col * patternLen];
+    if (!oldNote) continue;
+
+    const newPitch = note.pitch + semitones;
+    const newNote = pitchToNote(newPitch);
+
+    // Update the note
+    pattern.n[note.row + note.col * patternLen] = newNote;
+    newSelection.push({ row: note.row, pitch: newPitch, col: note.col });
+  }
+
+  state.pianoRoll.selectedNotes = newSelection;
+  state.notify && state.notify();
+  render();
+
+  const direction = semitones > 0 ? 'up' : 'down';
+  const amount = Math.abs(semitones) === 12 ? '1 octave' : `${Math.abs(semitones)} semitone${Math.abs(semitones) > 1 ? 's' : ''}`;
+  flashFeedback(`Transposed ${direction} ${amount}`);
+}
+
+function onPianoRollKeyDown(e) {
+  // Only handle keys when piano roll is active
+  if (state.viewMode !== 'pianoroll') return;
+
+  // Skip if a control has focus
+  const focused = document.activeElement;
+  if (focused && (focused.tagName === 'INPUT' || focused.tagName === 'SELECT' || focused.tagName === 'BUTTON')) {
+    return;
+  }
+
+  const patternLen = state.song.patternLen;
+  const numSemitones = (OCTAVE_RANGE[1] - OCTAVE_RANGE[0] + 1) * 12;
+  const lowestPitch = OCTAVE_RANGE[0] * 12;
+  let row = state.pianoRoll.cursorRow;
+  let pitch = state.pianoRoll.cursorPitch;
+
+  // Delete key - clear note at cursor or selection
+  if (e.code === 'Delete' || e.code === 'Backspace') {
+    if (state.pianoRoll.selectedNotes.length > 0) {
+      deleteSelection();
+    } else {
+      deleteNoteAtCursor();
+    }
+    e.preventDefault();
+    return;
+  }
+
+  // Transpose selection
+  if (e.altKey && state.pianoRoll.selectedNotes.length > 0) {
+    if (e.code === 'ArrowUp') {
+      transposeSelection(e.shiftKey ? 12 : 1); // Shift = octave, plain = semitone
+      e.preventDefault();
+      return;
+    }
+    if (e.code === 'ArrowDown') {
+      transposeSelection(e.shiftKey ? -12 : -1);
+      e.preventDefault();
+      return;
+    }
+  }
+
+  // Clipboard and undo
+  if (e.ctrlKey || e.metaKey) {
+    if (e.code === 'KeyC' && state.pianoRoll.selectedNotes.length > 0) {
+      copySelection();
+      e.preventDefault();
+      return;
+    }
+    if (e.code === 'KeyV') {
+      pasteAtCursor();
+      e.preventDefault();
+      return;
+    }
+    if (e.code === 'KeyA') {
+      selectAll();
+      e.preventDefault();
+      return;
+    }
+    if (e.code === 'KeyZ') {
+      undo();
+      e.preventDefault();
+      return;
+    }
+  }
+
+  // Note entry via computer keyboard
+  // Use state.previewNote to get the note number and preview sound
+  // The tracker has already mapped the key to a note offset
+  if (state.previewNote && !e.ctrlKey && !e.altKey && !e.metaKey) {
+    // Try to get note from tracker's key mapping
+    // Keys are positional: Z-M bottom row, A-K middle row, Q-] top row
+    const noteKeyMap = {
+      'KeyZ': 0, 'KeyS': 1, 'KeyX': 2, 'KeyD': 3, 'KeyC': 4, 'KeyV': 5, 'KeyG': 6, 'KeyB': 7, 'KeyH': 8, 'KeyN': 9, 'KeyJ': 10, 'KeyM': 11,
+      'KeyQ': 12, 'Digit2': 13, 'KeyW': 14, 'Digit3': 15, 'KeyE': 16, 'KeyR': 17, 'Digit5': 18, 'KeyT': 19, 'Digit6': 20, 'KeyY': 21, 'Digit7': 22, 'KeyU': 23, 'KeyI': 24,
+    };
+    if (noteKeyMap[e.code] !== undefined) {
+      const noteOffset = noteKeyMap[e.code];
+      const note = state.previewNote(noteOffset); // preview and get the actual note number
+      if (placeNoteAtCursor(row, note)) {
+        // Advance cursor by editStep (horizontal only, pitch stays same)
+        row = Math.min(patternLen - 1, row + state.editStep);
+        state.pianoRoll.cursorRow = row;
+        // No vertical scroll needed - pitch didn't change
+        render();
+      }
+      e.preventDefault();
+      return;
+    }
+  }
+
+  switch (e.code) {
+    case 'ArrowRight':
+      row = e.ctrlKey ? patternLen - 1 : Math.min(patternLen - 1, row + 1);
+      if (!e.shiftKey) {
+        state.pianoRoll.selectedNotes = [];
+      }
+      e.preventDefault();
+      break;
+    case 'ArrowLeft':
+      row = e.ctrlKey ? 0 : Math.max(0, row - 1);
+      if (!e.shiftKey) {
+        state.pianoRoll.selectedNotes = [];
+      }
+      e.preventDefault();
+      break;
+    case 'ArrowUp':
+      pitch = e.ctrlKey ? lowestPitch + numSemitones - 1 : Math.min(lowestPitch + numSemitones - 1, pitch + 1);
+      if (!e.shiftKey) {
+        state.pianoRoll.selectedNotes = [];
+      }
+      e.preventDefault();
+      break;
+    case 'ArrowDown':
+      pitch = e.ctrlKey ? lowestPitch : Math.max(lowestPitch, pitch - 1);
+      if (!e.shiftKey) {
+        state.pianoRoll.selectedNotes = [];
+      }
+      e.preventDefault();
+      break;
+    case 'Home':
+      row = 0;
+      e.preventDefault();
+      break;
+    case 'End':
+      row = patternLen - 1;
+      e.preventDefault();
+      break;
+    case 'PageUp':
+      pitch = Math.min(lowestPitch + numSemitones - 1, pitch + 12); // up one octave
+      e.preventDefault();
+      break;
+    case 'PageDown':
+      pitch = Math.max(lowestPitch, pitch - 12); // down one octave
+      e.preventDefault();
+      break;
+    default:
+      return;
+  }
+
+  state.pianoRoll.cursorRow = row;
+  state.pianoRoll.cursorPitch = pitch;
+  scrollCursorIntoView();
+  render();
+}
+
+function scrollCursorIntoView() {
+  const scroll = $('pianoroll-scroll');
+  if (!scroll) return;
+
+  const numSemitones = (OCTAVE_RANGE[1] - OCTAVE_RANGE[0] + 1) * 12;
+  const lowestPitch = OCTAVE_RANGE[0] * 12;
+  const y = (numSemitones - 1 - (state.pianoRoll.cursorPitch - lowestPitch)) * cellHeight;
+
+  // Scroll only if cursor is outside viewport (with small margin to avoid jitter)
+  const scrollTop = scroll.scrollTop;
+  const scrollBottom = scrollTop + scroll.clientHeight;
+  const MARGIN = 2; // px tolerance to prevent tiny scroll jumps
+
+  if (y < scrollTop + MARGIN) {
+    scroll.scrollTop = y;
+  } else if (y + cellHeight > scrollBottom - MARGIN) {
+    scroll.scrollTop = y + cellHeight - scroll.clientHeight;
+  }
+}
+
+function getCurrentPatternNum() {
+  return state.song.songData[state.selInstrument].p[state.selRow] || 0;
+}
+
+function render() {
+  const canvas = $('pianoroll-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+
+  // Clear
+  ctx.fillStyle = '#0d0e11'; // --bg0
+  ctx.fillRect(0, 0, w, h);
+
+  // Calculate grid dimensions
+  const patternLen = state.song.patternLen;
+  const numSemitones = (OCTAVE_RANGE[1] - OCTAVE_RANGE[0] + 1) * 12;
+  const lowestPitch = OCTAVE_RANGE[0] * 12; // C of lowest octave
+
+  // Draw grid
+  drawGrid(ctx, w, h, patternLen, numSemitones, lowestPitch);
+
+  // Draw hover highlight
+  if (hoverCell) {
+    drawCellHighlight(ctx, hoverCell.row, hoverCell.pitch, lowestPitch, numSemitones, 'rgba(255, 255, 255, 0.05)');
+  }
+
+  // Draw playback cursor
+  if (playbackRow >= 0 && playbackRow < patternLen) {
+    const x = PIANO_KEY_WIDTH + playbackRow * CELL_WIDTH;
+    const gridHeight = numSemitones * cellHeight;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.fillRect(x, 0, CELL_WIDTH, gridHeight);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x + CELL_WIDTH / 2, 0);
+    ctx.lineTo(x + CELL_WIDTH / 2, gridHeight);
+    ctx.stroke();
+  }
+
+  // Draw full column indicators (rows where all 4 note columns are occupied in focused channel)
+  drawFullColumnIndicators(ctx, patternLen, numSemitones, lowestPitch);
+
+  // Draw all channels' notes
+  for (let channel = 0; channel < engine.MAX_CHANNELS; channel++) {
+    const pn = state.song.songData[channel].p[state.selRow];
+    if (!pn) continue; // no pattern at this sequence row
+    drawChannelNotes(ctx, channel, pn, patternLen, lowestPitch);
+  }
+
+  // Draw selected notes with highlight
+  drawSelectedNotes(ctx, lowestPitch, numSemitones);
+
+  // Draw marquee box while selecting
+  if (isDragging && dragStart && !state.pianoRoll.dragSelection && hoverCell) {
+    drawMarquee(ctx, dragStart, hoverCell, lowestPitch, numSemitones);
+  }
+
+  // Draw drag preview if moving selection
+  if (state.pianoRoll.dragSelection) {
+    drawDragPreview(ctx, lowestPitch, numSemitones);
+  }
+
+  // Draw cursor
+  drawCellHighlight(ctx, state.pianoRoll.cursorRow, state.pianoRoll.cursorPitch, lowestPitch, numSemitones, 'rgba(255, 255, 255, 0.3)', true);
+
+  // Draw cursor tooltip
+  if (mousePos && hoverCell) {
+    drawCursorTooltip(ctx, mousePos.x, mousePos.y, hoverCell.pitch);
+  }
+}
+
+function drawCursorTooltip(ctx, x, y, pitch) {
+  const text = pitchName(pitch);
+
+  ctx.font = '12px monospace';
+  ctx.textBaseline = 'top';
+
+  // Position text offset from cursor
+  const offsetX = 14;
+  const offsetY = 14;
+  let textX = x + offsetX;
+  let textY = y + offsetY;
+
+  // Keep text on screen
+  const canvas = $('pianoroll-canvas');
+  const metrics = ctx.measureText(text);
+  if (textX + metrics.width > canvas.width) textX = x - metrics.width - 4;
+  if (textY + 16 > canvas.height) textY = y - 20;
+
+  // Text with shadow for readability
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+  ctx.fillText(text, textX + 1, textY + 1);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(text, textX, textY);
+}
+
+function drawMarquee(ctx, start, end, lowestPitch, numSemitones) {
+  const row0 = Math.min(start.row, end.row);
+  const row1 = Math.max(start.row, end.row);
+  const pitch0 = Math.min(start.pitch, end.pitch);
+  const pitch1 = Math.max(start.pitch, end.pitch);
+
+  const x = PIANO_KEY_WIDTH + row0 * CELL_WIDTH;
+  const y = (numSemitones - 1 - (pitch1 - lowestPitch)) * cellHeight;
+  const w = (row1 - row0 + 1) * CELL_WIDTH;
+  const h = (pitch1 - pitch0 + 1) * cellHeight;
+
+  // Marquee fill
+  ctx.fillStyle = 'rgba(100, 150, 255, 0.1)';
+  ctx.fillRect(x, y, w, h);
+
+  // Marquee border (dashed)
+  ctx.strokeStyle = 'rgba(100, 150, 255, 0.8)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  ctx.strokeRect(x, y, w, h);
+  ctx.setLineDash([]); // reset dash
+}
+
+function drawSelectedNotes(ctx, lowestPitch, numSemitones) {
+  const selectedSet = new Set(state.pianoRoll.selectedNotes.map(n => `${n.row},${n.pitch}`));
+
+  for (const note of state.pianoRoll.selectedNotes) {
+    const x = PIANO_KEY_WIDTH + note.row * CELL_WIDTH;
+    const y = (numSemitones - 1 - (note.pitch - lowestPitch)) * cellHeight;
+
+    // Bright blue outline on selected notes
+    ctx.strokeStyle = 'rgba(100, 200, 255, 1.0)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x + 1, y + 1, CELL_WIDTH - 2, cellHeight - 2);
+  }
+}
+
+function drawDragPreview(ctx, lowestPitch, numSemitones) {
+  const offset = state.pianoRoll.dragSelection;
+
+  for (const note of state.pianoRoll.selectedNotes) {
+    const newRow = note.row + offset.offsetRow;
+    const newPitch = note.pitch + offset.offsetPitch;
+
+    const x = PIANO_KEY_WIDTH + newRow * CELL_WIDTH;
+    const y = (numSemitones - 1 - (newPitch - lowestPitch)) * cellHeight;
+
+    // Ghost preview of where notes will land
+    ctx.fillStyle = 'rgba(100, 200, 255, 0.3)';
+    drawRoundRect(ctx, x + 2, y + 2, CELL_WIDTH - 4, cellHeight - 4, 3);
+  }
+}
+
+function drawFullColumnIndicators(ctx, patternLen, numSemitones, lowestPitch) {
+  const pn = state.song.songData[state.selInstrument].p[state.selRow];
+  if (!pn) return;
+
+  const pattern = state.song.songData[state.selInstrument].c[pn - 1];
+  if (!pattern) return;
+
+  const gridX = PIANO_KEY_WIDTH;
+  const gridHeight = numSemitones * cellHeight;
+
+  // Check each row to see if all 4 columns are full
+  for (let row = 0; row < patternLen; row++) {
+    let count = 0;
+    for (let col = 0; col < 4; col++) {
+      if (pattern.n[row + col * patternLen]) count++;
+    }
+
+    if (count === 4) {
+      // Draw vertical highlight for this column
+      const x = gridX + row * CELL_WIDTH;
+      ctx.fillStyle = 'rgba(255, 100, 100, 0.15)'; // subtle red tint
+      ctx.fillRect(x, 0, CELL_WIDTH, gridHeight);
+    }
+  }
+}
+
+function drawCellHighlight(ctx, row, pitch, lowestPitch, numSemitones, color, isCursor = false) {
+  const x = PIANO_KEY_WIDTH + row * CELL_WIDTH;
+  const y = (numSemitones - 1 - (pitch - lowestPitch)) * cellHeight;
+
+  if (isCursor) {
+    // Cursor: outlined rectangle
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x + 1, y + 1, CELL_WIDTH - 2, cellHeight - 2);
+  } else {
+    // Hover: filled rectangle
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, CELL_WIDTH, cellHeight);
+  }
+}
+
+function drawGrid(ctx, w, h, patternLen, numSemitones, lowestPitch) {
+  const gridX = PIANO_KEY_WIDTH;
+  const gridY = 0;
+  const gridWidth = w - gridX; // fill entire width
+  const gridHeight = numSemitones * cellHeight;
+  const activeWidth = patternLen * CELL_WIDTH; // width of active pattern
+
+  // Alternating row shading for white/black keys
+  for (let i = 0; i < numSemitones; i++) {
+    const pitch = lowestPitch + i;
+    const y = gridY + (numSemitones - 1 - i) * cellHeight; // bottom to top
+
+    // Active pattern area (lighter with more contrast)
+    ctx.fillStyle = isBlackKey(pitch) ? '#16181e' : '#1d1f27';
+    ctx.fillRect(gridX, y, activeWidth, cellHeight);
+
+    // Beyond pattern area (darker)
+    ctx.fillStyle = isBlackKey(pitch) ? '#0a0b0d' : '#0d0e11';
+    ctx.fillRect(gridX + activeWidth, y, gridWidth - activeWidth, cellHeight);
+  }
+
+  // Vertical lines (beat markers) - only within active pattern
+  ctx.strokeStyle = '#2a2c33';
+  ctx.lineWidth = 1;
+  for (let row = 0; row <= patternLen; row++) {
+    const x = gridX + row * CELL_WIDTH;
+    // Thicker line every beatRows
+    if (row % state.beatRows === 0) {
+      ctx.strokeStyle = '#3a3c44';
+      ctx.lineWidth = 2;
+    } else {
+      ctx.strokeStyle = '#2a2c33';
+      ctx.lineWidth = 1;
+    }
+    ctx.beginPath();
+    ctx.moveTo(x + 0.5, gridY);
+    ctx.lineTo(x + 0.5, gridY + gridHeight);
+    ctx.stroke();
+  }
+
+  // Vertical line at pattern boundary (stronger visual separation)
+  ctx.strokeStyle = '#4a4c55';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(gridX + activeWidth + 0.5, gridY);
+  ctx.lineTo(gridX + activeWidth + 0.5, gridY + gridHeight);
+  ctx.stroke();
+
+  // Horizontal lines (octave markers) - extend full width
+  ctx.strokeStyle = '#2a2c33';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= numSemitones; i++) {
+    const pitch = lowestPitch + i;
+    const y = gridY + (numSemitones - i) * cellHeight;
+    // Thicker line at C notes, subtle line otherwise
+    if (pitch % 12 === 0) {
+      ctx.strokeStyle = '#4a4c55';
+      ctx.lineWidth = 1.5;
+    } else {
+      ctx.strokeStyle = 'rgba(42, 44, 51, 0.4)';
+      ctx.lineWidth = 1;
+    }
+    ctx.beginPath();
+    ctx.moveTo(gridX, y + 0.5);
+    ctx.lineTo(w, y + 0.5); // extend to full width
+    ctx.stroke();
+  }
+
+  // Piano key labels on the left
+  ctx.fillStyle = '#8a8c97';
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  for (let i = 0; i < numSemitones; i++) {
+    const pitch = lowestPitch + i;
+    const y = gridY + (numSemitones - 1 - i) * cellHeight + cellHeight / 2;
+    // Only label C notes to avoid clutter
+    if (pitch % 12 === 0) {
+      ctx.fillText(pitchName(pitch), PIANO_KEY_WIDTH - 6, y);
+    }
+  }
+}
+
+function drawChannelNotes(ctx, channel, patternNum, patternLen, lowestPitch) {
+  const pattern = state.song.songData[channel].c[patternNum - 1];
+  if (!pattern) return;
+
+  const isFocused = channel === state.selInstrument;
+  const color = CHANNEL_COLORS[channel % CHANNEL_COLORS.length];
+  const opacity = isFocused ? 1.0 : 0.3;
+
+  // Parse the color to apply opacity
+  const rgb = hexToRgb(color);
+  ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity})`;
+
+  const gridX = PIANO_KEY_WIDTH;
+  const numSemitones = (OCTAVE_RANGE[1] - OCTAVE_RANGE[0] + 1) * 12;
+
+  // Iterate through all 4 note columns
+  for (let col = 0; col < 4; col++) {
+    for (let row = 0; row < patternLen; row++) {
+      const note = pattern.n[row + col * patternLen];
+      if (!note) continue;
+
+      const pitch = noteToPitch(note);
+      if (pitch < lowestPitch || pitch >= lowestPitch + numSemitones) continue; // out of range
+
+      const x = gridX + row * CELL_WIDTH;
+      const y = (numSemitones - 1 - (pitch - lowestPitch)) * cellHeight;
+
+      // Draw note block (rounded rectangle)
+      drawRoundRect(ctx, x + 2, y + 2, CELL_WIDTH - 4, cellHeight - 4, 3);
+    }
+  }
+}
+
+function drawRoundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function hexToRgb(hex) {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result ? {
+    r: parseInt(result[1], 16),
+    g: parseInt(result[2], 16),
+    b: parseInt(result[3], 16)
+  } : { r: 255, g: 255, b: 255 };
+}
+
+// Export for tracker.js to call when view mode changes
+export function refreshPianoRoll() {
+  if (state.viewMode !== 'pianoroll') return;
+  render();
+}
+
+// Track playback position for drawing
+let playbackRow = -1;
+
+// Called from main.js during playback (same as tracker's followPlayback)
+export function followPlaybackPianoRoll(row) {
+  if (state.viewMode !== 'pianoroll') return;
+  playbackRow = row;
+  render();
+}
+
+export function stopFollowingPianoRoll() {
+  playbackRow = -1;
+  if (state.viewMode === 'pianoroll') render();
+}

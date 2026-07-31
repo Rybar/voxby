@@ -232,6 +232,20 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
                 cursor: pointer; white-space: nowrap; }
 .pat-col.focused .pat-col-head { color: var(--accent); }
 
+/* piano roll */
+.pianoroll-header { display: flex; align-items: center; gap: 8px; padding-bottom: 4px; }
+.pianoroll-header h3 { margin: 0; }
+.pianoroll-header .hint { color: var(--text-dim); font-size: 10px; }
+.pianoroll-header .spacer { flex: 1; }
+.zoom-control { display: flex; align-items: center; gap: 6px; color: var(--text-dim); font-size: 10px; }
+.zoom-control input[type=range] { width: 60px; }
+#pianoroll-canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
+
+/* view mode toggle */
+.view-toggle { display: flex; align-items: center; gap: 4px; color: var(--text-dim); font-size: 10px; }
+.view-toggle select { background: var(--bg2); color: inherit; border: 1px solid var(--border);
+                       border-radius: 4px; padding: 2px 5px; font: inherit; font-size: 11px; }
+
 /* instrument panel */
 #instrument-panel { display: flex; flex-direction: column; gap: 6px; }
 .instr-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

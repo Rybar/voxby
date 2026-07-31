@@ -34,16 +34,22 @@
     <div class="row">
       <button id="new-song" title="Start an empty song — one channel, 32 rows per pattern, 120 BPM. Asks first if the current song has unsaved changes.">New</button>
       <button id="open-song" title="Open a song: the built-in library, or a file — a .js exported from Voxby or the old sonant-x editor, or a legacy binary .snd">Open</button>
-      <button id="export-js" title="Download the song as an ES module (export default {...}) — drop it in src/js/sounds/ to play in a game, and it re-opens here. Doubles as Save: it clears the unsaved-changes flag.">Export JS</button>
-      <button id="export-wav" title="Render the whole song to a 44.1 kHz WAV file and download it">Export WAV</button>
-      <button id="share-song" title="Get a link with the whole song packed into it, for pasting somewhere — nothing is uploaded, the song travels in the URL">Share</button>
+      <button id="export-js" title="Download the song as an ES module (export default {...}) — drop it in src/js/sounds/ to play in a game, and it re-opens here. Doubles as Save: it clears the unsaved-changes flag.">Export</button>
+      <button id="export-wav" title="Render the whole song to a 44.1 kHz WAV file and download it">WAV</button>
     </div>
 
     <div class="row">
       <button id="play-song" title="Render and play the whole song from the top (Ctrl+Space)">Play</button>
       <button id="play-selected" title="Play the sequence editor's selection, or solo-play the pattern being edited (same as Space)">Play selected</button>
       <button id="stop-song" title="Stop playing (Space)">Stop</button>
+      <button id="share-song" title="Get a link with the whole song packed into it, for pasting somewhere — nothing is uploaded, the song travels in the URL">Share</button>
       <label title="Repeat whatever gets played, instead of stopping at the end"><input id="loop-playback" type="checkbox"> loop</label>
+      <label class="view-toggle" title="Switch between traditional tracker columns and horizontal piano roll">
+        View: <select id="view-mode">
+          <option value="tracker">Tracker</option>
+          <option value="pianoroll">Piano Roll</option>
+        </select>
+      </label>
       <label class="volume-control" title="Master volume: scales all playback and live jamming. The level meter shows live output: green is safe, yellow approaches 0dB, red is clipping — lower the volume or reduce instrument oscillator levels if it stays in the red.">
         Vol <input id="master-volume" type="range" min="0" max="100" step="1">
         <div class="level-meter" title="Live output level: green (safe), yellow (hot), red (clipping)">

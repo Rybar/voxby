@@ -39,6 +39,7 @@ import { SCALES, PITCH_NAMES, QUALITIES, slotOf, pitchName, scaleKeys, harmonyOf
 import { padOf, rankNext } from '../chords.js';
 import { openMenu } from '../menu.js';
 import { keyHandledByFocus } from '../focus.js';
+import { initPianoRoll } from './pianoroll.js';
 
 const $ = id => document.getElementById(id);
 const NOTE_NAMES = ['C-', 'C#', 'D-', 'D#', 'E-', 'F-', 'F#', 'G-', 'G#', 'A-', 'A#', 'B-'];
@@ -1050,8 +1051,22 @@ function moveCursor(oldCol, oldRow, newCol, newRow) {
 function render() {
   refreshSongControls();
   renderSequencer();
-  renderPatterns();
-  scrollCursorIntoView();
+  if (state.viewMode === 'pianoroll') {
+    initPianoRoll();
+  } else {
+    // Ensure tracker patterns panel structure exists
+    if (!$('pat-scroll')) {
+      initTrackerPatternsPanel();
+    }
+    renderPatterns();
+    scrollCursorIntoView();
+  }
+}
+
+function initTrackerPatternsPanel() {
+  $('patterns-panel').innerHTML =
+    `<h3 title="The notes in the patterns playing at the sequencer's current row — every channel side by side. The highlighted column is the one you are editing.">Patterns</h3>
+     <div class="pat-scroll" id="pat-scroll"></div>`;
 }
 
 // --- playback row-following: main.js calls this every frame with the elapsed

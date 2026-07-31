@@ -21,6 +21,7 @@ import { audioContext, masterGain } from './audio.js';
 import { svgIcon } from './icons.js';
 import { initInstrumentPanel, refreshInstrumentPanel } from './panels/instrument.js';
 import { initTrackerPanel, refreshTrackerPanel, followPlayback, stopFollowingPlayback, getPlayRange, setFollowRange } from './panels/tracker.js';
+import { followPlaybackPianoRoll, stopFollowingPianoRoll } from './panels/pianoroll.js';
 import { initKeyboardPanel, refreshKeyboardPanel, previewNote, syncJammer, highlightPlaybackNotes, getJammer } from './panels/keyboard.js';
 import { initScopePanel, drawScope, getLastPeak } from './panels/scope.js';
 import { initLayout } from './panels/layout.js';
@@ -493,6 +494,7 @@ function stopSong() {
   }
   currentPlayer = null;
   stopFollowingPlayback();
+  stopFollowingPianoRoll();
   state.playing = false;
 }
 // `range` is undefined for a full-song Play, or a
@@ -587,7 +589,15 @@ function updateLevelMeter() {
 // and currentPlayer is null when nothing plays; scope.js filters those out.
 (function tick() {
   const t = state.playing ? (audioContext.currentTime - playStartTime) % playDuration : 0;
-  if (state.playing) followPlayback(t);
+  if (state.playing) {
+    followPlayback(t);
+    // Extract current row for piano roll playback cursor
+    const rowLen = state.song.rowLen;
+    const patternLen = state.song.patternLen;
+    const totalRows = Math.floor(t * 44100 / rowLen);
+    const currentRow = totalRows % patternLen;
+    followPlaybackPianoRoll(currentRow);
+  }
   drawScope([state.playing ? currentPlayer : null, getJammer()], t);
   updateLevelMeter();
   requestAnimationFrame(tick);
@@ -609,5 +619,14 @@ initTrackerPanel();
 initKeyboardPanel();
 initScopePanel();
 initLayout();
+
+// View mode toggle (tracker vs piano roll)
+$('view-mode').value = state.viewMode;
+$('view-mode').onchange = () => {
+  state.viewMode = $('view-mode').value;
+  $('view-mode').blur(); // return focus to document
+  refresh(); // re-render the view
+};
+
 refresh();
 loadSharedSong();

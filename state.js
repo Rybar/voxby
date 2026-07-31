@@ -76,6 +76,18 @@ export const state = {
   // transient UI feedback -- not persisted.
   chordName: '',
 
+  // --- view mode: tracker (traditional columns) or pianoroll (horizontal grid) ---
+  viewMode: 'tracker',  // 'tracker' | 'pianoroll'
+  pianoRoll: {
+    scrollY: 0,        // vertical scroll position (semitones from bottom)
+    cursorRow: 0,      // time position (pattern row)
+    cursorPitch: 60,   // note number (C4 = 60)
+    dragNote: null,    // {channel, col, row, originalPitch, originalRow} when dragging
+    selectedNotes: [], // array of {row, pitch, col} - actual notes that are selected
+    dragSelection: null, // {startX, startY, offsetRow, offsetPitch} when dragging selection
+    undoStack: [],     // undo history
+  },
+
   // --- row layout (panels/layout.js). Heights are px, null meaning "use the
   // row's natural/CSS default size" -- so a user who never touches a handle
   // gets exactly today's layout. The tracks row (sequencer + patterns) is
