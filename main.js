@@ -637,8 +637,6 @@ const sharedMatch = /[#&]s=([\w-]+)/.exec(location.hash);
 const autosaved = loadAutosave();
 const hasValidAutosave = autosaved && (Date.now() - (autosaved.timestamp || 0)) < 7 * 24 * 60 * 60 * 1000;
 
-console.log('Boot check:', { hasSharedURL: !!sharedMatch, hasAutosave: !!autosaved, isValid: hasValidAutosave, age: autosaved ? Date.now() - autosaved.timestamp : null });
-
 // If both exist, prompt user to choose
 if (sharedMatch && hasValidAutosave) {
   (async () => {
