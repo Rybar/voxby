@@ -9,7 +9,7 @@
 // Future phases: cursor, note entry, dragging, selection, clipboard.
 
 import * as engine from '../engine.js';
-import { state } from '../state.js';
+import { state, savePrefs } from '../state.js';
 import { keyHandledByFocus } from '../focus.js';
 
 const $ = id => document.getElementById(id);
@@ -27,9 +27,29 @@ const PIANO_KEY_WIDTH = 50;    // left margin for note labels
 const CELL_WIDTH = 16;         // horizontal pixels per pattern row
 let cellHeight = 9;            // vertical pixels per semitone (adjustable)
 const OCTAVE_RANGE = [1, 8];   // which octaves to show (C1 to B8 = 96 semitones)
+const MIN_NOTE_WIDTH = 4;      // px, so a very short envelope still shows a block
+const TAIL_ALPHA = 0.45;       // the sounding tail is dimmer than the note's first row
 
 // Note names for labels
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+// Estimated sounding length of one note of `instrument`, in pattern rows.
+// SoundBox plays every note as one envelope: attack, sustain and release last
+// (param * param * 4) samples each (player-small.js createNote), and one
+// pattern row is song.rowLen samples. Both counts are in the same 44100 Hz
+// sample domain, so their ratio is the length in rows.
+//
+// FX are deliberately not part of this. Delay and reverb keep sound after the
+// envelope ends, but they do not change when the note itself stops, and their
+// tails are not a length the musician wrote. The number is an estimate for the
+// eye only: it never changes the song data, the hit boxes or playback.
+function noteLengthRows(instrument) {
+  const i = instrument.i;
+  const samples = (i[engine.ENV_ATTACK] ** 2 + i[engine.ENV_SUSTAIN] ** 2 + i[engine.ENV_RELEASE] ** 2) * 4;
+  const rowLen = state.song.rowLen;
+  if (!(rowLen > 0)) return 1;
+  return samples / rowLen;
+}
 
 function isBlackKey(pitch) {
   const n = pitch % 12;
@@ -66,6 +86,9 @@ export function initPianoRoll() {
       <label class="zoom-control" title="Vertical zoom: adjust row height">
         Zoom: <input id="pianoroll-zoom" type="range" min="6" max="20" step="1" value="${cellHeight}">
       </label>
+      <label class="zoom-control" title="Draw each note as long as its instrument's envelope sounds (attack + sustain + release). An estimate for the eye only: FX tails are not counted, and the note data does not change.">
+        <input id="pianoroll-notelen" type="checkbox" ${state.pianoRollNoteLen ? 'checked' : ''}> Length
+      </label>
       <div class="spacer"></div>
       <span class="hint" id="pianoroll-hint">All channels · Focused: Ch ${state.selInstrument + 1} · Pattern ${getCurrentPatternNum() || '—'}</span>
     </div>
@@ -95,6 +118,13 @@ export function initPianoRoll() {
     cellHeight = +$('pianoroll-zoom').value;
     initPianoRoll(); // re-render with new height
     scrollToPitch(oldPitch); // maintain view position
+  };
+
+  // Envelope-length note blocks. Drawing only, so a redraw is enough.
+  $('pianoroll-notelen').onchange = () => {
+    state.pianoRollNoteLen = $('pianoroll-notelen').checked;
+    savePrefs();
+    render();
   };
 
   // Mouse handlers
@@ -1392,10 +1422,15 @@ function drawChannelNotes(ctx, channel, patternNum, patternLen, lowestPitch) {
 
   // Parse the color to apply opacity
   const rgb = hexToRgb(color);
-  ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity})`;
+  const headFill = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity})`;
+  const tailFill = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity * TAIL_ALPHA})`;
 
   const gridX = PIANO_KEY_WIDTH;
   const numSemitones = (OCTAVE_RANGE[1] - OCTAVE_RANGE[0] + 1) * 12;
+
+  // Envelope length is a property of the channel's instrument, so it is the
+  // same for every note here -- compute it once.
+  const lenRows = state.pianoRollNoteLen ? noteLengthRows(state.song.songData[channel]) : 1;
 
   // Iterate through all 4 note columns
   for (let col = 0; col < 4; col++) {
@@ -1409,8 +1444,17 @@ function drawChannelNotes(ctx, channel, patternNum, patternLen, lowestPitch) {
       const x = gridX + row * CELL_WIDTH;
       const y = (numSemitones - 1 - (pitch - lowestPitch)) * cellHeight;
 
-      // Draw note block (rounded rectangle)
-      drawRoundRect(ctx, x + 2, y + 2, CELL_WIDTH - 4, cellHeight - 4, 3);
+      // Width in pixels: the envelope length, floored so a very short note is
+      // still visible and capped at the end of the pattern.
+      const maxW = (patternLen - row) * CELL_WIDTH - 4;
+      const w = Math.max(MIN_NOTE_WIDTH, Math.min(lenRows * CELL_WIDTH - 4, maxW));
+
+      // The note body, then its first row again at full strength. The brighter
+      // head keeps the note's start readable where long notes overlap.
+      ctx.fillStyle = tailFill;
+      drawRoundRect(ctx, x + 2, y + 2, w, cellHeight - 4, 3);
+      ctx.fillStyle = headFill;
+      drawRoundRect(ctx, x + 2, y + 2, Math.min(w, CELL_WIDTH - 4), cellHeight - 4, 3);
     }
   }
 }

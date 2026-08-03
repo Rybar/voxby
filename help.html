@@ -237,6 +237,19 @@ transpose. The undo stack holds 50 operations.</p>
 height from 6 to 20 pixels. Zoom out to see more octaves at once; zoom in for
 easier mouse targeting.</p>
 
+<h3>Note length</h3>
+
+<p>The <strong>Length</strong> checkbox draws each note as wide as it sounds. The
+width comes from the channel instrument's envelope — attack plus sustain plus
+release — measured against the song tempo. Change an envelope slider or the BPM
+and the blocks change with it. The first row of each note stays brighter, so you
+can still see where a note starts under a long tail.</p>
+
+<p>This is an estimate for the eye only. It never changes the song data, and a
+note is still one cell to click, to select and to delete. FX are not counted:
+delay and reverb keep sound after the envelope ends, but they do not change the
+note itself. Turn the checkbox off for one block per row.</p>
+
 <h3>Playback</h3>
 
 <p>During playback, a vertical line sweeps through the piano roll showing the

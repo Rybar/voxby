@@ -1479,7 +1479,12 @@ export function initTrackerPanel() {
 
   $('song-bpm').oninput = () => {
     const bpm = +$('song-bpm').value;
-    if (bpm >= 10 && bpm <= 1000) state.song.rowLen = engine.calcSamplesPerRow(bpm);
+    if (bpm >= 10 && bpm <= 1000) {
+      state.song.rowLen = engine.calcSamplesPerRow(bpm);
+      // A row now holds more or fewer samples, so the piano roll's
+      // envelope-length note blocks are a different number of rows wide.
+      renderPianoRoll();
+    }
   };
   $('song-rpp').onchange = () => {
     const len = +$('song-rpp').value;

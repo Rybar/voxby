@@ -26,6 +26,7 @@ import { svgIcon } from '../icons.js';
 import { activeFxCell } from './tracker.js';
 import { syncJammer } from './keyboard.js';
 import { getAccent } from '../theme.js';
+import { render as renderPianoRoll } from './pianoroll.js';
 
 const $ = id => document.getElementById(id);
 
@@ -88,6 +89,9 @@ function setInstrProp(prop, value) {
   if (cell) cell.set(prop, value);
   $('instr-preset').value = '';
   syncJammer();
+  // The piano roll draws each note as wide as this envelope sounds, so an
+  // envelope edit must repaint it. A no-op in the tracker view.
+  if (prop === engine.ENV_ATTACK || prop === engine.ENV_SUSTAIN || prop === engine.ENV_RELEASE) renderPianoRoll();
 }
 
 // The instrument array to *display*: the real instrument, unless an FX cell is

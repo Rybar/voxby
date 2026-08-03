@@ -86,6 +86,10 @@ export const state = {
 
   // --- view mode: tracker (traditional columns) or pianoroll (horizontal grid) ---
   viewMode: 'tracker',  // 'tracker' | 'pianoroll'
+  // Draw each piano-roll note as wide as its instrument's envelope sounds
+  // (panels/pianoroll.js noteLengthRows) instead of one cell. A view option,
+  // not song data: it changes no note and no hit box.
+  pianoRollNoteLen: true,
   // Per-channel mute, toggled by clicking a channel number in the sequencer
   // header (both views). A muted channel is left out of Space / "Play selected"
   // (panels/tracker.js's getPlayRange) and cannot be edited in the piano roll.
@@ -127,7 +131,7 @@ export const state = {
 // this object also holds `song`, which must never come from localStorage.
 const PREFS_KEY = 'soundbox-prefs';
 const PREF_FIELDS = ['beatRows', 'editStep', 'kbLayout', 'scaleRoot', 'voicing', 'smoothVoicing', 'chordOn', 'chordTones',
-  'kbRowH', 'kbRowCollapsed', 'bottomRowH', 'bottomRowCollapsed', 'masterVolume'];
+  'kbRowH', 'kbRowCollapsed', 'bottomRowH', 'bottomRowCollapsed', 'masterVolume', 'pianoRollNoteLen'];
 
 export function loadPrefs() {
   let saved;
