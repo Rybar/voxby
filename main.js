@@ -21,7 +21,7 @@ import { audioContext, masterGain } from './audio.js';
 import { svgIcon } from './icons.js';
 import { initInstrumentPanel, refreshInstrumentPanel } from './panels/instrument.js';
 import { initTrackerPanel, refreshTrackerPanel, followPlayback, stopFollowingPlayback, getPlayRange, setFollowRange, noteKeys } from './panels/tracker.js';
-import { followPlaybackPianoRoll, stopFollowingPianoRoll } from './panels/pianoroll.js';
+import { followPlaybackPianoRoll, stopFollowingPianoRoll, refreshPianoRoll } from './panels/pianoroll.js';
 import { initKeyboardPanel, refreshKeyboardPanel, previewNote, syncJammer, highlightPlaybackNotes, getJammer } from './panels/keyboard.js';
 import { initScopePanel, drawScope, getLastPeak } from './panels/scope.js';
 import { initLayout } from './panels/layout.js';
@@ -36,7 +36,10 @@ import { DEMO_SONGS, SECTIONS } from './songs/index.js';
 // audioContext's .state so tests can confirm the startup gate actually
 // resumed it, without importing audio.js themselves. getPlayRange is what Space
 // is about to play, which a test can read without waiting on a render.
-window.soundbox = { state, engine, scales, loadSong, loadDemoSong, DEMO_SONGS, importSongFile, getJammer, getPlayRange, getAudioState: () => audioContext.state };
+// refreshPianoRoll repaints the roll after a state write: nothing draws it on a
+// timer, so a script that sets a cursor or a selection would otherwise capture
+// the frame before its own edit (scripts/help-shots.mjs did exactly that).
+window.soundbox = { state, engine, scales, loadSong, loadDemoSong, DEMO_SONGS, importSongFile, getJammer, getPlayRange, refreshPianoRoll, getAudioState: () => audioContext.state };
 
 const $ = id => document.getElementById(id);
 
