@@ -10,6 +10,7 @@
 
 import * as engine from '../engine.js';
 import { state } from '../state.js';
+import { keyHandledByFocus } from '../focus.js';
 
 const $ = id => document.getElementById(id);
 
@@ -61,7 +62,7 @@ export function initPianoRoll() {
   // Create canvas container with flex wrapper and scrolling
   panel.innerHTML = `
     <div class="pianoroll-header">
-      <h3>Piano Roll</h3>
+      <h3 title="Time runs left to right, pitch bottom to top. Click an empty cell to place a note, right-click a note to delete it. The computer keys write their own pitch and pull the cursor onto it; Caps Lock writes the note the cursor is already on. Either way the row moves on by the edit step.">Piano Roll</h3>
       <label class="zoom-control" title="Vertical zoom: adjust row height">
         Zoom: <input id="pianoroll-zoom" type="range" min="6" max="20" step="1" value="${cellHeight}">
       </label>
@@ -194,6 +195,17 @@ function onCanvasMouseMove(e) {
 }
 
 function onCanvasMouseDown(e) {
+  // A click on the grid claims the keyboard back from the sequencer. Without
+  // this, clicking a sequencer cell and then clicking a piano-roll cell to place
+  // a note (both work by mouse regardless of editMode) left editMode stuck at
+  // 'sequence' -- exactly the sticky-mode trap the first version of this fix was
+  // for, just relocated: every note key afterwards would have gone to
+  // seqGrid instead of the piano roll, with no visible reason why. See
+  // onKeyDown's guard (tracker.js) and this module's own mirror of it. notify()
+  // (rather than a bare assignment) so the sequencer's own render drops the
+  // cursor highlight it draws for editMode 'sequence' -- this module never
+  // touches that DOM itself.
+  if (state.editMode === 'sequence') { state.editMode = 'pattern'; state.notify && state.notify(); }
   const cell = canvasToGrid(e.clientX, e.clientY);
   if (!cell) return;
 
@@ -275,7 +287,7 @@ function onCanvasMouseUp(e) {
 
     // Only allow note placement if focused channel is enabled
     if (!state.channelsEnabled[state.selInstrument]) {
-      flashFeedback(`Channel ${state.selInstrument + 1} is disabled - enable it to place notes`);
+      flashFeedback(`Channel ${state.selInstrument + 1} is muted - click its number in the sequencer to place notes`);
       dragStart = null;
       return;
     }
@@ -370,6 +382,35 @@ function placeNoteAtCursor(row, note, preview = true) {
   // All 4 columns full - flash feedback
   flashFeedback('All 4 note columns full at this row');
   return false;
+}
+
+// Step entry at the cursor cell (CapsLock): write the pitch the cursor is on,
+// sound the row it lands in, and move on by the edit step -- the same distance a
+// released note key advances by. Refuses the same cases the mouse does, and says
+// which one it hit rather than doing nothing: an empty cell is the only place a
+// note can go, and a second note at the same pitch would just be a doubled
+// unison in another column.
+function enterNoteAtCursorCell() {
+  const row = state.pianoRoll.cursorRow, pitch = state.pianoRoll.cursorPitch;
+  if (!state.channelsEnabled[state.selInstrument]) {
+    flashFeedback(`Channel ${state.selInstrument + 1} is muted - click its number in the sequencer to place notes`);
+    return;
+  }
+  if (!getCurrentPatternNum()) {
+    flashFeedback('No pattern at this sequence row - assign one in the sequencer');
+    return;
+  }
+  if (getNoteAt(row, pitch)) {
+    flashFeedback(`${pitchName(pitch)} is already at the cursor`);
+    return;
+  }
+  pushUndo();
+  // preview left on, so this sounds like clicking the same cell does: the whole
+  // row, the note you just added included.
+  if (!placeNoteAtCursor(row, pitchToNote(pitch))) return; // flashes its own reason
+  state.pianoRoll.cursorRow = Math.min(state.song.patternLen - 1, row + state.editStep);
+  scrollCursorIntoView();
+  render();
 }
 
 function flashFeedback(message) {
@@ -821,20 +862,35 @@ let heldNoteKeys = new Set();
 let chordRowStart = null;
 
 function onPianoRollKeyDown(e) {
-  // Only handle keys when piano roll is active
-  if (state.viewMode !== 'pianoroll') return;
+  // Only handle keys when piano roll is active, and only when the sequencer
+  // doesn't have the cursor -- tracker.js's onKeyDown owns editMode 'sequence'
+  // wherever it's drawn (assigning a pattern number is its job, not this
+  // module's), and its own guard is the exact mirror of this one so a keypress
+  // is never claimed by both.
+  if (state.viewMode !== 'pianoroll' || state.editMode === 'sequence') return;
 
-  // Skip if a control has focus
-  const focused = document.activeElement;
-  if (focused && (focused.tagName === 'INPUT' || focused.tagName === 'SELECT' || focused.tagName === 'BUTTON')) {
-    return;
-  }
+  // Give up only the keys the focused control genuinely uses (see focus.js),
+  // the same test tracker.js applies: a focused instrument slider keeps its
+  // arrows, but note keys still reach the grid -- which is exactly when you want
+  // to keep playing notes to hear what the slider changed.
+  if (keyHandledByFocus(e)) return;
 
   const patternLen = state.song.patternLen;
   const numSemitones = (OCTAVE_RANGE[1] - OCTAVE_RANGE[0] + 1) * 12;
   const lowestPitch = OCTAVE_RANGE[0] * 12;
   let row = state.pianoRoll.cursorRow;
   let pitch = state.pianoRoll.cursorPitch;
+
+  // CapsLock writes the cursor cell's own pitch. Every other note key names a
+  // pitch of its own, so entering "the note I am looking at" meant working out
+  // which key that pitch sits on -- easy to get wrong when the arrow keys are
+  // what you are steering with. This is the piano roll's step-entry key: arrow
+  // to a cell, press it, the cursor moves on by the edit step.
+  if (e.code === 'CapsLock') {
+    enterNoteAtCursorCell();
+    e.preventDefault();
+    return;
+  }
 
   // Delete key - clear note at cursor or selection
   if (e.code === 'Delete' || e.code === 'Backspace') {
@@ -890,17 +946,14 @@ function onPianoRollKeyDown(e) {
     }
   }
 
-  // Note entry via computer keyboard
-  // Use state.previewNote to get the note number and preview sound
-  // The tracker has already mapped the key to a note offset
-  if (state.previewNote && !e.ctrlKey && !e.altKey && !e.metaKey) {
-    // Try to get note from tracker's key mapping
-    // Keys are positional: Z-M bottom row, A-K middle row, Q-] top row
-    const noteKeyMap = {
-      'KeyZ': 0, 'KeyS': 1, 'KeyX': 2, 'KeyD': 3, 'KeyC': 4, 'KeyV': 5, 'KeyG': 6, 'KeyB': 7, 'KeyH': 8, 'KeyN': 9, 'KeyJ': 10, 'KeyM': 11,
-      'KeyQ': 12, 'Digit2': 13, 'KeyW': 14, 'Digit3': 15, 'KeyE': 16, 'KeyR': 17, 'Digit5': 18, 'KeyT': 19, 'Digit6': 20, 'KeyY': 21, 'Digit7': 22, 'KeyU': 23, 'KeyI': 24,
-    };
-    if (noteKeyMap[e.code] !== undefined && !e.repeat) {
+  // Note entry via computer keyboard. The key -> semitone-offset map is the one
+  // everything else uses (tracker.js's noteKeys(), reached through state.noteKeys
+  // because tracker.js imports this module and the direct import would close a
+  // cycle), so a scale layout or chord-follow remaps the piano roll exactly as it
+  // remaps the tracker and the on-screen keys.
+  if (state.previewNote && state.noteKeys && !e.ctrlKey && !e.altKey && !e.metaKey) {
+    const noteOffset = state.noteKeys()[e.code];
+    if (noteOffset !== undefined && !e.repeat) {
       // Track this key as held
       heldNoteKeys.add(e.code);
 
@@ -910,7 +963,6 @@ function onPianoRollKeyDown(e) {
         pushUndo();
       }
 
-      const noteOffset = noteKeyMap[e.code];
       const note = state.previewNote(noteOffset); // preview and get the actual note number
 
       // Place note at the chord start row (not the current cursor row which may have moved)
@@ -918,7 +970,18 @@ function onPianoRollKeyDown(e) {
       // Don't preview again - keyboard already previewed via state.previewNote above
       placeNoteAtCursor(targetRow, note, false);
 
-      // Don't advance cursor yet - wait for all keys to be released
+      // The cursor follows the key you played. A note key names an absolute
+      // pitch, so leaving the cursor behind put it somewhere the last note did
+      // not come from -- and the next CapsLock or Delete acted there. Off-grid
+      // pitches (past the drawn octaves) leave it where it is, since there is no
+      // cell to move it to.
+      const playedPitch = noteToPitch(note);
+      if (playedPitch >= lowestPitch && playedPitch < lowestPitch + numSemitones) {
+        state.pianoRoll.cursorPitch = playedPitch;
+        scrollCursorIntoView();
+      }
+
+      // Don't advance the row yet - wait for all keys to be released
       render();
       e.preventDefault();
       return;
@@ -1004,13 +1067,10 @@ function onPianoRollKeyUp(e) {
   // Only handle keys when piano roll is active
   if (state.viewMode !== 'pianoroll') return;
 
-  const noteKeyMap = {
-    'KeyZ': 0, 'KeyS': 1, 'KeyX': 2, 'KeyD': 3, 'KeyC': 4, 'KeyV': 5, 'KeyG': 6, 'KeyB': 7, 'KeyH': 8, 'KeyN': 9, 'KeyJ': 10, 'KeyM': 11,
-    'KeyQ': 12, 'Digit2': 13, 'KeyW': 14, 'Digit3': 15, 'KeyE': 16, 'KeyR': 17, 'Digit5': 18, 'KeyT': 19, 'Digit6': 20, 'KeyY': 21, 'Digit7': 22, 'KeyU': 23, 'KeyI': 24,
-  };
-
-  // Remove key from held set
-  if (noteKeyMap[e.code] !== undefined) {
+  // Membership in the held set, not the note map: the map can be remapped
+  // between press and release (the scale or its root can change under a held
+  // key), and a key that went down as a note has to come back up as one.
+  if (heldNoteKeys.has(e.code)) {
     heldNoteKeys.delete(e.code);
 
     // If all note keys are released, advance cursor

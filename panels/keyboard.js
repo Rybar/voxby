@@ -279,7 +279,10 @@ function refreshPads() {
 // instrument slider or checkbox must not stop the physical keyboard from playing
 // and highlighting notes -- only a field you are actually typing into does.
 function isNoteEntryActive() {
-  return !typingInField() && (state.editMode === 'pattern' || state.editMode === 'fx');
+  // The piano roll writes notes whatever the tracker's edit mode says, so in
+  // that view the keys always play (see panels/pianoroll.js's own handler).
+  if (typingInField()) return false;
+  return state.viewMode === 'pianoroll' || state.editMode === 'pattern' || state.editMode === 'fx';
 }
 
 // Physical-keyboard presses light up the on-screen key they play. Tracked per

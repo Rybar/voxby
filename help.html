@@ -69,7 +69,7 @@ hundred bytes.</p>
   <li>Click a cell in the pattern grid and play a few notes on the piano, or on
   the computer keys. <kbd>Z</kbd> <kbd>X</kbd> <kbd>C</kbd>… is the bottom
   octave. <kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd>… is the one above.</li>
-  <li>Press <kbd>Space</kbd> to hear just the pattern you are editing, and
+  <li>Press <kbd>Space</kbd> to hear the sequence row you are working on, and
   <strong>Export JS</strong> when you want to keep it.</li>
 </ol>
 
@@ -125,6 +125,11 @@ gets long without getting big. Clicking anywhere in a channel's column also
 makes it the <em>selected channel</em>. The instrument panel and the
 highlighted pattern column follow your cursor around.</p>
 
+<p>The sequencer works the same way in the piano roll: it stays on screen there
+too, and clicking a cell lets you type a pattern number into it exactly as
+above. Once you arrow away, or click into the piano roll itself, typing goes
+back to entering notes.</p>
+
 <p>Two song-wide settings live here, because they apply to every pattern:
 <strong>BPM</strong> and <strong>Rows</strong> (rows per pattern). Four rows make
 a beat, so 32 rows is eight beats (two bars of 4/4). <strong>Beat</strong> only
@@ -147,7 +152,7 @@ sequencer first.</p>
 
 <p><kbd>Tab</kbd> moves between the three grids (sequencer → pattern → FX);
 <kbd>Shift</kbd>+<kbd>Tab</kbd> goes back. Which grid has the cursor decides
-what typing does, and what <kbd>Space</kbd> plays.</p>
+what typing does.</p>
 
 <p><kbd>Enter</kbd> inserts a row at the cursor. This pushes the rest of the pattern
 down and drops whatever fell off the end. This is useful for making room in a part
@@ -175,8 +180,15 @@ context. Notes show as colored blocks on the grid.</p>
 
 <p><strong>Click</strong> an empty cell to place a note. <strong>Right-click</strong>
 any note to delete it. The computer keyboard works the same as in tracker view:
-type <kbd>Z</kbd>–<kbd>M</kbd>, <kbd>Q</kbd>–<kbd>U</kbd> to enter notes at the
-cursor pitch, advancing by the edit step after each note.</p>
+type <kbd>Z</kbd>–<kbd>M</kbd>, <kbd>Q</kbd>–<kbd>U</kbd> to enter notes. Each key
+writes its own pitch, and the cursor jumps to that pitch — so the cursor is always
+on the note you played last. The row advances by the edit step once you release
+every key, which is how a held handful of keys becomes one chord on one row.</p>
+
+<p><kbd>Caps Lock</kbd> enters the note the cursor is already on. Arrow to a cell,
+press it, and the cursor steps down by the edit step. This is note entry without
+having to work out which key carries that pitch — useful when the arrow keys are
+what you are steering with.</p>
 
 <p>A tooltip follows your mouse showing which note you are hovering over. Piano
 key labels appear on the left at each C note (C1, C2, C3...).</p>
@@ -522,17 +534,29 @@ one slider at a time and listen. Some things worth knowing:</p>
 <h2 id="playback">Playback</h2>
 
 <p><strong>Play</strong> renders and plays the whole song. <strong>Play
-selected</strong> (and <kbd>Space</kbd>, which is the same thing) plays the
-sequencer's selection if you are working in the sequencer, or just the pattern
-you are editing otherwise. <kbd>Space</kbd> stops it again, as does
+selected</strong> (and <kbd>Space</kbd>, which is the same thing) plays what is
+on screen: the sequence row you are editing, on every channel that is not muted.
+The row you hear is the row you see, with the other parts around it, in the
+tracker and the piano roll alike. <kbd>Space</kbd> stops it again, as does
 <strong>Stop</strong>. <strong>loop</strong> repeats whatever gets played, which
 is how you sit inside one pattern while you shape it.</p>
+
+<p>Two things change what <kbd>Space</kbd> covers. Click a channel number in the
+sequencer header to <strong>mute</strong> that channel: it is left out, and drops
+out of the piano roll's editing too. Click the number again to bring it back.
+Muting is a working state, so full-song <strong>Play</strong> and <strong>Export
+WAV</strong> ignore it and always give you everything.</p>
+
+<p>Drag a block of cells in the sequencer, or hold <kbd>Shift</kbd> and arrow
+across one, and <kbd>Space</kbd> plays exactly that block instead — several rows
+of the arrangement, or a few channels of it. One clicked cell is not a selection:
+that is just where the cursor is, so it plays the row like everything else.</p>
 
 <p>Playback is rendered up front, not streamed: the synth generates the whole
 selection into a buffer before the first sound, so edits made while it plays are
 heard the next time you press play. A long song takes a few seconds. A progress
 dialog appears while it works, and <strong>Cancel</strong> abandons the render.
-Playing one pattern instead of the whole song is nearly instant, which is why
+Playing one sequence row instead of the whole song is nearly instant, which is why
 <kbd>Space</kbd> is the key you live on while writing. Once it runs, the grids
 follow the playing row and the piano lights the notes currently sounding.</p>
 
@@ -668,7 +692,7 @@ itself.</p>
 <table>
   <thead><tr><th>Keys</th><th>Does</th></tr></thead>
   <tbody>
-    <tr><td><kbd>Space</kbd></td><td>Play the selection or the current pattern (stop if playing)</td></tr>
+    <tr><td><kbd>Space</kbd></td><td>Play this sequence row on every unmuted channel, or the sequencer's selection (stop if playing)</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>Space</kbd></td><td>Play the whole song from the top (works from any focus)</td></tr>
     <tr><td><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>Move between sequencer, pattern and FX grids</td></tr>
     <tr><td><kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd></td><td>Move the cursor (wraps at the edges)</td></tr>

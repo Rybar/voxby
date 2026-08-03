@@ -141,11 +141,17 @@ var CPlayerWorker = function() {
     this.lastRow = song.endPattern;
     this.firstCol = 0;
     this.lastCol = song.numChannels - 1;
+    // Optional whitelist of channels within firstCol..lastCol. The column range
+    // alone cannot describe "these channels, not that one in the middle", which
+    // is what the sequencer's mute toggles ask for (see tracker.js's
+    // getPlayRange). Absent, the whole span renders as before.
+    this.cols = null;
     if (opts) {
       this.firstRow = opts.firstRow;
       this.lastRow = opts.lastRow;
       this.firstCol = opts.firstCol;
       this.lastCol = opts.lastCol;
+      this.cols = opts.cols || null;
     }
 
     // Prepare song info
@@ -163,7 +169,14 @@ var CPlayerWorker = function() {
     var i, j, b, p, row, col, currentCol, n, cp,
         k, t, lfor, e, x, rsample, rowStartSample, f, da;
 
+    var cols = this.cols;
+
     for (currentCol = this.firstCol; currentCol <= this.lastCol; currentCol++) {
+      // Muted channel: leave it out of the mix entirely. Skipping costs a
+      // column's worth of progress messages, which is harmless -- onmessage
+      // posts a final progress of 1 with the buffer once generate() returns.
+      if (cols && cols.indexOf(currentCol) < 0) continue;
+
       // Put performance critical items in local variables
       var chnBuf = new Int32Array(this.numWords),
           mixBuf = this.mixBufWork,

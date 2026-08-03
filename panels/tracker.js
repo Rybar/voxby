@@ -260,11 +260,18 @@ export function activeFxCell() {
 // Writes an already-computed SoundBox note number at the pattern cursor and
 // advances it. Both entry paths come through here -- this file's physical-keyboard
 // handling below and panels/keyboard.js's on-screen piano -- so they can't drift
-// apart. A no-op outside pattern edit mode or with no pattern focused; in fx mode
-// the note still sounds (the caller triggered the jammer before calling) but is
-// stored nowhere.
+// apart. A no-op outside pattern edit mode; in fx mode the note still sounds
+// (the caller triggered the jammer before calling) but is stored nowhere, which
+// needs no explanation -- the fx column was never going to hold a note. With no
+// pattern assigned at this sequence row it's also a no-op, but that one gets a
+// flashed reason: a channel with no pattern still takes the click (see
+// patternsMouseDown), so typing into it used to just do nothing with no hint why.
 export function enterNoteAtCursor(note) {
-  if (state.editMode !== 'pattern' || !focusedPatternNum()) return;
+  if (state.editMode !== 'pattern') return;
+  if (!focusedPatternNum()) {
+    flashFeedback('No pattern at this sequence row — assign one in the sequencer');
+    return;
+  }
   pushUndo();
   const row = pat.row, col = pat.col, channel = state.selInstrument;
   if (state.chordOn) {
@@ -601,17 +608,45 @@ function patternsContextMenu(e) {
   ]);
 }
 
-// What Space and "Play selected" play: the sequencer's selection when that is
-// the grid being worked in, otherwise the one pattern being edited. The shape is
-// player-worker.js's own opts -- firstRow/lastRow are sequence steps,
-// firstCol/lastCol are channels. Solo-play passes a single sequence row
-// (state.selRow) so player-worker.js's numSamples works out to exactly one
-// pattern's length.
+// What Space and "Play selected" play.
+//
+// The default is what is on screen: the sequence row being edited
+// (state.selRow), on every channel that is toggled on in the sequencer header.
+// That is the same answer in both views -- the row you hear is the row you see,
+// in context with the parts around it, not the one channel you happen to be
+// typing into. Muting the header toggles is how you hear less than that; it used
+// to be a permanent solo of the focused channel, which meant a chord written
+// across three channels could not be checked without playing the whole song.
+//
+// A real selection in the sequencer overrides that, because dragging or
+// shift+arrowing a block is a deliberate statement about what to hear. A single
+// cell is not one -- it is only where the cursor came to rest -- so it plays the
+// default like everywhere else.
+//
+// The shape is player-worker.js's own opts: firstRow/lastRow are sequence steps,
+// firstCol/lastCol are channels, and the optional `cols` whitelists channels
+// inside that span, since the toggles need not leave a contiguous run. One
+// sequence row (firstRow === lastRow) makes the worker's numSamples exactly one
+// pattern long, which is what keeps Space near-instant.
 export function getPlayRange() {
-  if (state.editMode === 'sequence') {
+  if (state.editMode === 'sequence' && (selLeft(seq) !== selRight(seq) || selTop(seq) !== selBottom(seq))) {
     return { firstRow: selTop(seq), lastRow: selBottom(seq), firstCol: selLeft(seq), lastCol: selRight(seq) };
   }
-  return { firstRow: state.selRow, lastRow: state.selRow, firstCol: state.selInstrument, lastCol: state.selInstrument };
+  const cols = [];
+  for (let ch = 0; ch < state.song.numChannels; ch++) {
+    if (state.channelsEnabled[ch] && state.song.songData[ch].p[state.selRow]) cols.push(ch);
+  }
+  // Nothing assigned at this row on any unmuted channel: render the focused
+  // channel by itself, which is one pattern of silence. The transport stays
+  // predictable (press, hear a bar of nothing, press again) and the worker never
+  // sees a column range it cannot make sense of.
+  if (!cols.length) {
+    return { firstRow: state.selRow, lastRow: state.selRow, firstCol: state.selInstrument, lastCol: state.selInstrument };
+  }
+  return {
+    firstRow: state.selRow, lastRow: state.selRow,
+    firstCol: cols[0], lastCol: cols[cols.length - 1], cols,
+  };
 }
 
 // --- undo ---
@@ -824,12 +859,41 @@ function onKeyDown(e) {
   // octave, clipboard -- still reaches the grids.
   if (keyHandledByFocus(e)) return;
 
-  // Octave: < and >, plus - and = -- the unshifted keys in the same place, which
-  // is what a hand reaching for the octave actually finds. Matched on e.key
-  // rather than e.code so the printed character is what counts, unlike note
-  // entry, which is positional (see layouts.js).
-  if (e.key === '<' || e.key === '-') { shiftOctave(-1); return; }
-  if (e.key === '>' || e.key === '=') { shiftOctave(1); return; }
+  // Octave: Minus, or Shift+Comma ("<"); Equal, or Shift+Period (">"). Matched
+  // on e.code, like note entry, not on the printed character: e.key reflects
+  // what the OS layout prints on a key, and on German/Swiss QWERTZ that is "-"
+  // for the physical key at the Slash position (layouts.js's QWERTZ table) --
+  // a genuine note key (offset 16). Matching by character let that keypress get
+  // eaten here before it ever reached the note lookup below: no jammer preview,
+  // no note written, while the on-screen key still lit (keyboard.js's physical
+  // highlighter is already code-based, so only this half of the pair broke).
+  // Minus/Equal are never note keys, so they always mean octave; Comma/Period
+  // need Shift, since unshifted they are notes.
+  if (e.code === 'Minus' || (e.code === 'Comma' && e.shiftKey)) { shiftOctave(-1); return; }
+  if (e.code === 'Equal' || (e.code === 'Period' && e.shiftKey)) { shiftOctave(1); return; }
+
+  // In piano-roll view the piano roll replaces the pattern grid and installs its
+  // own document keydown handler, so everything below belongs to it instead --
+  // except when the sequencer itself has the cursor (editMode 'sequence', set
+  // only by clicking a sequencer cell; see seqMouseDown). Assigning, clearing or
+  // copying a pattern number is a sequencer operation wherever the sequencer is
+  // drawn, and pianoroll.js has no keyboard route of its own into seqGrid -- it
+  // used to give up every key regardless, so a pattern number could only ever
+  // be typed in tracker view. pianoroll.js's own guard is the exact mirror of
+  // this one, so the two handlers never both act on the same keypress.
+  if (state.viewMode === 'pianoroll' && state.editMode !== 'sequence') return;
+
+  // Escape leaves the sequencer for the pattern grid. Clicking a pattern cell
+  // does the same, but a channel with no pattern refuses that click, so the
+  // sequencer could otherwise hold the keyboard with no way out. In the pattern
+  // and fx grids it collapses the selection back to the cursor cell.
+  if (e.code === 'Escape') {
+    if (state.editMode === 'sequence') state.editMode = 'pattern';
+    else { const c = cursorFor(state.editMode); setCursor(c, c.col, c.row); }
+    render(); notify();
+    e.preventDefault();
+    return;
+  }
 
   if (e.code === 'Tab') {
     e.preventDefault();
@@ -862,10 +926,9 @@ function onKeyDown(e) {
   }
   if (e.ctrlKey && e.code === 'KeyC') { copySelection(state.editMode); e.preventDefault(); return; }
   if (e.ctrlKey && e.code === 'KeyV') { doPaste(state.editMode); e.preventDefault(); return; }
-  // Don't handle Ctrl+Z/Ctrl+Shift+Z in tracker mode if we're in piano roll (it has its own handler)
-  // Check Ctrl+Shift+Z first (redo), then Ctrl+Z (undo)
-  if (e.ctrlKey && e.shiftKey && e.code === 'KeyZ' && state.viewMode !== 'pianoroll') { redo(); e.preventDefault(); return; }
-  if (e.ctrlKey && e.code === 'KeyZ' && !e.shiftKey && state.viewMode !== 'pianoroll') { undo(); e.preventDefault(); return; }
+  // Ctrl+Shift+Z first (redo), then Ctrl+Z (undo)
+  if (e.ctrlKey && e.shiftKey && e.code === 'KeyZ') { redo(); e.preventDefault(); return; }
+  if (e.ctrlKey && e.code === 'KeyZ' && !e.shiftKey) { undo(); e.preventDefault(); return; }
 
   if (state.editMode === 'sequence') {
     let code = null;
@@ -925,9 +988,8 @@ function onKeyDown(e) {
     // pattern grid when a pattern is actually focused. previewNote does the raw-
     // key-offset -> note-number math (octave + NOTE_OFFSET) and hands the result
     // back, so both sides agree on the exact value.
-    // Skip note entry in piano roll mode - it has its own handler
     const n = noteKeys()[e.code];
-    if (n !== undefined && state.viewMode !== 'pianoroll') {
+    if (n !== undefined) {
       const note = state.previewNote ? state.previewNote(n) : n + state.octave * 12 + engine.NOTE_OFFSET;
       enterNoteAtCursor(note);
       e.preventDefault();
@@ -996,9 +1058,11 @@ function seqMouseDown(e) {
 function patternsMouseDown(e) {
   const t = cellTarget(e);
   if (!t || !primary(e)) return;
-  // Don't focus a channel that has no pattern assigned
-  const pn = patternNumFor(t.channel);
-  if (!pn) return;
+  // A channel with no pattern assigned still takes the cursor. Every write goes
+  // through patGrid/fxGrid, which are no-ops without a pattern number, so the
+  // cell stays empty -- but the click is the only way back out of the sequencer
+  // with the mouse, and refusing it here left the keyboard stuck in the
+  // sequencer on a song whose channels are still empty.
   // Shift+click extends the selection from its anchor to the clicked
   // cell -- the mouse equivalent of shift+arrow, which likewise moves only the
   // col1/row1 corner and leaves the active cell where it is. Restricted to the
@@ -1068,15 +1132,15 @@ function renderSequencer() {
   let thead = '<tr><th></th>';
   for (let col = 0; col < engine.MAX_CHANNELS; col++) {
     const enabled = state.channelsEnabled[col];
-    const classes = [];
+    // Toggleable in both views. The toggle used to be piano-roll only, where it
+    // decided what was editable; it now also decides what Space plays, and that
+    // is just as useful with the tracker grids on screen.
+    const classes = ['channel-toggleable'];
     if (col === state.selInstrument) classes.push('focused');
-    if (state.viewMode === 'pianoroll') {
-      classes.push('channel-toggleable');
-      if (!enabled) classes.push('channel-disabled');
-    }
-    const title = state.viewMode === 'pianoroll'
-      ? `Channel ${col + 1}. Click to ${enabled ? 'disable' : 'enable'} for editing.`
-      : `Channel ${col + 1}. Click a cell in this column to edit this channel's patterns and instrument.`;
+    if (!enabled) classes.push('channel-disabled');
+    const title = `Channel ${col + 1}. Click to ${enabled ? 'mute' : 'unmute'} it: a muted channel is left out of`
+      + ` Space / Play selected, and cannot be edited in the piano roll. Play still plays the whole song.`
+      + ` Click a cell below to edit this channel's patterns and instrument.`;
     thead += `<th class="${classes.join(' ')}" data-channel="${col}" title="${title}">${col + 1}</th>`;
   }
   thead += '</tr>';
@@ -1089,20 +1153,17 @@ function renderSequencer() {
   $('seq-thead').innerHTML = thead;
   $('seq-tbody').innerHTML = tbody;
 
-  // Attach channel toggle handlers in piano roll mode
-  if (state.viewMode === 'pianoroll') {
-    $('seq-thead').querySelectorAll('th.channel-toggleable').forEach(th => {
-      th.onclick = e => {
-        const ch = +th.dataset.channel;
-        state.channelsEnabled[ch] = !state.channelsEnabled[ch];
-        // Clear selection of any notes from this channel
-        if (!state.channelsEnabled[ch]) {
-          state.pianoRoll.selectedNotes = state.pianoRoll.selectedNotes.filter(n => n.channel !== ch);
-        }
-        state.notify && state.notify();
-      };
-    });
-  }
+  $('seq-thead').querySelectorAll('th.channel-toggleable').forEach(th => {
+    th.onclick = () => {
+      const ch = +th.dataset.channel;
+      state.channelsEnabled[ch] = !state.channelsEnabled[ch];
+      // Clear selection of any notes from this channel
+      if (!state.channelsEnabled[ch]) {
+        state.pianoRoll.selectedNotes = state.pianoRoll.selectedNotes.filter(n => n.channel !== ch);
+      }
+      state.notify && state.notify();
+    };
+  });
 }
 
 function patternNumFor(channel) {
@@ -1239,8 +1300,27 @@ function render() {
 
 function initTrackerPatternsPanel() {
   $('patterns-panel').innerHTML =
-    `<h3 title="The notes in the patterns playing at the sequencer's current row — every channel side by side. The highlighted column is the one you are editing.">Patterns</h3>
+    `<div class="row pat-header">
+       <h3 title="The notes in the patterns playing at the sequencer's current row — every channel side by side. The highlighted column is the one you are editing.">Patterns</h3>
+       <div class="spacer"></div>
+       <span class="hint" id="pattern-hint"></span>
+     </div>
      <div class="pat-scroll" id="pat-scroll"></div>`;
+}
+
+// Same trick as panels/pianoroll.js's flashFeedback: a channel with no pattern
+// assigned still takes the cursor (see patternsMouseDown), so a note key typed
+// there was previously a silent no-op with no way to tell why nothing happened.
+function flashFeedback(message) {
+  const hint = $('pattern-hint');
+  if (!hint) return;
+  const original = hint.textContent;
+  hint.textContent = message;
+  hint.style.color = '#ff4444';
+  setTimeout(() => {
+    hint.textContent = original;
+    hint.style.color = '';
+  }, 1000);
 }
 
 // --- playback row-following: main.js calls this every frame with the elapsed
@@ -1288,12 +1368,15 @@ function moveFollowRow(oldRow, newRow) {
 // so row 0 of *that* buffer is sequence row followRow0, not row 0; everything
 // below that reads `t` against the buffer needs this offset to land on the right
 // sequence/pattern position.
-let followRow0 = 0, followCol0 = 0, followCol1 = engine.MAX_CHANNELS - 1;
+let followRow0 = 0, followCol0 = 0, followCol1 = engine.MAX_CHANNELS - 1, followCols = null;
 export function setFollowRange(range) {
   followSeq = followPat = -1;
   followRow0 = range ? range.firstRow : 0;
   followCol0 = range ? range.firstCol : 0;
   followCol1 = range ? range.lastCol : engine.MAX_CHANNELS - 1;
+  // A muted channel inside the span was skipped by the render, so it must not
+  // light up keys either (see getPlayRange's `cols`).
+  followCols = (range && range.cols) || null;
 }
 
 // Which note, if any, channel `chan` is sounding at time t -- what decides
@@ -1367,6 +1450,7 @@ export function followPlayback(t) {
     // 0..MAX_CHANNELS-1) -- a channel outside a "play selected" range wasn't
     // rendered by player-worker.js at all, so it has nothing to highlight.
     for (let ch = followCol0; ch <= followCol1 && ch < state.song.numChannels; ch++) {
+      if (followCols && followCols.indexOf(ch) < 0) continue;
       const note = channelActiveNote(t, ch);
       if (note !== null) notes.push(note);
     }
@@ -1391,9 +1475,7 @@ export function initTrackerPanel() {
       <table class="trk-table"><thead id="seq-thead"></thead><tbody id="seq-tbody"></tbody></table></div>`;
 
   $('patterns-panel').classList.remove('wip');
-  $('patterns-panel').innerHTML =
-    `<h3 title="The notes in the patterns playing at the sequencer's current row — every channel side by side. The highlighted column is the one you are editing.">Patterns</h3>
-     <div class="pat-scroll" id="pat-scroll"></div>`;
+  initTrackerPatternsPanel();
 
   $('song-bpm').oninput = () => {
     const bpm = +$('song-bpm').value;
@@ -1425,8 +1507,19 @@ export function initTrackerPanel() {
   };
 
   $('seq-tbody').closest('table').addEventListener('mousedown', seqMouseDown);
-  $('pat-scroll').addEventListener('mousedown', patternsMouseDown);
-  $('pat-scroll').addEventListener('contextmenu', patternsContextMenu);
+  // Delegated from #patterns-panel, not #pat-scroll: switching to piano-roll
+  // view and back replaces #patterns-panel's whole innerHTML (initPianoRoll()
+  // then initTrackerPatternsPanel(), see render()), which discards #pat-scroll
+  // and builds a new one. A listener bound to that specific element stopped
+  // firing the moment it was replaced -- clicking the pattern grid went
+  // silently dead for the rest of the session, with the sequencer (bound to
+  // the sequencer's <table>, which really is stable) still working, matching
+  // exactly what was reported: "I can't click into the pattern view to enter
+  // new notes... I can enter new pattern numbers into the sequencer." #patterns-
+  // panel itself is never replaced, only its contents, so this survives any
+  // number of trips through piano-roll view.
+  $('patterns-panel').addEventListener('mousedown', patternsMouseDown);
+  $('patterns-panel').addEventListener('contextmenu', patternsContextMenu);
   document.addEventListener('mouseover', onMouseOver);
   document.addEventListener('mouseup', onMouseUp);
   document.addEventListener('keydown', onKeyDown);

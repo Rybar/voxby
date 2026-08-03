@@ -20,7 +20,7 @@ import { state, markClean, isDirty, saveAutosave, loadAutosave, clearAutosave } 
 import { audioContext, masterGain } from './audio.js';
 import { svgIcon } from './icons.js';
 import { initInstrumentPanel, refreshInstrumentPanel } from './panels/instrument.js';
-import { initTrackerPanel, refreshTrackerPanel, followPlayback, stopFollowingPlayback, getPlayRange, setFollowRange } from './panels/tracker.js';
+import { initTrackerPanel, refreshTrackerPanel, followPlayback, stopFollowingPlayback, getPlayRange, setFollowRange, noteKeys } from './panels/tracker.js';
 import { followPlaybackPianoRoll, stopFollowingPianoRoll } from './panels/pianoroll.js';
 import { initKeyboardPanel, refreshKeyboardPanel, previewNote, syncJammer, highlightPlaybackNotes, getJammer } from './panels/keyboard.js';
 import { initScopePanel, drawScope, getLastPeak } from './panels/scope.js';
@@ -34,8 +34,9 @@ import { DEMO_SONGS, SECTIONS } from './songs/index.js';
 // the jammer is actually producing samples without depending on canvas-pixel
 // heuristics. getAudioState exposes the shared
 // audioContext's .state so tests can confirm the startup gate actually
-// resumed it, without importing audio.js themselves.
-window.soundbox = { state, engine, scales, loadSong, loadDemoSong, DEMO_SONGS, importSongFile, getJammer, getAudioState: () => audioContext.state };
+// resumed it, without importing audio.js themselves. getPlayRange is what Space
+// is about to play, which a test can read without waiting on a render.
+window.soundbox = { state, engine, scales, loadSong, loadDemoSong, DEMO_SONGS, importSongFile, getJammer, getPlayRange, getAudioState: () => audioContext.state };
 
 const $ = id => document.getElementById(id);
 
@@ -90,6 +91,12 @@ state.previewNote = previewNote;
 // sounding during song playback -- a callback rather than a direct import, for
 // the same reason.
 state.highlightNotes = highlightPlaybackNotes;
+// The key -> semitone-offset map in force (scale layout, chord follow, or the
+// plain chromatic table), for panels/pianoroll.js. tracker.js already imports
+// pianoroll.js, so the piano roll asking for it directly would close a cycle --
+// and before this it kept a chromatic copy of its own, which wrote a different
+// note than the key the on-screen keyboard was showing whenever a scale was set.
+state.noteKeys = noteKeys;
 
 function loadSong(song, skipAutosave = false) {
   state.song = song;
@@ -534,8 +541,8 @@ $('play-selected').onclick = () => { startPlayback(getPlayRange()); $('play-sele
 $('stop-song').onclick = () => { stopSong(); $('stop-song').blur(); };
 state.requestStop = stopSong;
 
-// Space plays the sequencer's selection when that grid is being worked in, or
-// solo-plays the pattern being edited otherwise; getPlayRange()
+// Space plays the sequence row on screen across every unmuted channel, or a
+// dragged sequencer selection if there is one; getPlayRange()
 // (panels/tracker.js) picks between them, so this is #play-selected's behaviour
 // on a different trigger. Ignored while the startup audio gate is still up.
 document.addEventListener('keydown', e => {

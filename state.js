@@ -44,6 +44,14 @@ export const state = {
   // (tracker calling out to keyboard instead of keyboard calling into
   // tracker). Takes an array of SoundBox note numbers.
   highlightNotes: null,
+  // Set to panels/tracker.js's noteKeys() at boot: the key -> semitone-offset
+  // map in force, scale layout and chord-follow included. For panels/
+  // pianoroll.js, which cannot import tracker.js (tracker.js imports it, to
+  // render the piano roll in place of the pattern grid). One map for every
+  // panel is the point: a local copy went out of date the moment a scale was
+  // selected, and the piano roll then wrote a different note than the on-screen
+  // keyboard showed for the same key.
+  noteKeys: null,
 
   // --- note-input preferences. Deliberately *not* song data: which scale you play in and how many rows
   // a beat is are per-musician settings, so they persist to localStorage
@@ -78,7 +86,13 @@ export const state = {
 
   // --- view mode: tracker (traditional columns) or pianoroll (horizontal grid) ---
   viewMode: 'tracker',  // 'tracker' | 'pianoroll'
-  channelsEnabled: Array(16).fill(true), // which channels are editable in piano roll
+  // Per-channel mute, toggled by clicking a channel number in the sequencer
+  // header (both views). A muted channel is left out of Space / "Play selected"
+  // (panels/tracker.js's getPlayRange) and cannot be edited in the piano roll.
+  // Full-song Play and Export WAV ignore it -- those two mean the finished
+  // thing, and a mute is a working state, not part of the arrangement. Not song
+  // data and not persisted, for the same reason.
+  channelsEnabled: Array(16).fill(true),
 
   // Undo/redo stacks (shared between tracker and piano roll)
   undoStack: [],
