@@ -550,6 +550,12 @@ state.requestStop = stopSong;
 // on a different trigger. Ignored while the startup audio gate is still up.
 document.addEventListener('keydown', e => {
   if (e.code !== 'Space') return;
+  // A held key auto-repeats keydown. startPlayback() is async (render, then
+  // decodeAudioData) so state.playing stays false until it resolves -- a
+  // held Space/Ctrl+Space would otherwise retrigger startPlayback on every
+  // repeat before the first render finishes, queuing an endless pile of
+  // renders that each restart the song when they land.
+  if (e.repeat) return;
   // focus.js rather than a tag-name test, so Space still plays with an instrument
   // slider focused -- but not with the loop checkbox or a button focused, where
   // the browser's own Space press already means something.
