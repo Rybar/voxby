@@ -8,7 +8,7 @@
 // Phase 1: Read-only rendering - draw the grid and all notes from all channels.
 // Future phases: cursor, note entry, dragging, selection, clipboard.
 
-import * as engine from '../engine.js';
+import * as engine from '../engine2.js';
 import { state, savePrefs } from '../state.js';
 import { keyHandledByFocus } from '../focus.js';
 
@@ -33,21 +33,41 @@ const TAIL_ALPHA = 0.45;       // the sounding tail is dimmer than the note's fi
 // Note names for labels
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
-// Estimated sounding length of one note of `instrument`, in pattern rows.
-// SoundBox plays every note as one envelope: attack, sustain and release last
-// (param * param * 4) samples each (player-small.js createNote), and one
-// pattern row is song.rowLen samples. Both counts are in the same 44100 Hz
-// sample domain, so their ratio is the length in rows.
+// How many pattern rows the note stored at slot `s` sounds for.
 //
-// FX are deliberately not part of this. Delay and reverb keep sound after the
-// envelope ends, but they do not change when the note itself stops, and their
-// tails are not a length the musician wrote. The number is an estimate for the
-// eye only: it never changes the song data, the hit boxes or playback.
-function noteLengthRows(instrument) {
-  const i = instrument.i;
-  const samples = (i[engine.ENV_ATTACK] ** 2 + i[engine.ENV_SUSTAIN] ** 2 + i[engine.ENV_RELEASE] ** 2) * 4;
-  const rowLen = state.song.rowLen;
+// In v2 this is often a real answer rather than an estimate. A GATE beside the
+// note states its length outright, and a note-off further down the column ends
+// it exactly. Only a held note with neither -- a sustaining instrument left to
+// ring -- has to be drawn as an open-ended block.
+//
+// FX are deliberately not part of this. Delay keeps sound after the envelope
+// ends, but it does not change when the note itself stops, and its tail is not
+// a length the musician wrote.
+//
+// Milestone 6 turns this into an editable length (drag the right edge). Until
+// then it is a drawing width only: it changes no note and no hit box.
+function noteLengthRows(channel, p, s, row) {
+  const song = state.song, patternLen = song.patternLen;
+  const rowLen = song.rowLen;
   if (!(rowLen > 0)) return 1;
+
+  // A gate states the length directly, in rows.
+  if (p.e[s * 2] === engine.GATE && p.e[s * 2 + 1] > 0) return p.e[s * 2 + 1];
+
+  // Otherwise the next event in this column ends it: a note-off, or the next
+  // note taking the voice over.
+  const col = Math.floor(s / patternLen);
+  for (let r = row + 1; r < patternLen; r++) {
+    if (p.n[r + col * patternLen]) return r - row;
+  }
+
+  // Nothing ends it inside this pattern. A voice with no sustain level decays
+  // on its own; one with a sustain level holds, so it is drawn to the end.
+  const ins = engine.insOf(p.n[s]);
+  const i = song.instruments[ins < 0 ? state.song.channels[channel].ins : ins];
+  if (!i) return 1;
+  if (i[engine.ENV_SUSTAIN_LEVEL]) return patternLen - row;
+  const samples = (i[engine.ENV_ATTACK] ** 2 + i[engine.ENV_DECAY] ** 2 + i[engine.ENV_RELEASE] ** 2) * 4;
   return samples / rowLen;
 }
 
@@ -56,11 +76,14 @@ function isBlackKey(pitch) {
   return n === 1 || n === 3 || n === 6 || n === 8 || n === 10; // C#, D#, F#, G#, A#
 }
 
-// Convert SoundBox note number to pitch (MIDI-style, C4 = 60)
-// SoundBox's note numbers are offset by engine.NOTE_OFFSET (87)
+// Convert a stored note event to a pitch (MIDI-style, C4 = 60). Note numbers
+// are offset by engine.NOTE_OFFSET (87), and the event may carry a velocity
+// and an instrument alongside the pitch, so the pitch is unpacked first.
+// A note-off has no pitch to draw.
 function noteToPitch(note) {
-  if (!note) return null;
-  return note - engine.NOTE_OFFSET;
+  const p = engine.pitchOf(note);
+  if (!p || p === engine.NOTE_OFF) return null;
+  return p - engine.NOTE_OFFSET;
 }
 
 // Convert pitch back to SoundBox note number
@@ -354,17 +377,17 @@ function onCanvasRightClick(e) {
 
 // Check if a note exists at (row, pitch) in the focused channel
 function getNoteAt(row, pitch) {
-  const pn = state.song.songData[state.selInstrument].p[state.selRow];
+  const pn = state.song.channels[state.selInstrument].seq[state.selRow];
   if (!pn) return null;
 
-  const pattern = state.song.songData[state.selInstrument].c[pn - 1];
+  const pattern = state.song.channels[state.selInstrument].pat[pn - 1];
   if (!pattern) return null;
 
   const note = pitchToNote(pitch);
   const patternLen = state.song.patternLen;
 
   for (let col = 0; col < 4; col++) {
-    if (pattern.n[row + col * patternLen] === note) {
+    if (engine.pitchOf(pattern.n[row + col * patternLen]) === note) {
       return { col, note };
     }
   }
@@ -374,10 +397,10 @@ function getNoteAt(row, pitch) {
 // Place a note at the cursor row. Returns true if successful.
 // preview: if true, plays the entire chord through the jammer (for mouse clicks)
 function placeNoteAtCursor(row, note, preview = true) {
-  const pn = state.song.songData[state.selInstrument].p[state.selRow];
+  const pn = state.song.channels[state.selInstrument].seq[state.selRow];
   if (!pn) return false; // no pattern assigned
 
-  const pattern = state.song.songData[state.selInstrument].c[pn - 1];
+  const pattern = state.song.channels[state.selInstrument].pat[pn - 1];
   if (!pattern) return false;
 
   const patternLen = state.song.patternLen;
@@ -392,9 +415,10 @@ function placeNoteAtCursor(row, note, preview = true) {
       if (preview && state.previewNote) {
         const allNotes = [];
         for (let c = 0; c < 4; c++) {
-          const n = pattern.n[row + c * patternLen];
-          if (n) {
-            const pitch = noteToPitch(n);
+          // noteToPitch returns null for an empty slot and for a note-off,
+          // neither of which is a pitch to sound.
+          const pitch = noteToPitch(pattern.n[row + c * patternLen]);
+          if (pitch !== null) {
             const octave = Math.floor(pitch / 12);
             const offset = pitch % 12;
             allNotes.push(offset + (octave - state.octave) * 12);
@@ -463,17 +487,17 @@ function deleteNoteAtCursor() {
 }
 
 function deleteNoteAt(row, note) {
-  const pn = state.song.songData[state.selInstrument].p[state.selRow];
+  const pn = state.song.channels[state.selInstrument].seq[state.selRow];
   if (!pn) return;
 
-  const pattern = state.song.songData[state.selInstrument].c[pn - 1];
+  const pattern = state.song.channels[state.selInstrument].pat[pn - 1];
   if (!pattern) return;
 
   const patternLen = state.song.patternLen;
 
   // Find and clear the note at this pitch
   for (let col = 0; col < 4; col++) {
-    if (pattern.n[row + col * patternLen] === note) {
+    if (engine.pitchOf(pattern.n[row + col * patternLen]) === note) {
       pattern.n[row + col * patternLen] = 0;
       state.notify && state.notify();
       render();
@@ -492,15 +516,15 @@ function deleteNoteAtAnyChannel(row, note) {
   for (let channel = 0; channel < engine.MAX_CHANNELS; channel++) {
     if (!state.channelsEnabled[channel]) continue;
 
-    const pn = state.song.songData[channel].p[state.selRow];
+    const pn = state.song.channels[channel].seq[state.selRow];
     if (!pn) continue;
 
-    const pattern = state.song.songData[channel].c[pn - 1];
+    const pattern = state.song.channels[channel].pat[pn - 1];
     if (!pattern) continue;
 
     // Find and clear the note at this pitch
     for (let col = 0; col < 4; col++) {
-      if (pattern.n[row + col * patternLen] === note) {
+      if (engine.pitchOf(pattern.n[row + col * patternLen]) === note) {
         pattern.n[row + col * patternLen] = 0;
         deleted = true;
         break; // Only delete one note per channel
@@ -527,17 +551,17 @@ function selectNotesInRect(row0, pitch0, row1, pitch1) {
     // Skip disabled channels
     if (!state.channelsEnabled[channel]) continue;
 
-    const pn = state.song.songData[channel].p[state.selRow];
+    const pn = state.song.channels[channel].seq[state.selRow];
     if (!pn) continue;
 
-    const pattern = state.song.songData[channel].c[pn - 1];
+    const pattern = state.song.channels[channel].pat[pn - 1];
     if (!pattern) continue;
 
     for (let row = minRow; row <= maxRow; row++) {
       for (let pitch = minPitch; pitch <= maxPitch; pitch++) {
         const note = pitchToNote(pitch);
         for (let col = 0; col < 4; col++) {
-          if (pattern.n[row + col * patternLen] === note) {
+          if (engine.pitchOf(pattern.n[row + col * patternLen]) === note) {
             state.pianoRoll.selectedNotes.push({ row, pitch, col, channel });
             break;
           }
@@ -565,10 +589,10 @@ function moveSelectedNotes(offsetRow, offsetPitch) {
   const newSelection = [];
   for (const channel in byChannel) {
     const ch = +channel;
-    const pn = state.song.songData[ch].p[state.selRow];
+    const pn = state.song.channels[ch].seq[state.selRow];
     if (!pn) continue;
 
-    const pattern = state.song.songData[ch].c[pn - 1];
+    const pattern = state.song.channels[ch].pat[pn - 1];
     if (!pattern) continue;
 
     // Store notes to move
@@ -591,7 +615,10 @@ function moveSelectedNotes(offsetRow, offsetPitch) {
 
       if (newRow < 0 || newRow >= patternLen) continue; // out of bounds
 
-      const newNote = pitchToNote(newPitch);
+      // Only the pitch moves: the note keeps the velocity and instrument it
+      // was written with, which is the whole point of dragging it rather than
+      // deleting it and typing a new one.
+      const newNote = engine.withPitch(n.note, pitchToNote(newPitch));
 
       // Find empty column at new position
       for (let col = 0; col < 4; col++) {
@@ -617,10 +644,10 @@ function deleteSelection() {
 
   // Group by channel and delete from each
   for (const note of state.pianoRoll.selectedNotes) {
-    const pn = state.song.songData[note.channel].p[state.selRow];
+    const pn = state.song.channels[note.channel].seq[state.selRow];
     if (!pn) continue;
 
-    const pattern = state.song.songData[note.channel].c[pn - 1];
+    const pattern = state.song.channels[note.channel].pat[pn - 1];
     if (!pattern) continue;
 
     pattern.n[note.row + note.col * patternLen] = 0;
@@ -645,10 +672,10 @@ function copySelection() {
 
   // Copy selected notes with relative positions AND channel info
   for (const n of selected) {
-    const pn = state.song.songData[n.channel].p[state.selRow];
+    const pn = state.song.channels[n.channel].seq[state.selRow];
     if (!pn) continue;
 
-    const pattern = state.song.songData[n.channel].c[pn - 1];
+    const pattern = state.song.channels[n.channel].pat[pn - 1];
     if (!pattern) continue;
 
     const note = pattern.n[n.row + n.col * patternLen];
@@ -680,13 +707,15 @@ function pasteAtCursor() {
 
     if (targetRow < 0 || targetRow >= patternLen) continue; // out of bounds
 
-    const pn = state.song.songData[channel].p[state.selRow];
+    const pn = state.song.channels[channel].seq[state.selRow];
     if (!pn) continue;
 
-    const pattern = state.song.songData[channel].c[pn - 1];
+    const pattern = state.song.channels[channel].pat[pn - 1];
     if (!pattern) continue;
 
-    const targetNote = pitchToNote(targetPitch);
+    // The copied event's velocity and instrument travel with it, so a pasted
+    // note sounds like the one it was copied from.
+    const targetNote = engine.withPitch(noteData.note, pitchToNote(targetPitch));
 
     // Find empty column
     for (let col = 0; col < 4; col++) {
@@ -717,15 +746,15 @@ function selectAll() {
 }
 
 function pushUndo() {
-  const pn = state.song.songData[state.selInstrument].p[state.selRow];
+  const pn = state.song.channels[state.selInstrument].seq[state.selRow];
   if (!pn) return;
 
-  const pattern = state.song.songData[state.selInstrument].c[pn - 1];
+  const pattern = state.song.channels[state.selInstrument].pat[pn - 1];
   if (!pattern) return;
 
   const newState = {
     notes: [...pattern.n],
-    fx: [...pattern.f],
+    fx: [...pattern.e],
     channel: state.selInstrument,
     seqRow: state.selRow,
     pattern: pn
@@ -780,13 +809,13 @@ function undo() {
   }
 
   // Save current state to redo stack before undoing
-  const pn = state.song.songData[state.selInstrument].p[state.selRow];
+  const pn = state.song.channels[state.selInstrument].seq[state.selRow];
   if (pn) {
-    const pattern = state.song.songData[state.selInstrument].c[pn - 1];
+    const pattern = state.song.channels[state.selInstrument].pat[pn - 1];
     if (pattern) {
       state.redoStack.push({
         notes: [...pattern.n],
-        fx: [...pattern.f],
+        fx: [...pattern.e],
         channel: state.selInstrument,
         seqRow: state.selRow,
         pattern: pn
@@ -797,14 +826,14 @@ function undo() {
   const undoState = state.undoStack.pop();
 
   // Restore pattern state
-  const pattern = state.song.songData[undoState.channel].c[undoState.pattern - 1];
+  const pattern = state.song.channels[undoState.channel].pat[undoState.pattern - 1];
   if (!pattern) {
     flashFeedback('Cannot undo - pattern missing');
     return;
   }
 
   pattern.n = [...undoState.notes];
-  pattern.f = [...undoState.fx];
+  pattern.e = [...undoState.fx];
 
   state.pianoRoll.selectedNotes = [];
   state.notify && state.notify();
@@ -819,13 +848,13 @@ function redo() {
   }
 
   // Save current state to undo stack before redoing
-  const pn = state.song.songData[state.selInstrument].p[state.selRow];
+  const pn = state.song.channels[state.selInstrument].seq[state.selRow];
   if (pn) {
-    const pattern = state.song.songData[state.selInstrument].c[pn - 1];
+    const pattern = state.song.channels[state.selInstrument].pat[pn - 1];
     if (pattern) {
       state.undoStack.push({
         notes: [...pattern.n],
-        fx: [...pattern.f],
+        fx: [...pattern.e],
         channel: state.selInstrument,
         seqRow: state.selRow,
         pattern: pn
@@ -836,14 +865,14 @@ function redo() {
   const redoState = state.redoStack.pop();
 
   // Restore pattern state
-  const pattern = state.song.songData[redoState.channel].c[redoState.pattern - 1];
+  const pattern = state.song.channels[redoState.channel].pat[redoState.pattern - 1];
   if (!pattern) {
     flashFeedback('Cannot redo - pattern missing');
     return;
   }
 
   pattern.n = [...redoState.notes];
-  pattern.f = [...redoState.fx];
+  pattern.e = [...redoState.fx];
 
   state.pianoRoll.selectedNotes = [];
   state.notify && state.notify();
@@ -856,10 +885,10 @@ function transposeSelection(semitones) {
 
   pushUndo();
 
-  const pn = state.song.songData[state.selInstrument].p[state.selRow];
+  const pn = state.song.channels[state.selInstrument].seq[state.selRow];
   if (!pn) return;
 
-  const pattern = state.song.songData[state.selInstrument].c[pn - 1];
+  const pattern = state.song.channels[state.selInstrument].pat[pn - 1];
   if (!pattern) return;
 
   const patternLen = state.song.patternLen;
@@ -868,10 +897,12 @@ function transposeSelection(semitones) {
   // Transpose each selected note
   for (const note of state.pianoRoll.selectedNotes) {
     const oldNote = pattern.n[note.row + note.col * patternLen];
-    if (!oldNote) continue;
+    // A note-off has no pitch to move, so it is left where it is.
+    if (!oldNote || engine.pitchOf(oldNote) === engine.NOTE_OFF) continue;
 
     const newPitch = note.pitch + semitones;
-    const newNote = pitchToNote(newPitch);
+    // Pitch only: the velocity and instrument stay as written.
+    const newNote = engine.withPitch(oldNote, pitchToNote(newPitch));
 
     // Update the note
     pattern.n[note.row + note.col * patternLen] = newNote;
@@ -1134,7 +1165,7 @@ function scrollCursorIntoView() {
 }
 
 function getCurrentPatternNum() {
-  return state.song.songData[state.selInstrument].p[state.selRow] || 0;
+  return state.song.channels[state.selInstrument].seq[state.selRow] || 0;
 }
 
 export function render() {
@@ -1179,7 +1210,7 @@ export function render() {
 
   // Draw all channels' notes
   for (let channel = 0; channel < engine.MAX_CHANNELS; channel++) {
-    const pn = state.song.songData[channel].p[state.selRow];
+    const pn = state.song.channels[channel].seq[state.selRow];
     if (!pn) continue; // no pattern at this sequence row
     drawChannelNotes(ctx, channel, pn, patternLen, lowestPitch);
   }
@@ -1285,10 +1316,10 @@ function drawDragPreview(ctx, lowestPitch, numSemitones) {
 }
 
 function drawFullColumnIndicators(ctx, patternLen, numSemitones, lowestPitch) {
-  const pn = state.song.songData[state.selInstrument].p[state.selRow];
+  const pn = state.song.channels[state.selInstrument].seq[state.selRow];
   if (!pn) return;
 
-  const pattern = state.song.songData[state.selInstrument].c[pn - 1];
+  const pattern = state.song.channels[state.selInstrument].pat[pn - 1];
   if (!pattern) return;
 
   const gridX = PIANO_KEY_WIDTH;
@@ -1410,7 +1441,7 @@ function drawGrid(ctx, w, h, patternLen, numSemitones, lowestPitch) {
 }
 
 function drawChannelNotes(ctx, channel, patternNum, patternLen, lowestPitch) {
-  const pattern = state.song.songData[channel].c[patternNum - 1];
+  const pattern = state.song.channels[channel].pat[patternNum - 1];
   if (!pattern) return;
 
   const isFocused = channel === state.selInstrument;
@@ -1428,18 +1459,22 @@ function drawChannelNotes(ctx, channel, patternNum, patternLen, lowestPitch) {
   const gridX = PIANO_KEY_WIDTH;
   const numSemitones = (OCTAVE_RANGE[1] - OCTAVE_RANGE[0] + 1) * 12;
 
-  // Envelope length is a property of the channel's instrument, so it is the
-  // same for every note here -- compute it once.
-  const lenRows = state.pianoRollNoteLen ? noteLengthRows(state.song.songData[channel]) : 1;
-
-  // Iterate through all 4 note columns
+  // Iterate through all 4 voice columns
   for (let col = 0; col < 4; col++) {
     for (let row = 0; row < patternLen; row++) {
-      const note = pattern.n[row + col * patternLen];
+      const s = row + col * patternLen;
+      const note = pattern.n[s];
       if (!note) continue;
 
+      // Null for a note-off, which ends a sound rather than drawing one.
       const pitch = noteToPitch(note);
+      if (pitch === null) continue;
       if (pitch < lowestPitch || pitch >= lowestPitch + numSemitones) continue; // out of range
+
+      // Length is per note now, not per channel: a gate, a note-off or a
+      // per-note instrument change all make one note a different length from
+      // its neighbour in the same column.
+      const lenRows = state.pianoRollNoteLen ? noteLengthRows(channel, pattern, s, row) : 1;
 
       const x = gridX + row * CELL_WIDTH;
       const y = (numSemitones - 1 - (pitch - lowestPitch)) * cellHeight;

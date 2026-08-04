@@ -191,7 +191,17 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
 .trk-table tr.beat td, .trk-table tr.beat th { background: var(--bg-beat); }
 .trk-table tr.curRow td, .trk-table tr.curRow th { background: var(--bg-currow); }
 .trk-table td { color: var(--text); cursor: pointer; }
-.trk-table td.trk-fx { color: var(--text-dim); border-left: 2px solid var(--border-dim); }
+/* The five fields of a voice column. Note carries the tone, so it keeps the
+   full text colour; the four that qualify it are dimmed, and the voice
+   boundary is drawn on the field that starts one. */
+.trk-table td.trk-ins, .trk-table td.trk-vol { color: var(--text-dim); }
+.trk-table td.trk-cmd, .trk-table td.trk-val { color: var(--text-dim); }
+.trk-table td.trk-note { border-left: 2px solid var(--border-dim); }
+.trk-table td.trk-cmd { border-left: 1px dashed var(--border-dim); }
+/* A note on an unfocused channel whose hidden fields hold something. Without a
+   marker it would look exactly like a plain note, since those columns are not
+   drawn at all outside the focused channel. */
+.trk-table td.has-fields::after { content: '\00b7'; color: var(--accent); }
 /* tr td.selected/.cursor (not the shorter .trk-table td.selected) so these
    beat a beat/curRow row's own "tr.beat td"/"tr.curRow td" background rule
    above -- same class+element count (2+2), and this way wins the tie by
@@ -202,9 +212,9 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
 .trk-table tr td.selected { background: var(--bg-selected); }
 .trk-table tr td.cursor { background: var(--accent); color: var(--accent-text); }
 
-/* Pattern/fx cells reserve space for their widest possible content (a note like
-   "C-4", an fx byte pair like "0F:3A") so columns don't visibly widen and narrow
-   as cells go from empty to filled while editing. Scoped to #pat-scroll; the
+/* Pattern cells reserve space for their widest likely content (a note like
+   "C-4", a command like "GAT") so columns don't visibly widen and narrow as
+   cells go from empty to filled while editing. Scoped to #pat-scroll; the
    sequencer's cells are always 0-1 char. */
 /* Keeps scrollCursorIntoView()/moveFollowRow()'s block: 'nearest'
    from parking the row it just scrolled to somewhere it can't be clicked --
@@ -214,8 +224,21 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
    half of a row flush with the bottom edge. Both selectors because the two
    callers scroll a <td> and a <tr> respectively. */
 #pat-scroll .trk-table tr, #pat-scroll .trk-table td { scroll-margin: 18px 0 20px; }
-#pat-scroll .trk-table td:not(.trk-fx) { min-width: 3ch; }
-#pat-scroll .trk-table td.trk-fx { min-width: 5ch; }
+#pat-scroll .trk-table td { min-width: 3ch; padding: 1px 2px; }
+/* A rest, drawn the way trackers have always drawn one. It also keeps the row
+   its full height: a <td> with no content at all has no line box, so a row of
+   empty cells used to collapse to the height of its borders. Before the fields
+   were split out, the fx column's own placeholder was holding every row open
+   by accident, and losing it made a 64-row pattern shorter than its panel --
+   so arrowing down never scrolled. */
+#pat-scroll .trk-table td.trk-note:empty::after { content: '\00b7\00b7\00b7'; color: var(--text-dim2); }
+#pat-scroll .trk-table td:empty::after { content: '\00a0'; }
+#pat-scroll .trk-table td.trk-ins, #pat-scroll .trk-table td.trk-vol { min-width: 2ch; }
+/* An effect value is a plain number and can be signed or fractional, so it
+   needs real room -- but it is capped, because one long gate length must not
+   push the next channel off the screen. */
+#pat-scroll .trk-table td.trk-val { min-width: 4ch; max-width: 7ch;
+                                     overflow: hidden; text-overflow: ellipsis; }
 
 .pat-scroll { flex: 1; min-height: 0; overflow: auto; display: flex; gap: 10px; align-items: flex-start; }
 .pat-col { flex: 0 0 auto; opacity: 0.55; }

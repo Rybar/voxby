@@ -14,7 +14,11 @@
 // rather than the bookmarkable data: URL SoundBox used, and it doubles as save
 // by clearing the unsaved-changes flag.
 
-import * as engine from './engine.js';
+// engine.js still owns the SoundBox format: the legacy binary importers, and
+// the v1 normalizer that engine2.convertV1 reads through. engine2.js owns
+// everything this editor writes.
+import * as engine1 from './engine.js';
+import * as engine from './engine2.js';
 import * as scales from './scales.js';
 import { state, markClean, isDirty, saveAutosave, loadAutosave, clearAutosave } from './state.js';
 import { audioContext, masterGain } from './audio.js';
@@ -39,7 +43,10 @@ import { DEMO_SONGS, SECTIONS } from './songs/index.js';
 // refreshPianoRoll repaints the roll after a state write: nothing draws it on a
 // timer, so a script that sets a cursor or a selection would otherwise capture
 // the frame before its own edit (scripts/help-shots.mjs did exactly that).
-window.soundbox = { state, engine, scales, loadSong, loadDemoSong, DEMO_SONGS, importSongFile, getJammer, getPlayRange, refreshPianoRoll, getAudioState: () => audioContext.state };
+// `engine` is engine2, the format the editor reads and writes. `engine1` is
+// exposed alongside it for the tests that cover the SoundBox importers, which
+// still live in engine.js and are reached through engine2.fromAny().
+window.soundbox = { state, engine, engine1, scales, loadSong, loadDemoSong, DEMO_SONGS, importSongFile, getJammer, getPlayRange, refreshPianoRoll, getAudioState: () => audioContext.state };
 
 const $ = id => document.getElementById(id);
 
@@ -228,7 +235,7 @@ $('new-song').onclick = async () => {
 // exactly like anything else the importer takes.
 async function loadDemoSong(entry) {
   const mod = await import(`./songs/${entry.file}`);
-  return engine.normalizeSong(mod.default);
+  return engine.fromAny(mod.default);
 }
 
 // Named so a discard prompt raised from inside it can put it back afterwards: the
@@ -297,8 +304,8 @@ async function importSongFile(file) {
   let song;
   try {
     song = /\.js$/i.test(file.name) || /javascript/.test(file.type)
-      ? await engine.songFromJS(await file.text())
-      : engine.binToSong(await readBinaryString(file));
+      ? await engine.songFromJSText(await file.text())
+      : engine.fromAny(engine1.binToSong(await readBinaryString(file)));
   } catch {
     song = undefined;  // a truncated/garbage binary can throw its way out of the parser
   }

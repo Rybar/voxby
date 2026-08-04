@@ -99,6 +99,63 @@ export const CMD_NAMES = {
   [GATE]: 'gate',
 };
 
+// The channel strip's parameter names, indexed the same as a channel's fx
+// array. A PARAM command is written as PARAM + this index, so these double as
+// the display names for those commands.
+export const FX_NAMES = ['lfo wave', 'lfo amt', 'lfo freq', 'lfo->fx',
+  'filter', 'freq', 'reso', 'dist', 'drive',
+  'pan amt', 'pan freq', 'delay amt', 'delay time'];
+
+// Three-character labels for the tracker's command column. Short enough that
+// four voice columns of a channel still fit side by side.
+const CMD_SHORT = {
+  [SLIDE_TO]: 'SLD',
+  [SLIDE]: 'BND',
+  [VIBRATO]: 'VIB',
+  [TEMPO]: 'TMP',
+  [NOTE_DELAY]: 'DLY',
+  [GATE]: 'GAT',
+};
+
+// What the tracker prints in a command cell. A PARAM writes a channel-strip
+// parameter, and there are thirteen of those, so they are shown as P0..PC
+// rather than being given thirteen more mnemonics.
+export const cmdLabel = function (cmd) {
+  if (!cmd) return '';
+  if (cmd >= PARAM) {
+    var i = cmd - PARAM;
+    return i < NUM_FX_PARAMS ? 'P' + i.toString(16).toUpperCase() : '?';
+  }
+  return CMD_SHORT[cmd] || '?';
+};
+
+// The full name, for a tooltip or the status line.
+export const cmdName = function (cmd) {
+  if (!cmd) return '';
+  if (cmd >= PARAM) {
+    var i = cmd - PARAM;
+    return i < NUM_FX_PARAMS ? FX_NAMES[i] : 'unknown parameter';
+  }
+  return CMD_NAMES[cmd] || 'unknown command';
+};
+
+// Which single key types which command in the tracker's command column.
+// Deliberately not the first letter of every name: SLIDE_TO and SLIDE would
+// both want S, so the free bend is typed as B for "bend".
+export const CMD_KEYS = {
+  KeyS: SLIDE_TO,
+  KeyB: SLIDE,
+  KeyV: VIBRATO,
+  KeyT: TEMPO,
+  KeyD: NOTE_DELAY,
+  KeyG: GATE,
+};
+
+// Tempo is stored as a row length in samples, the same unit as song.rowLen,
+// because that is what the player indexes rows with. The editor shows and
+// accepts BPM, which is the only form a musician thinks in.
+export const bpmOf = rowLen => (rowLen > 0 ? Math.round((60 * 44100 / 4) / rowLen) : 0);
+
 export const calcSamplesPerRow = v1.calcSamplesPerRow;
 
 //----------------------------------------------------------------------------
@@ -118,6 +175,26 @@ export const packNote = function (pitch, vel, ins) {
 export const pitchOf = n => n & 255;
 export const velOf = n => (n >> 8) & 127;      // 0 = unchanged
 export const insOf = n => (n >> 15) - 1;       // -1 = unchanged
+
+// Replace one field of a packed note, keeping the other two. The tracker's
+// note, instrument and velocity sub-columns are three separate cells over one
+// stored number, so each has to be writable on its own.
+//
+// A pitch of 0 empties the whole event and a note-off carries no velocity or
+// instrument, so both clear the other fields rather than leaving them stored
+// where nothing will ever read them again.
+export const withPitch = function (n, pitch) {
+  if (!pitch || pitch === NOTE_OFF) return pitch || 0;
+  return (pitch & 255) | (n & ~255);
+};
+export const withVel = function (n, vel) {
+  if (!pitchOf(n) || pitchOf(n) === NOTE_OFF) return n;
+  return (n & ~(127 << 8)) | ((vel & 127) << 8);
+};
+export const withIns = function (n, ins) {
+  if (!pitchOf(n) || pitchOf(n) === NOTE_OFF) return n;
+  return (n & 0x7fff) | (ins < 0 ? 0 : (ins + 1) << 15);
+};
 
 // Where a (row, column) lands in a pattern's arrays. A column is a voice slot,
 // so these two indexings are parallel on purpose.
@@ -381,15 +458,67 @@ export const normalizeSong = function (raw) {
   return song;
 };
 
+// Evaluate an exported .js song file and normalize whatever it holds. Both
+// formats arrive through here, because a file the user drops names neither:
+// a v1 export has `songData`, a v2 one has `channels` and `instruments`, and
+// that is enough to tell them apart. A v1 file is converted on the way in --
+// this editor has no way to save one back, so the conversion is the import.
+//
+// The text is evaluated as a real ES module, which is why the open dialog
+// warns about trusting the file.
+export const songFromJSText = function (text) {
+  // Older SoundBox builds exported `export default name = {...}`, which
+  // assigns to an undeclared identifier -- a ReferenceError in a module (they
+  // are always strict), so such a file won't even evaluate until the stray
+  // name is dropped. Nothing ever read it.
+  text = text.replace(/(export\s+default\s+)[A-Za-z_$][\w$]*\s*=\s*(?=[{[])/, '$1');
+  var url = URL.createObjectURL(new Blob([text], { type: 'text/javascript' }));
+  return import(url).then(
+    function (mod) { return fromAny(mod.default); },
+    function () { return undefined; }
+  ).then(function (song) {
+    URL.revokeObjectURL(url);
+    return song;
+  });
+};
+
+// One song object, either format, as a v2 song.
+export const fromAny = function (raw) {
+  if (!raw) return undefined;
+  if (Array.isArray(raw.songData)) return convertV1(v1.normalizeSong(raw));
+  return normalizeSong(raw);
+};
+
 export const songFromJS = normalizeSong;
 
 //----------------------------------------------------------------------------
 // Share links
 //
-// Base64url of the trimmed JSON. Longer than engine.js's packed binary, which
-// is a deliberate trade for this milestone: a v2 binary format is worth
-// writing once the format has stopped moving, not before.
+// Deflated, then base64url'd. The payload itself is trimmed JSON rather than a
+// packed binary: a v2 binary format is worth writing once the format has
+// stopped moving, not before.
+//
+// The deflate is not optional, though, and skipping it was a real bug for one
+// revision. A link has to survive being pasted into a chat client, so it has a
+// practical ceiling of a couple of thousand characters -- and raw base64 JSON
+// puts a five-channel song an order of magnitude past it. JSON is highly
+// repetitive, so deflate takes most of that back.
+//
+// fflate is the same global engine.js's binary format uses, loaded by
+// index.html. The editor is a development tool, so a CDN script is acceptable
+// here in a way it never is in a shipped game.
 //----------------------------------------------------------------------------
+
+const u8ToStr = function (u8) {
+  var s = '';
+  for (var i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]);
+  return s;
+};
+const strToU8 = function (s) {
+  var u8 = new Uint8Array(s.length);
+  for (var i = 0; i < s.length; i++) u8[i] = s.charCodeAt(i) & 255;
+  return u8;
+};
 
 const trimList = function (arr, len) {
   var last = -1, i;
@@ -411,14 +540,16 @@ export const songToURLData = function (song) {
     }
     out.c.push([ch.fx, ch.ins, trimList(ch.seq, song.endPattern + 1), pat]);
   }
-  return btoa(JSON.stringify(out))
+  var packed = u8ToStr(fflate.deflateSync(strToU8(JSON.stringify(out)), { level: 9 }));
+  return btoa(packed)
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 };
 
 export const urlDataToSong = function (str) {
   var raw;
   try {
-    raw = JSON.parse(atob(str.replace(/-/g, '+').replace(/_/g, '/')));
+    var bytes = strToU8(atob(str.replace(/-/g, '+').replace(/_/g, '/')));
+    raw = JSON.parse(u8ToStr(fflate.inflateSync(bytes)));
   } catch { return undefined; }
   if (!raw || !Array.isArray(raw.c)) return undefined;
   return normalizeSong({

@@ -1,5 +1,5 @@
 // UI-only state for the editor. The song/instrument data itself is a plain, JSON-serializable
-// object produced by engine.js — not duplicated here, just referenced by
+// object produced by engine2.js — not duplicated here, just referenced by
 // `state.song`. Mirrors tools/scenetool/state.js's shape (one `state`
 // object, exported by reference so every module sees live edits).
 //
@@ -10,11 +10,15 @@
 // for common.js's deepCopy/deepEquals, so that classic script isn't loaded
 // here at all.
 
-import { makeNewSong } from './engine.js';
+import { makeNewSong } from './engine2.js';
 
 export const state = {
   song: makeNewSong(),
   songUnmodified: null,
+  // Which channel the tracker and the instrument panel are focused on. The
+  // name is now a misnomer -- v2 has an instrument pool, so a channel and an
+  // instrument are different things -- but it is read by six modules and
+  // renaming it is Milestone 7's job, with the pool UI it belongs to.
   selInstrument: 0,
   selRow: 0,
   selCol: 0,
@@ -177,6 +181,15 @@ export function loadAutosave() {
   try {
     const saved = JSON.parse(localStorage.getItem(AUTOSAVE_KEY));
     if (!saved || !saved.song) return null;
+    // A v1 autosave left over from before the format change. Restoring it
+    // would hand every panel a shape it can no longer read, and there is no
+    // safe way to convert it here: the conversion is lossy and the user would
+    // get no say. Dropped instead, which is the same outcome as an autosave
+    // that has simply expired.
+    if (!Array.isArray(saved.song.channels) || !Array.isArray(saved.song.instruments)) {
+      clearAutosave();
+      return null;
+    }
     // Return the saved data for main.js to decide whether to restore
     return saved;
   } catch {

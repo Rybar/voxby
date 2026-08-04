@@ -1,26 +1,40 @@
 // Instrument panel: oscillator 1/2, noise, envelope, arpeggio, FX and LFO
-// controls for the instrument on the currently selected channel, written
-// against engine.js's instrument-property-index constants.
+// controls for the currently selected channel.
 //
-// The song format ties one instrument to one channel -- there is no separate
-// instrument list -- so this panel's "Channel" selector is state.selInstrument,
-// shared with the tracker: clicking any sequencer/pattern/fx cell moves it, and
-// this panel reflects whatever it is set to. The selector lists all
-// engine.MAX_CHANNELS slots rather than state.song.numChannels, matching
-// tracker.js's always-16 columns: a channel past numChannels is one with no
-// sequence data yet, and its instrument still has to be reachable to set up
-// before it is used.
+// TWO ARRAYS, NOT ONE (v2)
+// ------------------------
+// v1 kept all 28 parameters in one array per channel. v2 splits them: the 17
+// that describe a *voice* live in a song-level pool (song.instruments), and
+// the 13 that describe the *mixer strip* stay on the channel
+// (song.channels[c].fx). A voice is snapshotted at note-on, so a note keeps
+// the sound it started with; a strip parameter is read every row, so an
+// effect command can sweep it while notes play.
 //
-// While an FX-track cell is selected (tracker.js's activeFxCell()), every
-// slider/icon write here is mirrored into that cell *as well as* the live
-// instrument (see setInstrProp), and the controls display the cell's stored
-// value on top of the instrument's (see previewInstrI, which panels/keyboard.js
-// also reads so the jammer previews exactly what is on screen).
+// The panel's layout does not change for that. Every control names a
+// parameter address instead of a bare index -- V(n) for a voice parameter,
+// X(n) for a strip one -- and getParam/setParam below route it. Which
+// instrument a channel plays, and the pool UI for picking between them, is
+// Milestone 7's work; for now a channel edits the instrument its `ins` field
+// names, exactly as v1 read the channel's own array.
+//
+// This panel's "Channel" selector is state.selInstrument, shared with the
+// tracker: clicking any sequencer/pattern cell moves it, and this panel
+// reflects whatever it is set to. The selector lists all engine.MAX_CHANNELS
+// slots rather than state.song.numChannels, matching tracker.js's always-16
+// columns: a channel past numChannels is one with no sequence data yet, and
+// its instrument still has to be reachable to set up before it is used.
+//
+// While an effect cell is selected (tracker.js's activeFxCell()), a write to
+// a *strip* control is mirrored into that cell as well as into the live strip
+// (see setInstrProp), and the controls display the cell's stored value on top
+// of the strip's (see previewInstrI). Voice controls are not mirrored: v2
+// snapshots a voice at note-on, so an effect command that wrote one would
+// change nothing.
 //
 // Instrument copy/paste uses a module-local clipboard, leaving state.clipboard
-// to the pattern/fx-cell clipboard so the two can't collide.
+// to the pattern clipboard so the two can't collide.
 
-import * as engine from '../engine.js';
+import * as engine from '../engine2.js';
 import { state } from '../state.js';
 import { svgIcon } from '../icons.js';
 import { activeFxCell } from './tracker.js';
@@ -49,60 +63,109 @@ const FILTER_ICONS = [
 // is what gives them fine control at the low end of their range where it
 // matters; it lives in the range input's own value mapping, not in pixel math
 // (see bindSlider/refreshSlider).
+// A parameter address. `fx` says which of the two arrays it lives in; `i` is
+// its index there. Every control names one of these instead of a bare number,
+// which is what keeps the routing in one place.
+const V = i => ({ fx: false, i });   // a voice parameter, song.instruments[n]
+const X = i => ({ fx: true, i });    // a strip parameter, channel.fx
+
 const SLIDERS = {
-  osc1_vol: { prop: engine.OSC1_VOL, min: 0, max: 255 },
-  osc1_semi: { prop: engine.OSC1_SEMI, min: 92, max: 164 },
-  osc1_xenv: { prop: engine.OSC1_XENV, min: 0, max: 255 },
-  osc2_vol: { prop: engine.OSC2_VOL, min: 0, max: 255 },
-  osc2_semi: { prop: engine.OSC2_SEMI, min: 92, max: 164 },
-  osc2_det: { prop: engine.OSC2_DETUNE, min: 0, max: 255, nonLinear: true },
-  osc2_xenv: { prop: engine.OSC2_XENV, min: 0, max: 255 },
-  noise_vol: { prop: engine.NOISE_VOL, min: 0, max: 255 },
-  env_att: { prop: engine.ENV_ATTACK, min: 0, max: 255 },
-  env_sust: { prop: engine.ENV_SUSTAIN, min: 0, max: 255 },
-  env_rel: { prop: engine.ENV_RELEASE, min: 0, max: 255 },
-  env_decay: { prop: engine.ENV_EXP_DECAY, min: 0, max: 255 },
-  arp_speed: { prop: engine.ARP_SPEED, min: 0, max: 7 },
-  lfo_amt: { prop: engine.LFO_AMT, min: 0, max: 255 },
-  lfo_freq: { prop: engine.LFO_FREQ, min: 0, max: 16 },
-  fx_freq: { prop: engine.FX_FREQ, min: 0, max: 255, nonLinear: true },
-  fx_res: { prop: engine.FX_RESONANCE, min: 0, max: 254 },
-  fx_dist: { prop: engine.FX_DIST, min: 0, max: 255, nonLinear: true },
-  fx_drive: { prop: engine.FX_DRIVE, min: 0, max: 255 },
-  fx_pan_amt: { prop: engine.FX_PAN_AMT, min: 0, max: 255 },
-  fx_pan_freq: { prop: engine.FX_PAN_FREQ, min: 0, max: 16 },
-  fx_dly_amt: { prop: engine.FX_DELAY_AMT, min: 0, max: 255 },
-  fx_dly_time: { prop: engine.FX_DELAY_TIME, min: 0, max: 16 },
+  osc1_vol: { prop: V(engine.OSC1_VOL), min: 0, max: 255 },
+  osc1_semi: { prop: V(engine.OSC1_SEMI), min: 92, max: 164 },
+  osc1_xenv: { prop: V(engine.OSC1_XENV), min: 0, max: 255 },
+  osc2_vol: { prop: V(engine.OSC2_VOL), min: 0, max: 255 },
+  osc2_semi: { prop: V(engine.OSC2_SEMI), min: 92, max: 164 },
+  osc2_det: { prop: V(engine.OSC2_DETUNE), min: 0, max: 255, nonLinear: true },
+  osc2_xenv: { prop: V(engine.OSC2_XENV), min: 0, max: 255 },
+  noise_vol: { prop: V(engine.NOISE_VOL), min: 0, max: 255 },
+  env_att: { prop: V(engine.ENV_ATTACK), min: 0, max: 255 },
+  env_dec: { prop: V(engine.ENV_DECAY), min: 0, max: 255 },
+  env_sus: { prop: V(engine.ENV_SUSTAIN_LEVEL), min: 0, max: 255 },
+  env_rel: { prop: V(engine.ENV_RELEASE), min: 0, max: 255 },
+  env_decay: { prop: V(engine.ENV_EXP_DECAY), min: 0, max: 255 },
+  arp_speed: { prop: V(engine.ARP_SPEED), min: 0, max: 7 },
+  lfo_amt: { prop: X(engine.LFO_AMT), min: 0, max: 255 },
+  lfo_freq: { prop: X(engine.LFO_FREQ), min: 0, max: 16 },
+  fx_freq: { prop: X(engine.FX_FREQ), min: 0, max: 255, nonLinear: true },
+  fx_res: { prop: X(engine.FX_RESONANCE), min: 0, max: 254 },
+  fx_dist: { prop: X(engine.FX_DIST), min: 0, max: 255, nonLinear: true },
+  fx_drive: { prop: X(engine.FX_DRIVE), min: 0, max: 255 },
+  fx_pan_amt: { prop: X(engine.FX_PAN_AMT), min: 0, max: 255 },
+  fx_pan_freq: { prop: X(engine.FX_PAN_FREQ), min: 0, max: 16 },
+  fx_dly_amt: { prop: X(engine.FX_DELAY_AMT), min: 0, max: 255 },
+  fx_dly_time: { prop: X(engine.FX_DELAY_TIME), min: 0, max: 16 },
 };
 
 let instrClipboard = null;
 
-function currentInstr() {
-  return state.song.songData[state.selInstrument];
+const currentChannel = () => state.song.channels[state.selInstrument];
+
+// The voice this channel plays by default. A note can name a different one,
+// but this is the one the panel edits -- see the header comment.
+function currentVoice() {
+  const ch = currentChannel();
+  return state.song.instruments[ch.ins] || state.song.instruments[0];
 }
 
-// If an FX-track cell is selected, mirror the write into that cell as well as
-// the live instrument property -- both, never one or the other.
-function setInstrProp(prop, value) {
-  currentInstr().i[prop] = value;
-  const cell = activeFxCell();
-  if (cell) cell.set(prop, value);
+const arrayFor = addr => (addr.fx ? currentChannel().fx : currentVoice());
+
+function getParam(addr) { return arrayFor(addr)[addr.i]; }
+
+// If an effect cell is selected, a *strip* write is mirrored into that cell as
+// well as into the live strip. A voice write is not: v2 snapshots a voice at
+// note-on, so a command that wrote one would have nothing to change.
+function setInstrProp(addr, value) {
+  arrayFor(addr)[addr.i] = value;
+  if (addr.fx) {
+    const cell = activeFxCell();
+    if (cell) cell.set(addr.i, value);
+  }
   $('instr-preset').value = '';
   syncJammer();
-  // The piano roll draws each note as wide as this envelope sounds, so an
-  // envelope edit must repaint it. A no-op in the tracker view.
-  if (prop === engine.ENV_ATTACK || prop === engine.ENV_SUSTAIN || prop === engine.ENV_RELEASE) renderPianoRoll();
+  // The piano roll draws each note as long as it sounds, so an envelope edit
+  // must repaint it. A no-op in the tracker view.
+  if (!addr.fx && addr.i >= engine.ENV_ATTACK && addr.i <= engine.ENV_RELEASE) renderPianoRoll();
 }
 
-// The instrument array to *display*: the real instrument, unless an FX cell is
-// selected, in which case that cell's stored value previews on top of whichever
-// one property it targets. panels/keyboard.js reads this too, so the jammer's
-// live preview hears the same instrument these controls show.
+// The v1-shaped 28-number array the jammer plays, built from the two v2 arrays
+// it replaced. jammer.js is still the SoundBox real-time synth (Milestone 7
+// converts it), and this is the one place that difference is bridged.
+//
+// The one parameter with no v2 counterpart is v1's sustain *time*, index 11.
+// v2 holds a note until something releases it, and the jammer has no note-off
+// to send, so the preview is given a fixed hold: long enough to judge the tone,
+// short enough not to drone while you work.
+const PREVIEW_SUSTAIN = 32;
+
+function toV1(voice, fx) {
+  return [
+    voice[0], voice[1], voice[2], voice[3],
+    voice[4], voice[5], voice[6], voice[7], voice[8],
+    voice[9],
+    voice[engine.ENV_ATTACK],
+    // A voice that holds (a sustain level above zero) gets the preview hold;
+    // one that decays to nothing already ends on its own, so its decay time is
+    // the length it should sound for.
+    voice[engine.ENV_SUSTAIN_LEVEL] ? PREVIEW_SUSTAIN : voice[engine.ENV_DECAY],
+    voice[engine.ENV_RELEASE],
+    voice[engine.ENV_EXP_DECAY],
+    voice[engine.ARP_CHORD], voice[engine.ARP_SPEED],
+    ...fx,
+  ];
+}
+
+// What the jammer should play: the channel as it stands, unless an effect cell
+// is selected, in which case that cell's stored value previews on top of the
+// one strip parameter it targets. panels/keyboard.js reads this, so the live
+// preview hears the same settings these controls show.
 export function previewInstrI() {
-  const i = currentInstr().i.slice();
+  const fx = currentChannel().fx.slice();
   const cell = activeFxCell();
-  if (cell && cell.cmd > 0) i[cell.cmd - 1] = cell.val;
-  return i;
+  if (cell && cell.cmd >= engine.PARAM) {
+    const idx = cell.cmd - engine.PARAM;
+    if (idx < engine.NUM_FX_PARAMS) fx[idx] = cell.val;
+  }
+  return toV1(currentVoice(), fx);
 }
 
 function iconGroupHTML(id, entries) {
@@ -175,9 +238,9 @@ function bindSlider(id, def) {
   };
 }
 
-function refreshSlider(id, def, i) {
+function refreshSlider(id, def) {
   const el = $(id);
-  const value = i[def.prop];
+  const value = getParam(def.prop);
   el.value = def.nonLinear
     ? Math.round(1000 * Math.sqrt(Math.min(1, Math.max(0, (value - def.min) / (def.max - def.min)))))
     : value;
@@ -188,31 +251,61 @@ function refreshSlider(id, def, i) {
 // The arpeggio's two notes share one byte (ARP_CHORD: high nibble = note 1, low
 // nibble = note 2), so they can't go through SLIDERS' one-slider-one-property
 // mapping and are bound as a special case.
+const ARP = V(engine.ARP_CHORD);
+
 function bindArpNotes() {
   $('arp_note1').min = $('arp_note2').min = 0;
   $('arp_note1').max = $('arp_note2').max = 12;
   $('arp_note1').oninput = () => {
     const v = +$('arp_note1').value;
-    setInstrProp(engine.ARP_CHORD, (currentInstr().i[engine.ARP_CHORD] & 15) | (v << 4));
+    setInstrProp(ARP, (getParam(ARP) & 15) | (v << 4));
     $('arp_note1').nextElementSibling.textContent = v;
     paintFill($('arp_note1'));
   };
   $('arp_note2').oninput = () => {
     const v = +$('arp_note2').value;
-    setInstrProp(engine.ARP_CHORD, (currentInstr().i[engine.ARP_CHORD] & 240) | v);
+    setInstrProp(ARP, (getParam(ARP) & 240) | v);
     $('arp_note2').nextElementSibling.textContent = v;
     paintFill($('arp_note2'));
   };
 }
 
-function refreshArpNotes(i) {
-  const chord = i[engine.ARP_CHORD];
+function refreshArpNotes() {
+  const chord = getParam(ARP);
   $('arp_note1').value = chord >> 4;
   $('arp_note1').nextElementSibling.textContent = chord >> 4;
   paintFill($('arp_note1'));
   $('arp_note2').value = chord & 15;
   $('arp_note2').nextElementSibling.textContent = chord & 15;
   paintFill($('arp_note2'));
+}
+
+// The presets in presets.js are still SoundBox's 28-number v1 instruments, so
+// loading one splits it the way engine2.js's convertV1 splits a song's.
+//
+// The envelope cannot be split faithfully, and this is the honest compromise
+// until Milestone 7 re-voices the set by ear. v1's parameter 11 is a sustain
+// *time*; v2 has a sustain *level* and holds a note until it is released. A
+// preset carries no note-off, so mapping it to "hold at full level" would make
+// every loaded preset ring until the song ended. Instead the old hold time is
+// folded into the decay and the sustain level is set to 0, which gives a sound
+// that ends by itself. Percussive and plucked presets come out close; pads come
+// out shorter than they were, and are what Milestone 7 has to revisit.
+function loadPreset(src) {
+  const voice = currentVoice();
+  const v = [
+    src[0], src[1], src[2], src[3],
+    src[4], src[5], src[6], src[7], src[8],
+    src[9],
+    src[10],              // attack, unchanged
+    src[11] + src[12],    // old hold + old release, as a decay to silence
+    0,                    // no sustain level: it ends on its own
+    src[12],              // release, unchanged
+    src[13],              // exponential bend, unchanged
+    src[14], src[15],     // arpeggio
+  ];
+  for (let j = 0; j < voice.length; j++) voice[j] = v[j];
+  currentChannel().fx = src.slice(16, 29);
 }
 
 function presetOptionsHTML() {
@@ -230,7 +323,7 @@ export function initInstrumentPanel() {
   $('instrument-panel').classList.remove('wip');
   $('instrument-panel').innerHTML = `
     <div class="instr-header">
-      <h3 title="The sound one channel plays. Every note in that channel's patterns uses these settings — one instrument per channel, all the way through the song.">Instrument</h3>
+      <h3 title="The sound this channel plays by default. The oscillator, noise, envelope and arpeggio settings are the voice, which a note can swap for another from the song's pool; the FX settings are the channel's mixer strip, which every note on the channel goes through.">Instrument</h3>
       <label title="Which channel's instrument these controls edit. Clicking any cell in the tracker selects that channel too.">Channel <select id="instr-channel"></select></label>
       <select id="instr-preset" title="Load one of SoundBox's ready-made instruments into this channel, as a starting point to tweak. Overwrites every setting below.">
       </select>
@@ -269,11 +362,12 @@ export function initInstrumentPanel() {
       </div>
       <div class="instr-card">
         <div class="instr-sub">
-          <h4 title="The shape of a note's volume over time: fade in (Att), hold (Sust), fade out (Rel). Total length is the note's length — patterns trigger notes, they don't hold them.">Envelope</h4>
+          <h4 title="The shape of a note's volume over time: fade in (Att), fall to the sustain level (Dec, Sus), then fade out when the note is released (Rel). A note with Sus above 0 holds until something releases it — a note-off, or a GAT command. A note with Sus at 0 dies away on its own, which is what a drum wants.">Envelope</h4>
           ${sliderRow('env_att', 'Att', 'Fade-in time. 0 starts instantly (percussive); high values swell in, for pads and strings.')}
-          ${sliderRow('env_sust', 'Sust', 'How long the note holds at full volume after the fade-in, before it starts releasing.')}
-          ${sliderRow('env_rel', 'Rel', 'Fade-out time — the tail of the note. This is what makes a sound short and dry or long and ringing.')}
-          ${sliderRow('env_decay', 'Exp', 'Bends the fade-out from a straight line into an exponential drop: plucky and front-loaded instead of an even fade.')}
+          ${sliderRow('env_dec', 'Dec', 'How long it takes to fall from full volume to the sustain level after the fade-in.')}
+          ${sliderRow('env_sus', 'Sus', 'The level the note holds at once the decay is done. 0 means it dies away and needs no note-off — a drum. Above 0 it rings until a note-off or a GAT command releases it.')}
+          ${sliderRow('env_rel', 'Rel', 'Fade-out time after the note is released — the tail. This is what makes a sound short and dry or long and ringing.')}
+          ${sliderRow('env_decay', 'Exp', 'Bends both the decay and the fade-out from a straight line into an exponential drop: plucky and front-loaded instead of an even fade.')}
         </div>
         <div class="instr-sub">
           <h4 title="A slow oscillator that sweeps the FX filter cutoff up and down for wah and wobble. It does nothing until FX freq modulation below is ticked.">LFO</h4>
@@ -301,27 +395,34 @@ export function initInstrumentPanel() {
 
   for (const [id, def] of Object.entries(SLIDERS)) bindSlider(id, def);
   bindArpNotes();
-  bindIconGroup('osc1-wave', engine.OSC1_WAVEFORM);
-  bindIconGroup('osc2-wave', engine.OSC2_WAVEFORM);
-  bindIconGroup('lfo-wave', engine.LFO_WAVEFORM);
-  bindIconGroup('fx-filter', engine.FX_FILTER);
+  bindIconGroup('osc1-wave', V(engine.OSC1_WAVEFORM));
+  bindIconGroup('osc2-wave', V(engine.OSC2_WAVEFORM));
+  bindIconGroup('lfo-wave', X(engine.LFO_WAVEFORM));
+  bindIconGroup('fx-filter', X(engine.FX_FILTER));
 
-  $('lfo_fxfreq').onchange = () => setInstrProp(engine.LFO_FX_FREQ, $('lfo_fxfreq').checked ? 1 : 0);
+  $('lfo_fxfreq').onchange = () => setInstrProp(X(engine.LFO_FX_FREQ), $('lfo_fxfreq').checked ? 1 : 0);
 
   $('instr-preset').innerHTML = presetOptionsHTML();
   $('instr-preset').onchange = () => {
     const idx = $('instr-preset').value;
     if (idx === '') return;
-    const src = window.gInstrumentPresets[+idx].i;
-    for (let j = 0; j < src.length; j++) currentInstr().i[j] = src[j];
+    loadPreset(window.gInstrumentPresets[+idx].i);
     refreshInstrumentPanel();
     $('instr-preset').blur();
   };
 
-  $('instr-copy').onclick = () => { instrClipboard = currentInstr().i.slice(); };
+  // Copy/paste moves the voice *and* the strip together, because that pair is
+  // what "this channel's sound" means to the person clicking the button. The
+  // voice is copied by value into the target's own pool entry rather than
+  // shared, so pasting onto a second channel does not silently link the two.
+  $('instr-copy').onclick = () => {
+    instrClipboard = { voice: currentVoice().slice(), fx: currentChannel().fx.slice() };
+  };
   $('instr-paste').onclick = () => {
     if (!instrClipboard) return;
-    currentInstr().i = instrClipboard.slice();
+    const voice = currentVoice();
+    for (let j = 0; j < voice.length; j++) voice[j] = instrClipboard.voice[j];
+    currentChannel().fx = instrClipboard.fx.slice();
     refreshInstrumentPanel();
   };
 
@@ -340,14 +441,13 @@ export function refreshInstrumentPanel() {
   if (state.selInstrument < 0 || state.selInstrument >= engine.MAX_CHANNELS) state.selInstrument = 0;
   sel.value = state.selInstrument;
 
-  const i = previewInstrI();
-  setActiveIcon('osc1-wave', i[engine.OSC1_WAVEFORM]);
-  setActiveIcon('osc2-wave', i[engine.OSC2_WAVEFORM]);
-  setActiveIcon('lfo-wave', i[engine.LFO_WAVEFORM]);
-  setActiveIcon('fx-filter', i[engine.FX_FILTER]);
+  setActiveIcon('osc1-wave', getParam(V(engine.OSC1_WAVEFORM)));
+  setActiveIcon('osc2-wave', getParam(V(engine.OSC2_WAVEFORM)));
+  setActiveIcon('lfo-wave', getParam(X(engine.LFO_WAVEFORM)));
+  setActiveIcon('fx-filter', getParam(X(engine.FX_FILTER)));
 
-  for (const [id, def] of Object.entries(SLIDERS)) refreshSlider(id, def, i);
-  refreshArpNotes(i);
+  for (const [id, def] of Object.entries(SLIDERS)) refreshSlider(id, def);
+  refreshArpNotes();
 
-  $('lfo_fxfreq').checked = !!i[engine.LFO_FX_FREQ];
+  $('lfo_fxfreq').checked = !!getParam(X(engine.LFO_FX_FREQ));
 }

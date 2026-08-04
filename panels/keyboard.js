@@ -39,7 +39,7 @@
 // There is no MIDI input: SoundBox's was never separable from its old UI, and
 // nothing else here depends on it.
 
-import * as engine from '../engine.js';
+import * as engine from '../engine2.js';
 import { state, savePrefs } from '../state.js';
 import { audioContext, masterGain } from '../audio.js';
 import { previewInstrI } from './instrument.js';
