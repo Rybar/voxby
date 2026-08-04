@@ -105,11 +105,11 @@ export function initPianoRoll() {
   // Create canvas container with flex wrapper and scrolling
   panel.innerHTML = `
     <div class="pianoroll-header">
-      <h3 title="Time runs left to right, pitch bottom to top. Click an empty cell to place a note, right-click a note to delete it. The computer keys write their own pitch and pull the cursor onto it; Caps Lock writes the note the cursor is already on. Either way the row moves on by the edit step.">Piano Roll</h3>
+      <h3 title="Time runs left to right, pitch bottom to top. Click an empty cell to place a note, right-click a note to delete it, drag a note's right edge to set how long it sounds. The computer keys write their own pitch and pull the cursor onto it; Caps Lock writes the note the cursor is already on. Either way the row moves on by the edit step.">Piano Roll</h3>
       <label class="zoom-control" title="Vertical zoom: adjust row height">
         Zoom: <input id="pianoroll-zoom" type="range" min="6" max="20" step="1" value="${cellHeight}">
       </label>
-      <label class="zoom-control" title="Draw each note as long as its instrument's envelope sounds (attack + sustain + release). An estimate for the eye only: FX tails are not counted, and the note data does not change.">
+      <label class="zoom-control" title="Draw each note as long as it actually sounds, and let its right edge be dragged to change that. A length is written as a note-off in the same column, or as a GAT command when the note runs to the end of the pattern. Turn this off and every note draws one cell wide, with no edge to drag.">
         <input id="pianoroll-notelen" type="checkbox" ${state.pianoRollNoteLen ? 'checked' : ''}> Length
       </label>
       <div class="spacer"></div>
@@ -212,6 +212,42 @@ let hoverCell = null;
 let mousePos = null;
 let dragStart = null;
 let isDragging = false;
+// The note whose right edge is being dragged, and the length that drag is
+// currently showing. Not in state.js: it lives for the duration of one drag
+// and nothing outside this module reads it.
+let resizeDrag = null;
+
+// How close to a block's right edge counts as grabbing it, in pixels. A note
+// one cell wide is only CELL_WIDTH - 4 px across, so this cannot be much
+// larger without swallowing the whole block and making a short note
+// impossible to click normally.
+const RESIZE_GRIP = 5;
+
+// The pixel x of the right edge of the block starting at `startRow` and
+// running `lenRows` rows -- the same arithmetic drawChannelNotes uses, so the
+// grip is always where the edge is drawn.
+function blockRightEdge(startRow, lenRows) {
+  const patternLen = state.song.patternLen;
+  const maxW = (patternLen - startRow) * CELL_WIDTH - 4;
+  const w = Math.max(MIN_NOTE_WIDTH, Math.min(lenRows * CELL_WIDTH - 4, maxW));
+  return PIANO_KEY_WIDTH + startRow * CELL_WIDTH + 2 + w;
+}
+
+// The note whose right edge is under the pointer, or null. Only while the
+// length toggle is on: with it off every block is drawn one cell wide, so a
+// grip would resize a note whose length is not on screen.
+function gripAt(clientX, clientY) {
+  if (!state.pianoRollNoteLen) return null;
+  if (!state.channelsEnabled[state.selInstrument]) return null;
+  const cell = canvasToGrid(clientX, clientY);
+  if (!cell) return null;
+  const block = noteBlockAt(cell.row, cell.pitch);
+  if (!block) return null;
+  const canvas = $('pianoroll-canvas');
+  const x = clientX - canvas.getBoundingClientRect().left;
+  const edge = blockRightEdge(block.startRow, Math.max(1, block.lenRows));
+  return Math.abs(x - edge) <= RESIZE_GRIP ? block : null;
+}
 
 function onCanvasMouseMove(e) {
   const canvas = $('pianoroll-canvas');
@@ -221,6 +257,26 @@ function onCanvasMouseMove(e) {
   }
 
   hoverCell = canvasToGrid(e.clientX, e.clientY);
+
+  // A live right-edge drag owns the pointer: the length follows the column the
+  // pointer is over, floored at one row so a note can never be dragged away to
+  // nothing (Delete is how a note is removed).
+  if (resizeDrag) {
+    if (hoverCell) resizeDrag.lenRows = Math.max(1, hoverCell.row - resizeDrag.startRow + 1);
+    const hint = $('pianoroll-hint');
+    if (hint) {
+      hint.textContent = `${pitchName(noteToPitch(resizeDrag.note))} · `
+        + `${resizeDrag.lenRows} row${resizeDrag.lenRows === 1 ? '' : 's'}`;
+    }
+    render();
+    return;
+  }
+
+  // Not dragging: show the resize cursor whenever an edge is grabbable, so the
+  // grip is discoverable without having to be told about it.
+  if (canvas && !isDragging) {
+    canvas.style.cursor = gripAt(e.clientX, e.clientY) ? 'ew-resize' : '';
+  }
 
   // Handle dragging selection to move notes
   if (isDragging && state.pianoRoll.dragSelection && hoverCell) {
@@ -264,6 +320,21 @@ function onCanvasMouseDown(e) {
 
   if (e.button !== 0) return; // only left button
 
+  // The right-edge grip is checked before everything else: it sits inside a
+  // note's own block, so a move-drag or a marquee would otherwise claim the
+  // press first and the edge could never be grabbed.
+  const grip = gripAt(e.clientX, e.clientY);
+  if (grip && !e.shiftKey) {
+    const len = Math.max(1, Math.round(grip.lenRows));
+    // startLen is what the note measured when the drag began, so a drag that
+    // ends back where it started can be recognised and skipped.
+    resizeDrag = { ...grip, lenRows: len, startLen: len };
+    isDragging = true;
+    dragStart = null;
+    state.pianoRoll.selectedNotes = [];
+    return;
+  }
+
   // Check if clicking on a selected note to start dragging
   const clickedSelected = state.pianoRoll.selectedNotes.some(n => n.row === cell.row && n.pitch === cell.pitch);
 
@@ -295,6 +366,21 @@ function onCanvasMouseDown(e) {
 function onCanvasMouseUp(e) {
   if (!isDragging) return;
   isDragging = false;
+
+  // Commit a right-edge drag. Undo is pushed here rather than on mousedown so
+  // a drag that ends back where it started leaves no entry behind.
+  if (resizeDrag) {
+    const p = focusedPattern();
+    if (p && resizeDrag.lenRows !== resizeDrag.startLen) {
+      pushUndo();
+      setNoteLength(p, resizeDrag.col, resizeDrag.startRow, resizeDrag.lenRows);
+      state.notify && state.notify();
+    }
+    resizeDrag = null;
+    dragStart = null;
+    render();
+    return;
+  }
 
   const cell = canvasToGrid(e.clientX, e.clientY);
 
@@ -373,6 +459,96 @@ function onCanvasRightClick(e) {
   state.pianoRoll.cursorRow = cell.row;
   state.pianoRoll.cursorPitch = cell.pitch;
   render();
+}
+
+//----------------------------------------------------------------------------
+// Note lengths (Milestone 6 of plans/voxby-synth-v2.md)
+//
+// A note's length is drawn by noteLengthRows() above and edited by dragging
+// the right edge of its block. What that drag writes is one of two things,
+// and the choice is made here rather than being offered to the user:
+//
+//   - a **note-off** in the same voice column at the row the note ends on;
+//   - a **GATE** command beside the note, when there is no row to put a
+//     note-off on because the note runs to the end of the pattern.
+//
+// A note-off is preferred because it is the tracker-native way to end a sound:
+// it shows up in the tracker grid as a row you can see and edit, and it costs
+// no effect slot, leaving Cmd and Val free for a slide or a vibrato. A GATE is
+// the fallback rather than the default for the same reason.
+//
+// Nothing is written at all when the end row already holds a note in that
+// column: a note-on releases the column's previous voice, so that note already
+// ends this one, and a note-off in front of it would be redundant.
+//----------------------------------------------------------------------------
+
+// The pattern the focused channel plays at the current sequence row.
+function focusedPattern() {
+  const ch = state.song.channels[state.selInstrument];
+  const pn = ch.seq[state.selRow];
+  return pn ? ch.pat[pn - 1] : null;
+}
+
+// Which note block, if any, covers (row, pitch) on the focused channel --
+// anywhere along its drawn length, not only its first row. Returns the note's
+// own start row and length, which is what a right-edge drag needs.
+function noteBlockAt(row, pitch) {
+  const p = focusedPattern();
+  if (!p) return null;
+  const patternLen = state.song.patternLen;
+  const note = pitchToNote(pitch);
+  for (let col = 0; col < 4; col++) {
+    for (let r = Math.min(row, patternLen - 1); r >= 0; r--) {
+      const s = r + col * patternLen;
+      const ev = p.n[s];
+      if (!ev) continue;
+      // The nearest event above `row` in this column decides: a note of this
+      // pitch may cover the cell, anything else means it does not.
+      if (engine.pitchOf(ev) !== note) break;
+      const len = noteLengthRows(state.selInstrument, p, s, r);
+      if (row < r + Math.max(1, len)) {
+        return { col, slot: s, startRow: r, lenRows: len, note };
+      }
+      break;
+    }
+  }
+  return null;
+}
+
+// Clear whatever currently states this note's length, so a new length replaces
+// it instead of stacking on top. That is its GATE, and any note-off standing
+// between it and the next note in its own column.
+function clearNoteLength(p, col, startRow) {
+  const patternLen = state.song.patternLen;
+  if (p.e[(startRow + col * patternLen) * 2] === engine.GATE) {
+    p.e[(startRow + col * patternLen) * 2] = 0;
+    p.e[(startRow + col * patternLen) * 2 + 1] = 0;
+  }
+  for (let r = startRow + 1; r < patternLen; r++) {
+    const ev = p.n[r + col * patternLen];
+    if (!ev) continue;
+    if (ev === engine.NOTE_OFF) p.n[r + col * patternLen] = 0;
+    break;   // any other note ends the search: it is the next note-on
+  }
+}
+
+// Give the note at (col, startRow) a length of `lenRows` rows. See the block
+// comment above for which of the two forms it writes.
+function setNoteLength(p, col, startRow, lenRows) {
+  const patternLen = state.song.patternLen;
+  const len = Math.max(1, Math.round(lenRows));
+  clearNoteLength(p, col, startRow);
+
+  const endRow = startRow + len;
+  if (endRow >= patternLen) {
+    // No row left to hold a note-off, so the length is stated as a gate.
+    p.e[(startRow + col * patternLen) * 2] = engine.GATE;
+    p.e[(startRow + col * patternLen) * 2 + 1] = len;
+    return;
+  }
+  // A note already there ends this one by itself.
+  if (p.n[endRow + col * patternLen]) return;
+  p.n[endRow + col * patternLen] = engine.NOTE_OFF;
 }
 
 // Check if a note exists at (row, pitch) in the focused channel
@@ -495,9 +671,12 @@ function deleteNoteAt(row, note) {
 
   const patternLen = state.song.patternLen;
 
-  // Find and clear the note at this pitch
+  // Find and clear the note at this pitch, and whatever stated its length -- a
+  // note-off left behind by a deleted note ends nothing and only clutters the
+  // tracker grid.
   for (let col = 0; col < 4; col++) {
     if (engine.pitchOf(pattern.n[row + col * patternLen]) === note) {
+      clearNoteLength(pattern, col, row);
       pattern.n[row + col * patternLen] = 0;
       state.notify && state.notify();
       render();
@@ -522,9 +701,10 @@ function deleteNoteAtAnyChannel(row, note) {
     const pattern = state.song.channels[channel].pat[pn - 1];
     if (!pattern) continue;
 
-    // Find and clear the note at this pitch
+    // Find and clear the note at this pitch, and whatever stated its length.
     for (let col = 0; col < 4; col++) {
       if (engine.pitchOf(pattern.n[row + col * patternLen]) === note) {
+        clearNoteLength(pattern, col, row);
         pattern.n[row + col * patternLen] = 0;
         deleted = true;
         break; // Only delete one note per channel
@@ -595,20 +775,28 @@ function moveSelectedNotes(offsetRow, offsetPitch) {
     const pattern = state.song.channels[ch].pat[pn - 1];
     if (!pattern) continue;
 
-    // Store notes to move
+    // Store notes to move, each with the length it currently sounds for. A
+    // note's length is stated by a note-off further down its column or by a
+    // gate beside it, and neither of those travels on its own -- so a dragged
+    // note would otherwise change length as it moved, or leave its old
+    // note-off stranded where nothing starts any more.
     const notesToMove = byChannel[ch].map(n => ({
       row: n.row,
       pitch: n.pitch,
       col: n.col,
-      note: pattern.n[n.row + n.col * patternLen]
+      note: pattern.n[n.row + n.col * patternLen],
+      lenRows: noteLengthRows(ch, pattern, n.row + n.col * patternLen, n.row),
     }));
 
-    // Clear original positions
+    // Clear the original positions, length markers first: clearing the note
+    // ahead of them would leave clearNoteLength with nothing to search from.
     for (const n of notesToMove) {
+      clearNoteLength(pattern, n.col, n.row);
       pattern.n[n.row + n.col * patternLen] = 0;
     }
 
     // Place at new positions
+    const placed = [];
     for (const n of notesToMove) {
       const newRow = n.row + offsetRow;
       const newPitch = n.pitch + offsetPitch;
@@ -625,10 +813,15 @@ function moveSelectedNotes(offsetRow, offsetPitch) {
         if (!pattern.n[newRow + col * patternLen]) {
           pattern.n[newRow + col * patternLen] = newNote;
           newSelection.push({ row: newRow, pitch: newPitch, col, channel: ch });
+          placed.push({ col, row: newRow, lenRows: n.lenRows });
           break;
         }
       }
     }
+
+    // Lengths last, once every note has landed: setNoteLength refuses to write
+    // a note-off over a note, so it has to see the final arrangement.
+    for (const n of placed) setNoteLength(pattern, n.col, n.row, n.lenRows);
   }
 
   state.pianoRoll.selectedNotes = newSelection;
@@ -642,7 +835,8 @@ function deleteSelection() {
 
   const patternLen = state.song.patternLen;
 
-  // Group by channel and delete from each
+  // Group by channel and delete from each, taking each note's length marker
+  // with it so no note-off is left ending a note that is gone.
   for (const note of state.pianoRoll.selectedNotes) {
     const pn = state.song.channels[note.channel].seq[state.selRow];
     if (!pn) continue;
@@ -650,6 +844,7 @@ function deleteSelection() {
     const pattern = state.song.channels[note.channel].pat[pn - 1];
     if (!pattern) continue;
 
+    clearNoteLength(pattern, note.col, note.row);
     pattern.n[note.row + note.col * patternLen] = 0;
   }
 
@@ -1474,7 +1669,14 @@ function drawChannelNotes(ctx, channel, patternNum, patternLen, lowestPitch) {
       // Length is per note now, not per channel: a gate, a note-off or a
       // per-note instrument change all make one note a different length from
       // its neighbour in the same column.
-      const lenRows = state.pianoRollNoteLen ? noteLengthRows(channel, pattern, s, row) : 1;
+      //
+      // A note whose right edge is being dragged is drawn at the length the
+      // drag currently shows, so the block follows the pointer live rather
+      // than jumping to its new size only on release.
+      const dragging = resizeDrag && isFocused
+        && resizeDrag.col === col && resizeDrag.startRow === row;
+      const lenRows = dragging ? resizeDrag.lenRows
+        : state.pianoRollNoteLen ? noteLengthRows(channel, pattern, s, row) : 1;
 
       const x = gridX + row * CELL_WIDTH;
       const y = (numSemitones - 1 - (pitch - lowestPitch)) * cellHeight;
@@ -1490,6 +1692,15 @@ function drawChannelNotes(ctx, channel, patternNum, patternLen, lowestPitch) {
       drawRoundRect(ctx, x + 2, y + 2, w, cellHeight - 4, 3);
       ctx.fillStyle = headFill;
       drawRoundRect(ctx, x + 2, y + 2, Math.min(w, CELL_WIDTH - 4), cellHeight - 4, 3);
+
+      // The grip: a bright bar on the right edge of every note on the focused
+      // channel, so the one place a length can be dragged from is visible
+      // without having to hunt for it. Only while lengths are on screen --
+      // with the toggle off there is no length to drag (see gripAt).
+      if (isFocused && isEnabled && state.pianoRollNoteLen && cellHeight >= 7) {
+        ctx.fillStyle = dragging ? '#ffffff' : headFill;
+        ctx.fillRect(x + 2 + w - 2, y + 2, 2, cellHeight - 4);
+      }
     }
   }
 }
