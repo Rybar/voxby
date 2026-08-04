@@ -33,7 +33,7 @@
     <li><a href="#notes">Playing notes in</a>
       <ul><li><a href="#pads">Chord pads</a></li><li><a href="#follow">Follow</a></li></ul></li>
     <li><a href="#editing">Selecting and editing</a></li>
-    <li><a href="#fx">The FX track</a></li>
+    <li><a href="#fx">Effects</a></li>
     <li><a href="#instruments">Instruments</a></li>
     <li><a href="#playback">Playback</a></li>
     <li><a href="#files">Opening, saving, sharing</a></li>
@@ -44,12 +44,21 @@
 </nav>
 
 <p>Voxby is a <a href="https://en.wikipedia.org/wiki/Music_tracker">tracker</a>.
-A song is up to <strong>16 channels</strong>. Each channel has one
-<strong>instrument</strong> and up to <strong>36 patterns</strong> of notes. The
-<strong>sequencer</strong> says which pattern each channel plays at each step of
-the song. Every note you hear is synthesized on the spot from an instrument's
-settings. There are no samples. This is why a song fits in a few
-hundred bytes.</p>
+A song is up to <strong>16 channels</strong>, each with up to <strong>36
+patterns</strong> of notes, and a <strong>pool of voices</strong> any channel or
+any single note can play. The <strong>sequencer</strong> says which pattern each
+channel plays at each step of the song. Every note you hear is synthesized on
+the spot from a voice's settings. There are no samples. This is why a song fits
+in a few hundred bytes.</p>
+
+<div class="note">
+  <p><strong>Notes are held, not fired.</strong> A note sounds until something
+  ends it — a note-off, a gate, or its own envelope decaying to silence. That
+  one rule is what portamento, per-row tempo and per-note instrument changes are
+  all built on, and it is the main thing that differs from SoundBox, which this
+  editor grew out of. See <a href="#instruments">Sustain, and why a note might
+  never stop</a> if a channel drones.</p>
+</div>
 
 <h2 id="quickstart">Quick start</h2>
 
@@ -98,7 +107,8 @@ hundred bytes.</p>
   at the sequencer's current row. Every channel is shown side by side. The
   highlighted column is the one you are editing.</li>
   <li><strong>Keyboard</strong>: note entry, and the scale/chord helpers.</li>
-  <li><strong>Instrument</strong>: the sound the selected channel plays.</li>
+  <li><strong>Instrument</strong>: the voice being edited, and the selected
+  channel's mixer strip.</li>
   <li><strong>Scope</strong>: what the output actually looks like.</li>
 </ol>
 
@@ -111,7 +121,7 @@ things worth knowing before you can guess them.</p>
 <figure class="wide">
   <img src="help/tracker.png" alt="The sequencer and pattern grids">
   <figcaption>Left: the sequencer, one column per channel. Right: the pattern
-  grid, four note columns and one FX column per channel.</figcaption>
+  grid, four voice columns per channel.</figcaption>
 </figure>
 
 <p>One row per step of the song, one column per channel. A cell holds a pattern
@@ -143,14 +153,31 @@ changes which rows get a highlight. Set it to 3 for a waltz or 8 for
 
 <h2 id="patterns">Patterns</h2>
 
-<p>Each pattern has <strong>four note columns</strong>. Four notes can sound at
-once in one channel. This is what makes chords possible. Each pattern also has one
-<strong>FX column</strong>. A pattern only exists where the sequencer put it. If
-a channel's column header reads <code>-</code> instead of <code>Pat 3</code>,
-there is nothing at this step to write into. Place a pattern number in the
-sequencer first.</p>
+<p>Each pattern has <strong>four voice columns</strong>. Four notes can sound at
+once in one channel, which is what makes chords possible. A pattern only exists
+where the sequencer put it. If a channel's column header reads <code>-</code>
+instead of <code>Pat 3</code>, there is nothing at this step to write into.
+Place a pattern number in the sequencer first.</p>
 
-<p><kbd>Tab</kbd> moves between the three grids (sequencer → pattern → FX);
+<p>Each voice column is <strong>five cells</strong> wide:</p>
+
+<table class="keys">
+  <tr><th>Note</th><td>The pitch. <code>===</code> is a <strong>note-off</strong>:
+    it ends whatever this column is playing.</td></tr>
+  <tr><th>Ins</th><td>Which voice from the song's pool this note uses. Blank
+    means "the same as last time".</td></tr>
+  <tr><th>Vol</th><td>Velocity, <code>01</code> to <code>7F</code>. Blank means
+    "the same as last time".</td></tr>
+  <tr><th>Cmd</th><td>An effect command. See <a href="#fx">Effects</a>.</td></tr>
+  <tr><th>Val</th><td>Its value.</td></tr>
+</table>
+
+<p>Only the channel you are editing shows all five. Every other channel shows
+its notes alone, because sixteen channels of twenty cells is not readable. A
+note on one of those channels that is carrying a velocity, an instrument or an
+effect is marked with a small dot, so nothing is ever hidden without a sign.</p>
+
+<p><kbd>Tab</kbd> moves between the sequencer and the pattern grid;
 <kbd>Shift</kbd>+<kbd>Tab</kbd> goes back. Which grid has the cursor decides
 what typing does.</p>
 
@@ -239,16 +266,32 @@ easier mouse targeting.</p>
 
 <h3>Note length</h3>
 
-<p>The <strong>Length</strong> checkbox draws each note as wide as it sounds. The
-width comes from the channel instrument's envelope — attack plus sustain plus
-release — measured against the song tempo. Change an envelope slider or the BPM
-and the blocks change with it. The first row of each note stays brighter, so you
-can still see where a note starts under a long tail.</p>
+<p>The <strong>Length</strong> checkbox draws each note as wide as it sounds,
+and lets you <strong>drag its right edge</strong> to change that. The first row
+of each note stays brighter, so you can still see where a note starts under a
+long tail.</p>
 
-<p>This is an estimate for the eye only. It never changes the song data, and a
-note is still one cell to click, to select and to delete. FX are not counted:
-delay and reverb keep sound after the envelope ends, but they do not change the
-note itself. Turn the checkbox off for one block per row.</p>
+<p>Dragging an edge writes one of two things, and picks for you:</p>
+
+<ul>
+  <li>a <strong>note-off</strong> in the same column at the row the note ends
+  on — the usual case, and the one that shows up in the tracker grid as a row
+  you can see and edit;</li>
+  <li>a <strong>GAT</strong> command beside the note when it runs to the end of
+  the pattern, because there is no row left to put a note-off on.</li>
+</ul>
+
+<p>Nothing is written when the next note in that column already ends it: a note
+starting always releases whatever the column was playing. A note's length
+travels with it, so dragging a note sideways or deleting it takes its note-off
+along too.</p>
+
+<p>Where you have written no length at all, the block is drawn from the voice
+instead: one with <strong>Sus</strong> at 0 dies away on its own and is drawn
+that long, and one with Sus above 0 is held, so it is drawn to the end of the
+pattern. FX are not counted — delay keeps sound after a note ends, but it does
+not change when the note itself stops. Turn the checkbox off for one block per
+row, which also turns the drag handles off.</p>
 
 <h3>Playback</h3>
 
@@ -431,21 +474,59 @@ row at once, which is how you take out a chord you entered as one.</p>
 well by an octave. The right-click menu carries the same operations, so nothing
 is keyboard-only.</p>
 
-<h2 id="fx">The FX track</h2>
+<h2 id="fx">Effects</h2>
 
-<p>The narrow column on the right of each channel's pattern is its automation
-lane: one command per row, changing a single instrument parameter as the song
-plays. There is nothing to type. <strong>Click a row in the FX column, then
-move any control in the instrument panel</strong>, and that parameter and value
-are recorded on that row. The instrument panel shows the value stored in the
-selected FX cell rather than the instrument's own while such a row is
-selected, so you are always looking at what will happen there.</p>
+<p>Every voice column carries its own <strong>Cmd</strong> and <strong>Val</strong>
+cells. A command acts on the note in that column, so two notes on the same row
+can slide in different directions.</p>
+
+<p>Type one letter in a Cmd cell:</p>
+
+<table class="keys">
+  <tr><th><kbd>S</kbd> SLD</th><td><strong>Slide to</strong> the note written
+    on the same row. The note does not re-trigger — it bends. The value is the
+    speed, in sixteenths of a semitone per row.</td></tr>
+  <tr><th><kbd>B</kbd> BND</th><td><strong>Bend</strong> freely, with no
+    destination, until something changes it. Signed: a negative value bends
+    down. <code>0</code> stops it.</td></tr>
+  <tr><th><kbd>V</kbd> VIB</th><td><strong>Vibrato</strong>. The value is
+    speed × 256 + depth, both in sixteenths.</td></tr>
+  <tr><th><kbd>T</kbd> TMP</th><td><strong>Tempo</strong>. Typed and shown as
+    BPM. This one is <em>global</em> — it changes the speed of every channel,
+    whichever channel you enter it on.</td></tr>
+  <tr><th><kbd>D</kbd> DLY</th><td><strong>Delay</strong> the note's start by
+    this many samples, without moving it to another row.</td></tr>
+  <tr><th><kbd>G</kbd> GAT</th><td><strong>Gate</strong>: release this note
+    after this many rows. Fractions are allowed — <code>0.5</code> is half a
+    row.</td></tr>
+</table>
+
+<p>Val takes <strong>decimal</strong>, not hex, because these values are plain
+numbers: a bend rate can be negative and a gate length can be fractional.
+<kbd>-</kbd> flips the sign.</p>
+
+<h3>Recording a mixer change</h3>
+
+<p>The channel's mixer settings — filter, distortion, drive, pan, delay and the
+LFO — can be changed part-way through a song. There is nothing to type.
+<strong>Select a Cmd or Val cell, then move any control in the FX or LFO card of
+the instrument panel</strong>, and that parameter and value are recorded there
+as a <code>P0</code>…<code>PC</code> command. Hover one to see which parameter
+it writes.</p>
 
 <div class="note">
-  <p>FX commands are <strong>persistent</strong>. A change made in one pattern
+  <p>Only the <em>mixer</em> half can be recorded this way. The oscillator,
+  noise, envelope and arpeggio controls describe a <strong>voice</strong>, and a
+  voice is captured the instant a note starts — so a command changing one
+  part-way through would have nothing left to change. Give the note a different
+  voice in its Ins cell instead.</p>
+</div>
+
+<div class="note">
+  <p>Mixer commands are <strong>persistent</strong>. A change made in one pattern
   stays in force (into later patterns, and into other places the same pattern
   is used) until another command sets that parameter to something else. If a
-  channel sounds wrong halfway through a song, an FX command earlier in it is
+  channel sounds wrong halfway through a song, a command earlier in it is
   the usual reason.</p>
 </div>
 
@@ -453,13 +534,37 @@ selected, so you are always looking at what will happen there.</p>
 
 <figure class="wide">
   <img src="help/instrument.png" alt="The instrument panel: oscillators, noise, arpeggio, envelope, LFO and FX">
-  <figcaption>One channel's instrument. Presets in the header are a starting
-  point; the copy/paste buttons move a whole instrument to another channel.</figcaption>
+  <figcaption>A voice from the song's pool, and one channel's mixer strip.
+  Presets in the header are a starting point; the copy/paste buttons move a
+  whole sound to another channel.</figcaption>
 </figure>
 
-<p>Each channel has exactly one instrument, and every note in that channel is
-that sound. Two oscillators and a noise source are mixed, shaped by one
-envelope, and then run through the channel's effects in a fixed order:</p>
+<p>A sound is two separate things, and the panel is split to match. Cards with a
+grey edge are the <strong>voice</strong>; the two with an accent-coloured edge
+are the channel's <strong>mixer strip</strong>.</p>
+
+<table class="keys">
+  <tr><th>Voice</th><td>Oscillators, noise, arpeggio and envelope. Voices live
+    in a <strong>pool shared by the whole song</strong>, so several channels can
+    play the same one, and a single note can name a different one in its Ins
+    cell. A voice is captured the instant a note starts, so that note keeps the
+    sound it began with however the voice is edited afterwards.</td></tr>
+  <tr><th>Strip</th><td>LFO, filter, distortion, drive, pan and delay. These
+    belong to the <strong>channel</strong>, and everything the channel plays goes
+    through them. They are read continuously, which is why an effect command can
+    sweep one mid-pattern.</td></tr>
+</table>
+
+<p>The header has a selector for each. <strong>Channel</strong> picks whose strip
+the FX controls edit; <strong>Voice</strong> picks which pool entry the voice
+controls edit. Clicking a channel in the tracker moves both, so the usual case
+is one click. Changing Voice on its own only changes what you are
+<em>editing</em> — press <strong>Use</strong> to make the channel actually play
+it. <strong>+</strong> adds a copy of the voice on screen; <strong>−</strong>
+removes it, and is refused while any note or channel still names it.</p>
+
+<p>Two oscillators and a noise source are mixed, shaped by one envelope, and
+then run through the channel's strip in a fixed order:</p>
 
 <figure>
   <svg viewBox="0 0 860 190" role="img" aria-label="Signal chain: oscillator 1, oscillator 2 and noise are mixed, shaped by the envelope, then filtered, distorted, driven, panned and delayed">
@@ -496,7 +601,7 @@ envelope, and then run through the channel's effects in a fixed order:</p>
 
     <rect class="box" x="302" y="52" width="104" height="42" rx="4"/>
     <text class="lbl" x="354" y="70" text-anchor="middle">Envelope</text>
-    <text class="sub" x="354" y="86" text-anchor="middle">att · sust · rel</text>
+    <text class="sub" x="354" y="86" text-anchor="middle">att · dec · sus · rel</text>
     <path class="wire" d="M406 73 H438" marker-end="url(#arrow)"/>
 
     <rect class="fxbox" x="442" y="28" width="412" height="78" rx="6"/>
@@ -536,13 +641,33 @@ one slider at a time and listen. Some things worth knowing:</p>
   <li><strong>X-Env</strong> sweeps an oscillator's pitch down as the note
   decays. Almost every kick drum, laser and explosion in a game soundtrack is
   this control plus noise.</li>
-  <li>The <strong>envelope</strong> decides the note's length. Patterns
-  <em>trigger</em> notes rather than holding them, so a note lasts exactly
-  attack + sustain + release, however long the row is.</li>
+  <li>The <strong>envelope</strong> is <strong>Att · Dec · Sus · Rel</strong>:
+  fade in, fall to the sustain level, hold there, then fade out once the note is
+  released. <strong>Sus</strong> is the one to understand — see below.</li>
   <li><strong>Drive</strong> is the channel's output level (the mix control).</li>
   <li>The <strong>LFO</strong> does nothing until <strong>FX freq
   modulation</strong> is on: that switch is what routes it to the filter.</li>
 </ul>
+
+<h3>Sustain, and why a note might never stop</h3>
+
+<p>This is the one thing worth reading twice. <strong>Sus</strong> is a level,
+not a length.</p>
+
+<table class="keys">
+  <tr><th>Sus = 0</th><td>The note falls to silence over <strong>Dec</strong> and
+    ends by itself. It needs nothing to stop it. Every drum works this way, and
+    so does every plucked sound.</td></tr>
+  <tr><th>Sus &gt; 0</th><td>The note reaches that level and <strong>holds there
+    until something releases it</strong> — a note-off (<code>===</code>) further
+    down its column, or a <code>GAT</code> command beside it. With neither, it
+    sounds until the song ends.</td></tr>
+</table>
+
+<p>If a channel drones on forever, that is why: a held voice with nothing to
+release it. Either give the note an end, or set Sus to 0 so it ends on its own.
+The piano roll writes note-offs for you when you drag a note's right edge, which
+is usually the easiest way.</p>
 
 <h2 id="playback">Playback</h2>
 
@@ -620,21 +745,29 @@ when something outside the browser needs the audio.</p>
 <p>An exported song is a plain ES module. There is no player, no wrapper, just data:</p>
 
 <pre><code>export default {
-  songData: [ /* one entry per channel: instrument, patterns, notes */ ],
+  instruments: [ /* one array of 17 numbers per voice */ ],
+  channels: [ /* per channel: mixer strip, default voice, sequence, patterns */ ],
   rowLen: 5513, patternLen: 32, endPattern: 6, numChannels: 4,
 };</code></pre>
 
-<p>Play it with <a href="player-small.js">player-small.js</a>, the minimal
-playback routine (zlib/libpng licensed, so it can go in anything). It synthesises
-the song into an <code>AudioBuffer</code>, which you play like any other sound:</p>
+<div class="warn">
+  <p>This is <strong>not</strong> the SoundBox format, and
+  <a href="player-small.js">player-small.js</a> cannot read it. Play it with
+  <code>src/js/core/voxby.js</code> from the
+  <a href="https://github.com/Rybar/js13k2026">js13k2026</a> repository. A
+  SoundBox song still <em>imports</em> here, converted as it loads; nothing
+  exports back out to one.</p>
+</div>
 
-<pre><code>import song from './song.js';   // your export
+<p>The player synthesises the song into an <code>AudioBuffer</code>, which you
+play like any other sound:</p>
 
-// player-small.js defines CPlayer as a plain global: load it with a &lt;script&gt;
-// tag ahead of your own code, or paste it into your bundle if you are golfing.
+<pre><code>import VoxbyPlayer from './core/voxby.js';
+import song from './song.js';   // your export
+
 const ctx = new AudioContext();
 
-const player = new CPlayer();
+const player = new VoxbyPlayer();
 player.init(song);
 while (player.generate() &lt; 1) {}                 // synth the whole song
 const buffer = player.createAudioBuffer(ctx);     // ready to play
@@ -644,6 +777,25 @@ src.buffer = buffer;
 src.loop = true;                                  // songs loop; SFX do not
 src.connect(ctx.destination);
 src.start();</code></pre>
+
+<p>If you are using this repository's <code>core/utils.js</code>, its
+<code>initAudio()</code> does all of that for a whole list of sounds at once —
+and takes the player as an argument, so the module itself names neither one:</p>
+
+<pre><code>import { initAudio, playSound } from './core/utils.js';
+import VoxbyPlayer from './core/voxby.js';       // or ./core/musicplayer.js
+import song from '../sounds/song.js';
+
+const bank = initAudio([song, /* … */], VoxbyPlayer);</code></pre>
+
+<div class="note">
+  <p><strong>Pick one player and import only it.</strong> The two are separate
+  side-effect-free modules, so a bundler drops whichever you do not name — but
+  only if nothing names it. That is exactly why <code>initAudio()</code> takes
+  the player rather than defaulting to one: a default is a live reference, and
+  it would drag the other player into every game. On a real 13 KB entry that
+  measured 599 bytes.</p>
+</div>
 
 <p>A browser starts every <code>AudioContext</code> suspended until the page has
 had a real click or keypress. Call <code>ctx.resume()</code> from your first
@@ -655,7 +807,7 @@ rule this editor's own Start button exists for.)</p>
 <code>generate()</code> renders one channel per call and returns how far along it
 is, so call it once per frame instead and you have a progress bar:</p>
 
-<pre><code>const player = new CPlayer();
+<pre><code>const player = new VoxbyPlayer();
 player.init(song);
 const tick = () =&gt; {
   const done = player.generate();               // 0…1
@@ -672,13 +824,10 @@ buffer behind it can be played any number of times at once. Route them through a
 position, and a couple of hundred bytes of song data covers your whole
 soundtrack.</p>
 
-<p>There is also <code>createWave()</code>, which returns a WAV in a
-<code>Uint8Array</code> for handing to an <code>&lt;audio&gt;</code> element or
-<code>decodeAudioData</code>, and <code>getData(t, n)</code> to read samples back
-for a visualiser. <a href="demo.html">demo.html</a> and
-<a href="arpeggio-demo.html">arpeggio-demo.html</a> are working examples that use
-<code>createAudioBuffer</code> with the WebAudio API and <code>requestAnimationFrame</code>
-for oscilloscope rendering.</p>
+<p><a href="demo.html">demo.html</a> and
+<a href="arpeggio-demo.html">arpeggio-demo.html</a> are upstream SoundBox's own
+working examples. They use <code>player-small.js</code> and the older format, so
+read them for the WebAudio plumbing rather than for the player API.</p>
 
 <h3>Keeping it small</h3>
 
@@ -694,6 +843,10 @@ for oscilloscope rendering.</p>
   compresses far better than unique data.</li>
   <li>An SFX is a one-channel song with a single sequencer step. A dozen of them
   cost less than one tune.</li>
+  <li>Share one voice between channels instead of copying it. The pool is
+  song-wide, so two channels naming the same voice store it once.</li>
+  <li>Naming a voice costs bytes in the export. Names are written only when at
+  least one is set, so an unnamed pool costs nothing at all.</li>
 </ul>
 
 <h2 id="keys">Key reference</h2>
@@ -707,7 +860,7 @@ itself.</p>
   <tbody>
     <tr><td><kbd>Space</kbd></td><td>Play this sequence row on every unmuted channel, or the sequencer's selection (stop if playing)</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>Space</kbd></td><td>Play the whole song from the top (works from any focus)</td></tr>
-    <tr><td><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>Move between sequencer, pattern and FX grids</td></tr>
+    <tr><td><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>Move between the sequencer and the pattern grid</td></tr>
     <tr><td><kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd></td><td>Move the cursor (wraps at the edges)</td></tr>
     <tr><td><kbd>Ctrl</kbd>+arrow</td><td>Jump to the far end of the grid</td></tr>
     <tr><td><kbd>Shift</kbd>+arrow</td><td>Extend the selection</td></tr>
@@ -715,13 +868,17 @@ itself.</p>
     <tr><td><kbd>Ctrl</kbd>+<kbd>A</kbd></td><td>Select the whole grid</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>V</kbd></td><td>Copy / paste the selection</td></tr>
     <tr><td><kbd>Delete</kbd> / <kbd>Backspace</kbd></td><td>Clear the selection or the cell under the cursor</td></tr>
-    <tr><td><kbd>Shift</kbd>+<kbd>Delete</kbd></td><td>Clear all four note columns of this row</td></tr>
+    <tr><td><kbd>Shift</kbd>+<kbd>Delete</kbd></td><td>Clear this whole row: all four voice columns, notes and effects</td></tr>
+    <tr><td><kbd>`</kbd></td><td>In a Note cell: write a note-off, ending what that column is playing</td></tr>
     <tr><td><kbd>Enter</kbd></td><td>Insert a row at the cursor, pushing the pattern down</td></tr>
     <tr><td><kbd>Alt</kbd>+<kbd>↑</kbd> / <kbd>Alt</kbd>+<kbd>↓</kbd></td><td>Transpose the selection a semitone</td></tr>
     <tr><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd></td><td>Transpose the selection an octave</td></tr>
     <tr><td><kbd>-</kbd> / <kbd>=</kbd> (or <kbd>&lt;</kbd> / <kbd>&gt;</kbd>)</td><td>Octave down / up</td></tr>
     <tr><td><kbd>0</kbd>–<kbd>9</kbd>, <kbd>A</kbd>–<kbd>Z</kbd></td><td>In the sequencer: place that pattern (with <kbd>Shift</kbd>, step down a row)</td></tr>
-    <tr><td>note keys</td><td>In a pattern: play and write the note, or the chord the scale harmonizes it to in chord mode</td></tr>
+    <tr><td>note keys</td><td>In a Note cell: play and write the note, or the chord the scale harmonizes it to in chord mode. On the other four cells they still play, but write nothing</td></tr>
+    <tr><td><kbd>0</kbd>–<kbd>9</kbd>, <kbd>A</kbd>–<kbd>F</kbd></td><td>In an Ins or Vol cell: type a hex value</td></tr>
+    <tr><td><kbd>S</kbd> <kbd>B</kbd> <kbd>V</kbd> <kbd>T</kbd> <kbd>D</kbd> <kbd>G</kbd></td><td>In a Cmd cell: slide to, bend, vibrato, tempo, delay, gate</td></tr>
+    <tr><td>digits, <kbd>.</kbd>, <kbd>-</kbd></td><td>In a Val cell: type a decimal value, fractional or negative</td></tr>
     <tr><td><kbd>1</kbd>–<kbd>8</kbd></td><td>In a pattern, with a flavor set: write that chord pad</td></tr>
     <tr><td>right-click</td><td>Transpose and clipboard menu for the selection</td></tr>
     <tr><td><kbd>Escape</kbd></td><td>Close a dialog</td></tr>
@@ -740,9 +897,13 @@ the sharing links and the ES-module song format) is new; the sound is his.</p>
 <p>Voxby inherits SoundBox's licence, the
 <a href="gpl.txt">GNU General Public License v3</a>.</p>
 
-<p>The standalone playback routine, <a href="player-small.js">player-small.js</a>,
-is released under the <a href="https://opensource.org/licenses/Zlib">zlib/libpng
-licence</a>, which is what makes it safe to ship inside your own game.</p>
+<p>The standalone playback routines are released under the
+<a href="https://opensource.org/licenses/Zlib">zlib/libpng licence</a>, which is
+what makes them safe to ship inside your own game: upstream's
+<a href="player-small.js">player-small.js</a> for the SoundBox format, and
+<code>src/js/core/voxby.js</code> for the format this editor writes. The latter
+keeps SoundBox's oscillators and effects chain, so it carries the same terms for
+those parts.</p>
 
 <h3>Third-party code</h3>
 
