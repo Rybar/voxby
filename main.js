@@ -16,17 +16,19 @@
 
 import * as engine from './engine.js';
 import * as scales from './scales.js';
-import { state, markClean, isDirty, saveAutosave, loadAutosave, clearAutosave } from './state.js';
+import { state, markClean, isDirty, saveAutosave, loadAutosave, clearAutosave,
+  loadPresetLibrary, savePresetLibrary, legacyUserPresets } from './state.js';
 import { audioContext, masterGain } from './audio.js';
 import { svgIcon } from './icons.js';
-import { initInstrumentPanel, refreshInstrumentPanel } from './panels/instrument.js';
+import { initInstrumentPanel, refreshInstrumentPanel, setPresetPreview, clearPresetPreview, commitPresetPreview, previewInstrI } from './panels/instrument.js';
 import { initTrackerPanel, refreshTrackerPanel, followPlayback, stopFollowingPlayback, getPlayRange, setFollowRange, noteKeys } from './panels/tracker.js';
 import { followPlaybackPianoRoll, stopFollowingPianoRoll, refreshPianoRoll } from './panels/pianoroll.js';
-import { initKeyboardPanel, refreshKeyboardPanel, previewNote, syncJammer, highlightPlaybackNotes, getJammer } from './panels/keyboard.js';
+import { initKeyboardPanel, refreshKeyboardPanel, previewNote, syncJammer, highlightPlaybackNotes, getJammer, auditionNote } from './panels/keyboard.js';
 import { initScopePanel, drawScope, getLastPeak } from './panels/scope.js';
 import { initLayout } from './panels/layout.js';
 import { initTheme } from './theme.js';
 import { keyHandledByFocus } from './focus.js';
+import { openMenu } from './menu.js';
 import { DEMO_SONGS, SECTIONS } from './songs/index.js';
 
 // console/automation access, mirroring tools/scenetool/main.js's
@@ -39,7 +41,10 @@ import { DEMO_SONGS, SECTIONS } from './songs/index.js';
 // refreshPianoRoll repaints the roll after a state write: nothing draws it on a
 // timer, so a script that sets a cursor or a selection would otherwise capture
 // the frame before its own edit (scripts/help-shots.mjs did exactly that).
-window.soundbox = { state, engine, scales, loadSong, loadDemoSong, DEMO_SONGS, importSongFile, getJammer, getPlayRange, refreshPianoRoll, getAudioState: () => audioContext.state };
+// refreshInstrument is exposed for the same reason as refreshPianoRoll: a
+// script that writes an instrument byte into state directly needs a way to
+// ask the panel to re-derive itself, since nothing repaints it on a timer.
+window.soundbox = { state, engine, scales, loadSong, loadDemoSong, DEMO_SONGS, importSongFile, getJammer, getPlayRange, refreshPianoRoll, refreshInstrument: refreshInstrumentPanel, previewInstrumentI: previewInstrI, getAudioState: () => audioContext.state };
 
 const $ = id => document.getElementById(id);
 
@@ -100,6 +105,9 @@ state.highlightNotes = highlightPlaybackNotes;
 // and before this it kept a chromatic copy of its own, which wrote a different
 // note than the key the on-screen keyboard was showing whenever a scale was set.
 state.noteKeys = noteKeys;
+// Lets panels/instrument.js's Presets button open the shared #picker modal
+// without importing main.js back (see state.js's comment on this field).
+state.openPresets = openPresetsDialog;
 
 function loadSong(song, skipAutosave = false) {
   state.song = song;
@@ -114,9 +122,20 @@ function loadSong(song, skipAutosave = false) {
 // its own Cancel button, the backdrop, or Escape. confirmModal() needs that
 // to settle its promise on the paths that aren't its own button; without it
 // a dismissed prompt would leave the caller awaiting forever.
+//
+// A dialog opened *over* one that is already up counts as a dismissal of the
+// one it replaces, so its onClose runs here too. Without that, any nested
+// dialog -- Play's progress bar, an import notice, About -- silently dropped
+// the callback of whatever it covered: the presets dialog leaked its staged
+// preview that way, leaving the instrument panel showing a phantom
+// instrument that snapped its sliders back on the next refresh. A dialog
+// that rebuilds itself and means to keep its state across the rebuild
+// (openPresetsDialog) has to re-apply it afterwards.
 let modalOnClose = null;
 function openModal(bodyHTML, onClose = null) {
+  const prev = modalOnClose;
   modalOnClose = onClose;
+  prev && prev();
   $('picker-body').innerHTML = bodyHTML;
   $('picker').classList.add('open');
 }
@@ -333,6 +352,445 @@ document.addEventListener('drop', e => {
   if (file) importSongFile(file);
 });
 
+// --- instrument presets ---
+// One editable library, held in localStorage (state.js's
+// loadPresetLibrary/savePresetLibrary): a flat list of {name, i, set,
+// category} presets plus a list of {set, name} categories kept separately so
+// an empty category can exist to drag presets into.
+//
+// Every preset is editable, the SoundBox built-ins included -- presets.js's
+// window.gInstrumentPresets (a classic script global, see index.html's script
+// order) is only ever *read*, to seed the library on first open and to re-seed
+// it from the Restore button. That flat array marks a category with an entry
+// carrying only `name` and no `i` (its own "====[LEADS]===="-style headings).
+//
+// The dialog lays out as two columns: the SoundBox set on the left, every
+// other set on the right, which is where new presets and categories get added.
+// Export/Import carry the set/category tags, so an exported library rebuilds
+// its own organization -- this dialog's own files, unrelated to the song-level
+// Export JS/WAV buttons above, which never touch instrument presets.
+const BUILTIN_SET = 'SoundBox';
+const DEFAULT_SET = 'Custom', DEFAULT_CATEGORY = 'General';
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// presets.js flattened into this dialog's own shape. The `i` arrays are copied
+// rather than referenced: they land in localStorage and become editable, and
+// the originals have to stay pristine for Restore to mean anything.
+function builtinPresets() {
+  const out = [];
+  let category = DEFAULT_CATEGORY;
+  for (const p of window.gInstrumentPresets) {
+    if (!p.i) category = p.name.replace(/^=+\[|\]=+$/g, '') || DEFAULT_CATEGORY;
+    else out.push({ name: p.name, i: p.i.slice(), set: BUILTIN_SET, category });
+  }
+  return out;
+}
+
+// The library, seeded on first ever open. Presets saved under the older
+// storage shape (user presets only, before built-ins became editable) are
+// carried across into the Custom set rather than dropped.
+function ensureLibrary() {
+  let lib = loadPresetLibrary();
+  if (!lib) {
+    const carried = legacyUserPresets().map(normalizeImportedPreset).filter(Boolean);
+    lib = { presets: builtinPresets().concat(carried), categories: [] };
+    savePresetLibrary(lib);
+  }
+  return lib;
+}
+
+const setOf = p => p.set || DEFAULT_SET;
+const categoryOf = p => p.category || DEFAULT_CATEGORY;
+
+// Sets and categories in insertion order rather than sorted: the built-ins
+// arrive in presets.js's own deliberate order (leads, pads, drums, F/X), and a
+// preset dragged somewhere should stay where it was put.
+function groupPresets(lib) {
+  const sets = new Map();
+  const set = name => {
+    if (!sets.has(name)) sets.set(name, new Map());
+    return sets.get(name);
+  };
+  // Explicit categories first, so an empty one still renders (and renders
+  // in the order it was created, above whatever a later drag adds).
+  for (const c of lib.categories) set(c.set).set(c.name, []);
+  lib.presets.forEach((p, idx) => {
+    const cats = set(setOf(p)), name = categoryOf(p);
+    if (!cats.has(name)) cats.set(name, []);
+    cats.get(name).push({ p, idx });
+  });
+  return [...sets.entries()].map(([name, cats]) => ({
+    name,
+    categories: [...cats.entries()].map(([name, entries]) => ({ name, entries })),
+  }));
+}
+
+// Validates a preset against engine.js's fixed instrument shape -- a preset is
+// plain data, never evaluated, but a wrong-length or out-of-range `i` array
+// would still corrupt whatever channel it gets loaded into. Values clamp to a
+// byte: every instrument property is stored as one (see engine.js's
+// binToInstrument/instrumentToBin), even where a param's own UI range is
+// narrower (e.g. LFO_FREQ's slider tops out at 16). A missing set/category
+// defaults the same way saving does, so a file from an older export -- or the
+// legacy storage key ensureLibrary carries across -- still lands somewhere.
+function normalizeImportedPreset(p) {
+  if (!p || typeof p.name !== 'string' || !Array.isArray(p.i) || p.i.length !== engine.NUM_INSTR_PARAMS) return null;
+  return {
+    name: p.name.slice(0, 60) || 'Untitled',
+    i: p.i.map(v => Math.max(0, Math.min(255, +v | 0))),
+    set: (typeof p.set === 'string' && p.set.trim().slice(0, 40)) || DEFAULT_SET,
+    category: (typeof p.category === 'string' && p.category.trim().slice(0, 40)) || DEFAULT_CATEGORY,
+  };
+}
+
+// Every mutation goes through here: take the library, change it, write it
+// back, rebuild the dialog. Rebuilding wholesale rather than patching the DOM
+// keeps one code path for "what the picker shows" -- the dialog is cheap, and
+// a drag/rename/delete each otherwise needs its own incremental update.
+function editLibrary(fn) {
+  const lib = ensureLibrary();
+  fn(lib);
+  savePresetLibrary(lib);
+  openPresetsDialog();
+}
+
+function renameCategory(setName, oldName, newName) {
+  newName = newName.trim().slice(0, 40);
+  if (!newName || newName === oldName) { openPresetsDialog(); return; }
+  editLibrary(lib => {
+    for (const p of lib.presets) if (setOf(p) === setName && categoryOf(p) === oldName) p.category = newName;
+    for (const c of lib.categories) if (c.set === setName && c.name === oldName) c.name = newName;
+  });
+}
+
+function renameSet(oldName, newName) {
+  newName = newName.trim().slice(0, 40);
+  if (!newName || newName === oldName) { openPresetsDialog(); return; }
+  editLibrary(lib => {
+    for (const p of lib.presets) if (setOf(p) === oldName) p.set = newName;
+    for (const c of lib.categories) if (c.set === oldName) c.set = newName;
+  });
+}
+
+function renamePreset(idx, newName) {
+  newName = newName.trim().slice(0, 60);
+  if (!newName) { openPresetsDialog(); return; }
+  editLibrary(lib => { lib.presets[idx].name = newName; });
+}
+
+// Names the thing to inline-rename as soon as the rebuilt dialog is on screen
+// -- '.preset-row[data-idx="3"]', a category header, a set header. Adding
+// either a preset or a category is really "make it, then name it", and the
+// rebuild in between is what would otherwise lose the cursor.
+let renameOnOpen = null;
+
+// Turns a name span into an inline text field, committing on Enter/blur and
+// discarding on Escape -- renaming one string doesn't need a dialog of its
+// own. `commit` re-invokes openPresetsDialog() by way of editLibrary (even on
+// a no-op rename), so this never has to.
+function startRename(label, commit) {
+  if (!label) return;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'rename-input';
+  input.maxLength = 60;
+  input.value = label.textContent;
+  input.onclick = e => e.stopPropagation();
+  input.ondblclick = e => e.stopPropagation();
+  input.onkeydown = e => {
+    e.stopPropagation();
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    else if (e.key === 'Escape') { e.preventDefault(); input.dataset.cancel = '1'; input.blur(); }
+  };
+  input.onblur = () => { input.dataset.cancel ? openPresetsDialog() : commit(input.value); };
+  label.replaceWith(input);
+  input.focus();
+  input.select();
+}
+
+// Collapse state (native <details>'s own `open` attribute) survives a
+// same-session rebuild -- every edit re-invokes openPresetsDialog(), and
+// re-expanding a set you had tucked away on each one would be exhausting.
+// Keyed by set name, module-level rather than in state.js: purely this
+// dialog's own view preference, not worth persisting past a reload.
+const collapsedSets = new Set();
+
+// Which preset is staged (previewed + highlighted), as its index into
+// lib.presets, or -1. Module-level for the same reason, and reset only on a
+// real dialog dismissal -- see openPresetsDialog's onClose.
+let stagedIdx = -1;
+
+function presetRowHTML(name, idx, staged) {
+  return `<div class="preset-row${staged ? ' active' : ''}" data-idx="${idx}" draggable="true"
+    title="Click to preview — plays at C5 through this channel. Drag it onto another category to file it there; double-click its name to rename it.">
+    <span class="name">${escapeHtml(name)}</span>
+    <button class="preset-del" type="button" title="Delete this preset">×</button>
+  </div>`;
+}
+
+function categoryHTML(setName, cat) {
+  return `<div class="preset-cat" data-set="${escapeHtml(setName)}" data-cat="${escapeHtml(cat.name)}">
+    <div class="pick-section" title="Category — double-click to rename it. Drop a preset here to file it under this category.">
+      <span class="cat-name">${escapeHtml(cat.name)}</span>
+    </div>
+    <div class="preset-list">${cat.entries.map(({ p, idx }) => presetRowHTML(p.name, idx, idx === stagedIdx)).join('')}</div>
+    ${setName === BUILTIN_SET ? '' :
+      `<button class="add-preset-btn" type="button"
+         title="Save this channel's current instrument as a new preset in this category">+ Add preset</button>`}
+  </div>`;
+}
+
+function setHTML(set) {
+  const key = set.name;
+  return `<details class="preset-set" data-set="${escapeHtml(key)}" ${collapsedSets.has(key) ? '' : 'open'}>
+    <summary title="${key === BUILTIN_SET
+      ? 'The SoundBox built-in instruments. Editable like any other set — Restore below puts them back.'
+      : 'A set of your own presets — double-click its name to rename it.'}">
+      <span class="set-name">${escapeHtml(key)}</span>
+      <button class="export-set-btn" type="button" title="Export just this set as a .json file">Export</button>
+    </summary>
+    <div class="preset-set-body">${set.categories.map(cat => categoryHTML(key, cat)).join('')}</div>
+  </details>`;
+}
+
+function openPresetsDialog() {
+  const lib = ensureLibrary();
+  const sets = groupPresets(lib);
+  const builtinSets = sets.filter(s => s.name === BUILTIN_SET);
+  const customSets = sets.filter(s => s.name !== BUILTIN_SET);
+
+  // The custom column always renders something to add into, even with an
+  // empty library: an "Add preset" button needs a category to land in, and
+  // there is no way to make the first one without one already on screen.
+  const customHTML = customSets.length ? customSets.map(setHTML).join('')
+    : setHTML({ name: DEFAULT_SET, categories: [{ name: DEFAULT_CATEGORY, entries: [] }] });
+
+  // openModal below treats being replaced as a dismissal and runs the onClose
+  // this function installed last time, which clears the staged preview. That
+  // is right for any *other* dialog opening over this one, and wrong for this
+  // dialog rebuilding itself after an edit -- so the staged preset is carried
+  // across the rebuild by hand, and dropped if whatever it pointed at is gone.
+  const keepStaged = stagedIdx;
+
+  openModal(`<h3>Instrument presets</h3>
+    <div id="picker-grid" class="preset-grid">
+      <div class="preset-col" data-col="builtin">${builtinSets.map(setHTML).join('')}</div>
+      <div class="preset-col" data-col="custom">${customHTML}</div>
+    </div>
+    <p class="hint">Click a preset to preview it — it plays at C5 through this channel, and your keyboard
+      still plays it too. Drag presets between categories; right-click for Add category.</p>
+    <div class="row">
+      <button id="preset-use" disabled title="Load the previewed preset into this channel, overwriting every instrument setting">Use this preset</button>
+      <button id="preset-import-btn" title="Add presets from a .json file exported below, or shared by someone else — their set/category tags come along with them">Import…</button>
+      <button id="preset-export" title="Download the whole library as one .json file, with every set/category tag intact">Export all</button>
+      <button id="preset-restore" title="Put the SoundBox built-in presets back the way they shipped. Your own sets are left alone.">Restore Voxby presets</button>
+    </div>
+    <input id="preset-import-file" type="file" accept=".json,application/json" hidden>`,
+    () => { stagedIdx = -1; clearPresetPreview(); });
+
+  stagedIdx = keepStaged >= 0 && lib.presets[keepStaged] ? keepStaged : -1;
+  if (stagedIdx >= 0) setPresetPreview(lib.presets[stagedIdx].i);
+  else clearPresetPreview();
+
+  const grid = $('picker-grid');
+  const presetAt = el => +el.closest('.preset-row').dataset.idx;
+
+  for (const details of grid.querySelectorAll('.preset-set')) {
+    details.addEventListener('toggle', () => {
+      details.open ? collapsedSets.delete(details.dataset.set) : collapsedSets.add(details.dataset.set);
+    });
+  }
+
+  $('preset-use').disabled = stagedIdx < 0;
+
+  // --- click: preview/stage, delete, per-set export, add preset ---
+  grid.onclick = e => {
+    if (e.target.closest('.rename-input')) return;
+
+    if (e.target.closest('.preset-del')) {
+      const idx = presetAt(e.target);
+      // Staging survives a rebuild by index, so deleting anything above the
+      // staged preset would otherwise leave the highlight on its neighbour.
+      stagedIdx = -1;
+      clearPresetPreview();
+      editLibrary(lib => { lib.presets.splice(idx, 1); });
+      return;
+    }
+
+    const addBtn = e.target.closest('.add-preset-btn');
+    if (addBtn) {
+      const cat = addBtn.closest('.preset-cat');
+      const setName = cat.dataset.set, catName = cat.dataset.cat;
+      editLibrary(lib => {
+        lib.presets.push({
+          name: 'New preset',
+          i: state.song.songData[state.selInstrument].i.slice(),
+          set: setName, category: catName,
+        });
+        renameOnOpen = `.preset-row[data-idx="${lib.presets.length - 1}"] .name`;
+      });
+      return;
+    }
+
+    const exportBtn = e.target.closest('.export-set-btn');
+    if (exportBtn) {
+      const setName = exportBtn.closest('.preset-set').dataset.set;
+      const list = ensureLibrary().presets.filter(p => setOf(p) === setName);
+      downloadFile(new Blob([JSON.stringify(list, null, 2)], { type: 'application/json' }),
+        `voxby-presets-${setName}.json`);
+      return;
+    }
+
+    const row = e.target.closest('.preset-row');
+    if (row) {
+      stagedIdx = +row.dataset.idx;
+      for (const el of grid.querySelectorAll('.preset-row.active')) el.classList.remove('active');
+      row.classList.add('active');
+      setPresetPreview(ensureLibrary().presets[stagedIdx].i);
+      auditionNote();
+      $('preset-use').disabled = false;
+    }
+  };
+
+  // --- double-click a name to rename it ---
+  grid.ondblclick = e => {
+    const catName = e.target.closest('.cat-name');
+    if (catName) {
+      const cat = catName.closest('.preset-cat');
+      const setName = cat.dataset.set, current = cat.dataset.cat;
+      startRename(catName, value => renameCategory(setName, current, value));
+      return;
+    }
+    const setName = e.target.closest('.set-name');
+    if (setName) {
+      // Inside a <summary>, where a double-click would also toggle the
+      // disclosure open and shut under the field being typed into.
+      e.preventDefault();
+      startRename(setName, value => renameSet(setName.textContent, value));
+      return;
+    }
+    const presetName = e.target.closest('.preset-row .name');
+    if (presetName) {
+      const idx = presetAt(presetName);
+      startRename(presetName, value => renamePreset(idx, value));
+    }
+  };
+
+  // --- right-click: add a category to the set clicked in ---
+  grid.oncontextmenu = e => {
+    const set = e.target.closest('.preset-set');
+    if (!set) return;
+    e.preventDefault();
+    const setName = set.dataset.set;
+    openMenu(e.clientX, e.clientY, [{
+      label: 'Add category',
+      run: () => editLibrary(lib => {
+        let name = 'New category', n = 2;
+        const taken = new Set(lib.presets.filter(p => setOf(p) === setName).map(categoryOf)
+          .concat(lib.categories.filter(c => c.set === setName).map(c => c.name)));
+        while (taken.has(name)) name = `New category ${n++}`;
+        lib.categories.push({ set: setName, name });
+        renameOnOpen = `.preset-cat[data-cat="${name}"] .cat-name`;
+      }),
+    }]);
+  };
+
+  // --- drag a preset onto a category to file it there ---
+  let dragIdx = -1;
+  grid.ondragstart = e => {
+    const row = e.target.closest('.preset-row');
+    if (!row) return;
+    dragIdx = +row.dataset.idx;
+    row.classList.add('dragging');
+    // Required for Firefox to start a drag at all; the payload itself is
+    // unused, since dragIdx above is what the drop reads.
+    e.dataTransfer.setData('text/plain', String(dragIdx));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+  grid.ondragend = () => {
+    dragIdx = -1;
+    for (const el of grid.querySelectorAll('.dragging, .drop-target')) el.classList.remove('dragging', 'drop-target');
+  };
+  grid.ondragover = e => {
+    const cat = e.target.closest('.preset-cat');
+    if (dragIdx < 0 || !cat) return;
+    // preventDefault is what makes an element a valid drop target at all.
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    for (const el of grid.querySelectorAll('.drop-target')) el.classList.remove('drop-target');
+    cat.classList.add('drop-target');
+  };
+  grid.ondrop = e => {
+    const cat = e.target.closest('.preset-cat');
+    if (dragIdx < 0 || !cat) return;
+    e.preventDefault();
+    const idx = dragIdx, setName = cat.dataset.set, catName = cat.dataset.cat;
+    dragIdx = -1;
+    editLibrary(lib => {
+      const p = lib.presets[idx];
+      if (!p) return;
+      p.set = setName;
+      p.category = catName;
+    });
+  };
+
+  // --- footer ---
+  $('preset-use').onclick = () => {
+    commitPresetPreview();
+    stagedIdx = -1;
+    closeModal();
+  };
+
+  $('preset-export').onclick = () => {
+    const list = ensureLibrary().presets;
+    if (!list.length) return;
+    downloadFile(new Blob([JSON.stringify(list, null, 2)], { type: 'application/json' }), 'voxby-presets.json');
+  };
+
+  $('preset-restore').onclick = () => {
+    stagedIdx = -1;
+    clearPresetPreview();
+    editLibrary(lib => {
+      lib.presets = lib.presets.filter(p => setOf(p) !== BUILTIN_SET).concat(builtinPresets());
+      lib.categories = lib.categories.filter(c => c.set !== BUILTIN_SET);
+    });
+  };
+
+  $('preset-import-btn').onclick = () => $('preset-import-file').click();
+  $('preset-import-file').onchange = async () => {
+    const file = $('preset-import-file').files[0];
+    if (!file) return;
+    let data;
+    try { data = JSON.parse(await file.text()); } catch { data = null; }
+    const imported = (Array.isArray(data) ? data : [data]).map(normalizeImportedPreset).filter(Boolean);
+    if (!imported.length) {
+      noticeModal('Could not import', `${file.name} isn't a preset file this editor recognizes — it takes a
+        .json file exported from this dialog, holding either one preset or a list of them.`);
+      return;
+    }
+    editLibrary(lib => { lib.presets = lib.presets.concat(imported); });
+  };
+
+  // Something just added (a preset, a category) opens straight into its
+  // rename field -- see renameOnOpen.
+  if (renameOnOpen) {
+    const target = grid.querySelector(renameOnOpen);
+    const selector = renameOnOpen;
+    renameOnOpen = null;
+    if (target) {
+      if (selector.includes('.cat-name')) {
+        const cat = target.closest('.preset-cat');
+        startRename(target, value => renameCategory(cat.dataset.set, cat.dataset.cat, value));
+      } else {
+        const idx = presetAt(target);
+        startRename(target, value => renamePreset(idx, value));
+      }
+    }
+  }
+}
 // --- about ---
 // The synth, the song format, the instrument presets and both players are Marcus
 // Geelnard's, and the GPL comes with them -- so the credit is spelled out here

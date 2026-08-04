@@ -44,6 +44,11 @@ export const state = {
   // (tracker calling out to keyboard instead of keyboard calling into
   // tracker). Takes an array of SoundBox note numbers.
   highlightNotes: null,
+  // Set to main.js's openPresetsDialog at boot. Lets panels/instrument.js's
+  // Presets button open the shared #picker modal without importing main.js
+  // back -- main.js already imports panels/instrument.js to initialize it,
+  // same cycle concern as notify/requestStop/previewNote/highlightNotes above.
+  openPresets: null,
   // Set to panels/tracker.js's noteKeys() at boot: the key -> semitone-offset
   // map in force, scale layout and chord-follow included. For panels/
   // pianoroll.js, which cannot import tracker.js (tracker.js imports it, to
@@ -186,6 +191,42 @@ export function loadAutosave() {
 
 export function clearAutosave() {
   localStorage.removeItem(AUTOSAVE_KEY);
+}
+
+// The instrument preset library (main.js's instrument presets dialog). A
+// personal library that outlives any one song, kept separate from prefs/
+// autosave: it's neither a UI preference nor undo-tracked song data, and it
+// must survive a New/Open that would otherwise wipe both of those.
+//
+// It holds the SoundBox built-ins as well as the user's own presets, because
+// every preset in the dialog is editable -- built-ins included (presets.js
+// itself is never written, and main.js's Restore button re-seeds that set
+// from it). `categories` is stored alongside `presets` rather than derived
+// from them so a category can exist while still empty, which is what lets
+// "Add category" make somewhere to drag presets *to*.
+//
+// Returns null, not [], when nothing has ever been stored: main.js needs to
+// tell "no library yet, seed the built-ins" apart from "a library the user
+// has emptied on purpose".
+const PRESETS_KEY = 'soundbox-presets';
+// Superseded by PRESETS_KEY, and only ever read: the shape before built-ins
+// became editable held the user's own presets alone. Carried across once, by
+// main.js's seeding path, so an early library isn't silently dropped.
+const LEGACY_PRESETS_KEY = 'soundbox-user-presets';
+
+export function loadPresetLibrary() {
+  let lib;
+  try { lib = JSON.parse(localStorage.getItem(PRESETS_KEY)); } catch { return null; }
+  if (!lib || !Array.isArray(lib.presets)) return null;
+  return { presets: lib.presets, categories: Array.isArray(lib.categories) ? lib.categories : [] };
+}
+
+export function savePresetLibrary(lib) {
+  localStorage.setItem(PRESETS_KEY, JSON.stringify(lib));
+}
+
+export function legacyUserPresets() {
+  try { return JSON.parse(localStorage.getItem(LEGACY_PRESETS_KEY)) || []; } catch { return []; }
 }
 
 loadPrefs();

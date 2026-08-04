@@ -475,6 +475,71 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
 /* Import affordance/trust note in the open dialog. */
 #picker-body .hint { margin: 0; max-width: 52ch; font-size: 11px; color: var(--text-dim); line-height: 1.5; }
 #picker-body .hint b { color: var(--text); font-weight: 600; }
+
+/* Instrument presets dialog (main.js's openPresetsDialog). A fixed two-column
+   grid instead of #picker-grid's flex row above (built for the Open Song
+   library's own sections, which size to their content and would push a wide
+   library past the edge of the dialog). The whole grid is the one scroll
+   container, so a library of any size grows downward under one scrollbar.
+   The extra .preset-grid class plus #picker-grid's own id together outweigh
+   the plain #picker-grid rule above, so this overrides its display/gap/sizing
+   without touching the song-library dialog that still uses the bare id. */
+#picker-grid.preset-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+                            align-items: start; width: 720px; max-width: 86vw;
+                            max-height: 60vh; overflow: auto; }
+/* Two fixed columns: the SoundBox set on the left, the user's own sets --
+   and every Add preset/Add category affordance -- on the right, so where a
+   new preset lands is where the button that makes it sits. min-width: 0 is
+   what lets a long preset name ellipsize instead of widening its grid track
+   past the panel (the overflow that made the last column fall off). */
+.preset-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+/* .preset-set is one <details> per set -- the built-in library, or one of the
+   user's own -- collapsible for free via the native disclosure widget rather
+   than any JS open/close bookkeeping (main.js only listens for the 'toggle'
+   event, to remember which sets were left collapsed across a same-session
+   rebuild). The marker is redrawn as a small triangle that rotates open,
+   instead of the browser's own default (mismatched across engines, and not
+   itself accent-colorable). */
+.preset-set { border: 1px solid var(--border-dim); border-radius: 6px; padding: 4px 8px; }
+.preset-set summary { display: flex; align-items: center; gap: 6px; cursor: pointer;
+                       color: var(--text); font-weight: 600; list-style: none; }
+.preset-set summary::-webkit-details-marker { display: none; }
+.preset-set summary::before { content: '\25B8'; color: var(--text-dim); transition: transform .1s; flex: none; }
+.preset-set[open] > summary::before { transform: rotate(90deg); }
+.preset-set-body { padding: 4px 0 2px 14px; display: flex; flex-direction: column; gap: 2px; }
+/* .pick-section is reused from the song-library dialog above for the
+   category headers nested inside a set, but static rather than sticky --
+   nothing here scrolls independently of the whole #picker-grid column. */
+.preset-set-body .pick-section { position: static; padding: 4px 0 2px; display: flex; align-items: center; gap: 6px; }
+/* A whole category, header and list together, is the drop target: aiming at
+   the gap between two rows should still file the preset here. Padding keeps
+   the drop outline off the rows themselves. */
+.preset-cat { border: 1px solid transparent; border-radius: 4px; padding: 0 2px 2px; }
+.preset-cat.drop-target { border-color: var(--accent); background: rgba(255,255,255,.03); }
+.preset-list { display: flex; flex-direction: column; gap: 2px; }
+.preset-row { display: flex; align-items: center; justify-content: space-between; gap: 6px;
+              padding: 4px 8px; border: 1px solid transparent; border-radius: 4px;
+              cursor: pointer; color: var(--text-dim); }
+.preset-row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preset-row:hover { border-color: var(--border); color: var(--text); }
+.preset-row.dragging { opacity: .4; }
+/* The staged/auditioned preset -- main.js's stagedIdx -- stays marked while
+   the dialog is open so "what will Use this preset load" is never ambiguous. */
+.preset-row.active { border-color: var(--accent); color: var(--text); background: var(--bg2); }
+/* Borderless, and only inked on hover: one × per preset is a lot of chrome to
+   have shouting in a list this long. flex: none keeps it its own size while
+   the name beside it ellipsizes. */
+.preset-del, .export-set-btn, .add-preset-btn { background: none; border: none; padding: 0 2px;
+              color: var(--text-dim); font-size: 11px; cursor: pointer; flex: none; }
+.preset-del { font-size: 14px; line-height: 1; opacity: 0; }
+.preset-row:hover .preset-del, .preset-row.active .preset-del { opacity: 1; }
+.preset-del:hover, .export-set-btn:hover, .add-preset-btn:hover { color: var(--accent); }
+.add-preset-btn { align-self: flex-start; margin-top: 2px; }
+/* The inline rename field (main.js's startRename), sized to sit in the same
+   line box as the name span it replaces rather than growing the row. */
+.rename-input { min-width: 0; flex: 1; background: var(--bg2); color: var(--text);
+                border: 1px solid var(--accent); border-radius: 3px; padding: 1px 4px;
+                font: inherit; font-size: 12px; }
 /* The render-progress dialog (main.js's progressModal). The bar is
    a plain filled div rather than a <progress> element -- <progress> is styled
    through vendor-prefixed pseudo-elements that differ per engine, and this one

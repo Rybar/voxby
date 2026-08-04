@@ -87,18 +87,60 @@ function setInstrProp(prop, value) {
   currentInstr().i[prop] = value;
   const cell = activeFxCell();
   if (cell) cell.set(prop, value);
-  $('instr-preset').value = '';
   syncJammer();
   // The piano roll draws each note as wide as this envelope sounds, so an
   // envelope edit must repaint it. A no-op in the tracker view.
   if (prop === engine.ENV_ATTACK || prop === engine.ENV_SUSTAIN || prop === engine.ENV_RELEASE) renderPianoRoll();
 }
 
-// The instrument array to *display*: the real instrument, unless an FX cell is
-// selected, in which case that cell's stored value previews on top of whichever
-// one property it targets. panels/keyboard.js reads this too, so the jammer's
-// live preview hears the same instrument these controls show.
+// Set by main.js's presets dialog while a preset is highlighted there:
+// previewInstrI() (and so the sliders and the jammer) show this instrument
+// instead of the channel's real one, without touching real song data until
+// commitPresetPreview() applies it. Takes priority over the FX-cell preview
+// below -- the two dialogs that use them never open at once. null is the
+// normal case, nothing being previewed.
+let previewPresetI = null;
+
+// Copies rather than keeps `i` itself: a built-in preset's array is the same
+// shared object every time presets.js's window.gInstrumentPresets is read
+// (main.js never clones it), and previewInstrI() below hands this straight
+// out to callers -- a copy is what keeps a downstream mutation from ever
+// reaching, and permanently corrupting, the built-in library.
+export function setPresetPreview(i) {
+  previewPresetI = i.slice();
+  refreshInstrumentPanel();
+  syncJammer();
+}
+
+// A no-op with nothing staged, so main.js can call it unconditionally on
+// every dialog-dismiss route (Escape, backdrop, or after a real commit)
+// without checking first.
+export function clearPresetPreview() {
+  if (!previewPresetI) return;
+  previewPresetI = null;
+  refreshInstrumentPanel();
+  syncJammer();
+}
+
+// Copies the previewed preset into the real channel instrument in place
+// (SoundBox's instrument arrays are always this fixed length, so index-by-
+// index is enough -- same as the preset-select handler this replaced).
+export function commitPresetPreview() {
+  if (!previewPresetI) return;
+  const dest = currentInstr().i;
+  for (let j = 0; j < dest.length; j++) dest[j] = previewPresetI[j];
+  previewPresetI = null;
+  refreshInstrumentPanel();
+  syncJammer();
+}
+
+// The instrument array to *display*: a staged preset preview if one is set,
+// else the real instrument, unless an FX cell is selected, in which case
+// that cell's stored value previews on top of whichever one property it
+// targets. panels/keyboard.js reads this too, so the jammer's live preview
+// hears the same instrument these controls show.
 export function previewInstrI() {
+  if (previewPresetI) return previewPresetI;
   const i = currentInstr().i.slice();
   const cell = activeFxCell();
   if (cell && cell.cmd > 0) i[cell.cmd - 1] = cell.val;
@@ -215,12 +257,6 @@ function refreshArpNotes(i) {
   paintFill($('arp_note2'));
 }
 
-function presetOptionsHTML() {
-  return '<option value="">(select a preset)</option>' + window.gInstrumentPresets.map((p, i) =>
-    p.i ? `<option value="${i}">${p.name}</option>` : `<option value="" disabled>${p.name}</option>`
-  ).join('');
-}
-
 // Oscillators, noise+arpeggio and envelope+LFO are each two .instr-sub sections
 // stacked inside one .instr-card, so each pairing stays one .instr-grid item
 // (Osc1 above Osc2, Arpeggio under Noise, LFO under Envelope). That leaves
@@ -232,8 +268,7 @@ export function initInstrumentPanel() {
     <div class="instr-header">
       <h3 title="The sound one channel plays. Every note in that channel's patterns uses these settings — one instrument per channel, all the way through the song.">Instrument</h3>
       <label title="Which channel's instrument these controls edit. Clicking any cell in the tracker selects that channel too.">Channel <select id="instr-channel"></select></label>
-      <select id="instr-preset" title="Load one of SoundBox's ready-made instruments into this channel, as a starting point to tweak. Overwrites every setting below.">
-      </select>
+      <button id="instr-presets-btn" type="button" title="Browse instrument presets — SoundBox's built-in library plus any you've saved — and load one into this channel, overwriting every setting below.">Presets…</button>
       <button id="instr-copy" type="button" title="Copy this whole instrument, to paste onto another channel">${svgIcon('copy')}</button>
       <button id="instr-paste" type="button" title="Overwrite this channel's instrument with the copied one">${svgIcon('paste')}</button>
     </div>
@@ -308,15 +343,7 @@ export function initInstrumentPanel() {
 
   $('lfo_fxfreq').onchange = () => setInstrProp(engine.LFO_FX_FREQ, $('lfo_fxfreq').checked ? 1 : 0);
 
-  $('instr-preset').innerHTML = presetOptionsHTML();
-  $('instr-preset').onchange = () => {
-    const idx = $('instr-preset').value;
-    if (idx === '') return;
-    const src = window.gInstrumentPresets[+idx].i;
-    for (let j = 0; j < src.length; j++) currentInstr().i[j] = src[j];
-    refreshInstrumentPanel();
-    $('instr-preset').blur();
-  };
+  $('instr-presets-btn').onclick = () => { state.openPresets && state.openPresets(); };
 
   $('instr-copy').onclick = () => { instrClipboard = currentInstr().i.slice(); };
   $('instr-paste').onclick = () => {

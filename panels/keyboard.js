@@ -164,6 +164,17 @@ export function previewNote(offset) {
   return note;
 }
 
+// Fixed C5 (offset 0, this editor's own octave numbering -- the on-screen
+// piano's octave 5), deliberately not state.octave-relative: main.js's
+// presets dialog calls this to audition whatever preset was just staged with
+// panels/instrument.js's setPresetPreview (which already called syncJammer,
+// so the jammer is already playing that instrument by the time this fires),
+// and the same key should always sound no matter what note entry is set to.
+const AUDITION_NOTE = 5 * 12 + engine.NOTE_OFFSET;
+export function auditionNote() {
+  ensureJammer().addNote(AUDITION_NOTE);
+}
+
 // On-screen full-piano key -> absolute note (the key's own octave, not
 // state.octave -- see this file's top comment). Plays through the jammer
 // and, in pattern edit mode, writes into the pattern grid at the cursor.
