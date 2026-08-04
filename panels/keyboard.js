@@ -42,7 +42,7 @@
 import * as engine from '../engine2.js';
 import { state, savePrefs } from '../state.js';
 import { audioContext, masterGain } from '../audio.js';
-import { previewInstrI } from './instrument.js';
+import { previewInstr } from './instrument.js';
 import { noteKeys, enterNoteAtCursor, chordNotesFor, padChord, enterPadAtCursor, suggestedPads,
   resetChordContext, followedChord } from './tracker.js';
 import { SCALES, PITCH_NAMES, degreeOfPitch } from '../scales.js';
@@ -149,7 +149,8 @@ export function getJammer() {
 // Called from main.js's refresh() after every edit/load so the jammer's
 // snapshot instrument/tempo never goes stale.
 export function syncJammer() {
-  ensureJammer().updateInstr(previewInstrI());
+  const { voice, fx } = previewInstr();
+  ensureJammer().updateInstr(voice, fx);
   jammer.updateRowLen(state.song.rowLen);
 }
 
@@ -164,6 +165,14 @@ export function previewNote(offset) {
   return note;
 }
 
+// Let go of a previewed note. v2 holds a note until it is released, so a
+// sustaining instrument previews as a drone unless every press is matched by
+// one of these. Percussive instruments end on their own and ignore it, so no
+// caller has to know which kind it is playing.
+export function releasePreviewNote(note) {
+  if (jammer) jammer.releaseNote(note);
+}
+
 // On-screen full-piano key -> absolute note (the key's own octave, not
 // state.octave -- see this file's top comment). Plays through the jammer
 // and, in pattern edit mode, writes into the pattern grid at the cursor.
@@ -171,6 +180,7 @@ function previewAndEnter(octaveK, offsetInOctave) {
   const note = offsetInOctave + octaveK * 12 + engine.NOTE_OFFSET;
   ensureJammer().addNote(note);
   enterNoteAtCursor(note);
+  return note;
 }
 
 // Light up the on-screen key(s) for whatever notes tracker.js's followPlayback
@@ -282,13 +292,17 @@ function isNoteEntryActive() {
   // The piano roll writes notes whatever the tracker's edit mode says, so in
   // that view the keys always play (see panels/pianoroll.js's own handler).
   if (typingInField()) return false;
-  return state.viewMode === 'pianoroll' || state.editMode === 'pattern' || state.editMode === 'fx';
+  return state.viewMode === 'pianoroll' || state.editMode === 'pattern';
 }
 
 // Physical-keyboard presses light up the on-screen key they play. Tracked per
 // e.code rather than per note, so held chords each get their own key lit and
 // release the right one on keyup even if the octave changed in between.
 const physicalLitByCode = new Map();
+// Which pitch each held key started, for the same reason and keyed the same
+// way: a v2 note sounds until it is released, so the key-up has to name the
+// note the key-down actually played, not the one that key means now.
+const physicalNoteByCode = new Map();
 function onPhysicalKeyDown(e) {
   // Don't light up keys when modifiers are pressed (Ctrl+Z, etc)
   if (e.ctrlKey || e.altKey || e.metaKey) return;
@@ -296,12 +310,18 @@ function onPhysicalKeyDown(e) {
   const n = noteKeys()[e.code];
   if (n === undefined) return;
   const total = n + state.octave * 12;
+  physicalNoteByCode.set(e.code, total + engine.NOTE_OFFSET);
   const el = keyEl(Math.floor(total / 12), total - Math.floor(total / 12) * 12);
   if (el) { physicalLitByCode.set(e.code, el); setLit(el, 'key', true); }
 }
 function onPhysicalKeyUp(e) {
   const el = physicalLitByCode.get(e.code);
   if (el) { physicalLitByCode.delete(e.code); setLit(el, 'key', false); }
+  // Release whatever pitch that key started. Tracked per e.code, like the
+  // highlight above, so a chord held while the octave changes still releases
+  // the notes it actually played rather than the ones that key means now.
+  const note = physicalNoteByCode.get(e.code);
+  if (note !== undefined) { physicalNoteByCode.delete(e.code); releasePreviewNote(note); }
 }
 
 export function initKeyboardPanel() {
@@ -401,16 +421,28 @@ export function initKeyboardPanel() {
   });
   $('kb-pads').addEventListener('mouseleave', () => padHover(-1));
 
-  let mouseLit = null;
+  // The on-screen piano holds a note for as long as the button is down, the
+  // same as a physical key. mouseLitNote is what the release names, since the
+  // key element alone does not say which pitch it played.
+  let mouseLit = null, mouseLitNote = null;
   piano.addEventListener('mousedown', e => {
     const key = e.target.closest('[data-offset]');
     if (!key) return;
-    previewAndEnter(+key.dataset.octave, +key.dataset.offset);
+    mouseLitNote = previewAndEnter(+key.dataset.octave, +key.dataset.offset);
     mouseLit = key;
     setLit(key, 'click', true);
   });
   document.addEventListener('mouseup', () => {
     if (mouseLit) { setLit(mouseLit, 'click', false); mouseLit = null; }
+    if (mouseLitNote !== null) { releasePreviewNote(mouseLitNote); mouseLitNote = null; }
+  });
+  // A window that loses focus never sends the key-ups for whatever was held,
+  // and a held v2 note would drone on. The jammer has its own ten-second
+  // backstop, but this is the one that actually fires in normal use.
+  window.addEventListener('blur', () => {
+    physicalNoteByCode.clear();
+    for (const [code, el] of physicalLitByCode) { setLit(el, 'key', false); physicalLitByCode.delete(code); }
+    if (jammer) jammer.releaseAll();
   });
   piano.addEventListener('mouseover', e => {
     const key = e.target.closest('[data-offset]');

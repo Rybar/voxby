@@ -1499,6 +1499,11 @@ function moveFollowRow(oldRow, newRow) {
 // The worker's buffer only contains samples from `firstRow`/`firstCol` on, so
 // row 0 of *that* buffer is sequence row followRow0, not row 0.
 let followRow0 = 0, followCol0 = 0, followCol1 = engine.MAX_CHANNELS - 1, followCols = null;
+// Sample offsets for the rows being played. Elapsed time cannot be divided by
+// song.rowLen any more: a TEMPO command makes rows different lengths, and
+// dividing by the opening tempo drifts further out of step with every change.
+// Built once per render, from the same walk the player does.
+let followTable = null;
 export function setFollowRange(range) {
   followSeq = followPat = -1;
   followRow0 = range ? range.firstRow : 0;
@@ -1507,6 +1512,8 @@ export function setFollowRange(range) {
   // A muted channel inside the span was skipped by the render, so it must not
   // light up keys either (see getPlayRange's `cols`).
   followCols = (range && range.cols) || null;
+  followTable = engine.rowTable(state.song, followRow0,
+    range ? range.lastRow : state.song.endPattern);
 }
 
 // Which notes, if any, channel `chan` is sounding at time t -- what decides
@@ -1519,8 +1526,8 @@ export function setFollowRange(range) {
 // indefinitely when it has one and nothing releases it.
 function channelActiveNotes(t, chan) {
   const song = state.song, patternLen = song.patternLen;
-  const nFloat = t * 44100 / song.rowLen;
-  const n = Math.floor(nFloat);
+  const sample = t * 44100;
+  const n = engine.rowAtSample(followTable, sample);
   const seqPos0 = followRow0 + Math.floor(n / patternLen), patPos0 = n % patternLen;
   const out = [];
 
@@ -1542,7 +1549,9 @@ function channelActiveNotes(t, chan) {
       const ev = p.n[s];
       if (!ev) continue;
       if (ev === engine.NOTE_OFF) break;      // this column is silent
-      const samplesSince = (k + (nFloat - n)) * song.rowLen;
+      // Distance back through the table rather than k * rowLen: the rows
+      // between may not all be the same length.
+      const samplesSince = sample - followTable.rowStart[Math.max(0, n - k)];
       if (soundingAt(chan, p, s, samplesSince)) out.push(engine.pitchOf(ev));
       break;
     }
@@ -1568,13 +1577,16 @@ function soundingAt(chan, p, s, samplesSince) {
   if (p.e[s * 2] === engine.GATE) {
     return samplesSince < p.e[s * 2 + 1] * song.rowLen + release;
   }
+  // (A gate is counted in rows, so it too is only approximate through a tempo
+  // change -- but it is a key highlight, not the audio.)
   if (!i[engine.ENV_SUSTAIN_LEVEL]) return samplesSince < attack + decay;
   return true;
 }
 
 export function followPlayback(t) {
   const patternLen = state.song.patternLen;
-  const n = Math.floor(t * 44100 / state.song.rowLen);
+  if (!followTable) setFollowRange(null);
+  const n = engine.rowAtSample(followTable, t * 44100);
   const patPos = n % patternLen;
   const seqPos = followRow0 + Math.floor(n / patternLen);
   if (seqPos !== followSeq) {

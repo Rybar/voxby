@@ -10,24 +10,30 @@
 // the sound it started with; a strip parameter is read every row, so an
 // effect command can sweep it while notes play.
 //
-// The panel's layout does not change for that. Every control names a
-// parameter address instead of a bare index -- V(n) for a voice parameter,
-// X(n) for a strip one -- and getParam/setParam below route it. Which
-// instrument a channel plays, and the pool UI for picking between them, is
-// Milestone 7's work; for now a channel edits the instrument its `ins` field
-// names, exactly as v1 read the channel's own array.
+// Every control names a parameter address instead of a bare index -- V(n) for
+// a voice parameter, X(n) for a strip one -- and getParam/setInstrProp route
+// it. The cards are grouped to match: Oscillators, Noise/Arpeggio and Envelope
+// are the voice; LFO and FX are the strip.
 //
-// This panel's "Channel" selector is state.selInstrument, shared with the
-// tracker: clicking any sequencer/pattern cell moves it, and this panel
-// reflects whatever it is set to. The selector lists all engine.MAX_CHANNELS
-// slots rather than state.song.numChannels, matching tracker.js's always-16
-// columns: a channel past numChannels is one with no sequence data yet, and
-// its instrument still has to be reachable to set up before it is used.
+// TWO SELECTORS
+// -------------
+// Because the two halves are addressed separately, the header has two
+// selectors, and they answer different questions:
+//
+//   Channel  which channel's *strip* the FX controls edit (state.selInstrument,
+//            shared with the tracker -- clicking any cell moves it)
+//   Voice    which pool entry the *voice* controls edit (state.selVoice)
+//
+// Focusing a channel pulls Voice onto that channel's default, so the ordinary
+// case is still one click. Changing Voice by hand does not change what the
+// channel plays; the Use button does that. Keeping those apart is what lets
+// one voice be edited while another is sounding, and lets several channels
+// share a voice without editing one silently changing the others by surprise.
 //
 // While an effect cell is selected (tracker.js's activeFxCell()), a write to
 // a *strip* control is mirrored into that cell as well as into the live strip
 // (see setInstrProp), and the controls display the cell's stored value on top
-// of the strip's (see previewInstrI). Voice controls are not mirrored: v2
+// of the strip's (see previewInstr). Voice controls are not mirrored: v2
 // snapshots a voice at note-on, so an effect command that wrote one would
 // change nothing.
 //
@@ -41,6 +47,7 @@ import { activeFxCell } from './tracker.js';
 import { syncJammer } from './keyboard.js';
 import { getAccent } from '../theme.js';
 import { render as renderPianoRoll } from './pianoroll.js';
+import { v2Presets } from '../presets2.js';
 
 const $ = id => document.getElementById(id);
 
@@ -97,14 +104,18 @@ const SLIDERS = {
 };
 
 let instrClipboard = null;
+// Which channel the panel last drew, so refreshInstrumentPanel can tell a
+// change of focus from an ordinary repaint.
+let lastChannel = -1;
 
 const currentChannel = () => state.song.channels[state.selInstrument];
 
-// The voice this channel plays by default. A note can name a different one,
-// but this is the one the panel edits -- see the header comment.
+// The voice the panel is editing -- state.selVoice, not the focused channel's
+// default. The two are usually the same, because focusing a channel follows
+// its default (see refreshInstrumentPanel), but they can be pulled apart to
+// edit one voice while another is playing.
 function currentVoice() {
-  const ch = currentChannel();
-  return state.song.instruments[ch.ins] || state.song.instruments[0];
+  return state.song.instruments[state.selVoice] || state.song.instruments[0];
 }
 
 const arrayFor = addr => (addr.fx ? currentChannel().fx : currentVoice());
@@ -127,45 +138,23 @@ function setInstrProp(addr, value) {
   if (!addr.fx && addr.i >= engine.ENV_ATTACK && addr.i <= engine.ENV_RELEASE) renderPianoRoll();
 }
 
-// The v1-shaped 28-number array the jammer plays, built from the two v2 arrays
-// it replaced. jammer.js is still the SoundBox real-time synth (Milestone 7
-// converts it), and this is the one place that difference is bridged.
+// What the jammer should play: the voice being edited and the focused
+// channel's strip, unless an effect cell is selected, in which case that
+// cell's stored value previews on top of the one strip parameter it targets.
+// panels/keyboard.js reads this, so the live preview hears the same settings
+// these controls show.
 //
-// The one parameter with no v2 counterpart is v1's sustain *time*, index 11.
-// v2 holds a note until something releases it, and the jammer has no note-off
-// to send, so the preview is given a fixed hold: long enough to judge the tone,
-// short enough not to drone while you work.
-const PREVIEW_SUSTAIN = 32;
-
-function toV1(voice, fx) {
-  return [
-    voice[0], voice[1], voice[2], voice[3],
-    voice[4], voice[5], voice[6], voice[7], voice[8],
-    voice[9],
-    voice[engine.ENV_ATTACK],
-    // A voice that holds (a sustain level above zero) gets the preview hold;
-    // one that decays to nothing already ends on its own, so its decay time is
-    // the length it should sound for.
-    voice[engine.ENV_SUSTAIN_LEVEL] ? PREVIEW_SUSTAIN : voice[engine.ENV_DECAY],
-    voice[engine.ENV_RELEASE],
-    voice[engine.ENV_EXP_DECAY],
-    voice[engine.ARP_CHORD], voice[engine.ARP_SPEED],
-    ...fx,
-  ];
-}
-
-// What the jammer should play: the channel as it stands, unless an effect cell
-// is selected, in which case that cell's stored value previews on top of the
-// one strip parameter it targets. panels/keyboard.js reads this, so the live
-// preview hears the same settings these controls show.
-export function previewInstrI() {
+// Both halves go across as themselves now. The jammer runs the same ADSR the
+// offline players do, so a preview holds a note under the key and releases it
+// on key-up, exactly as the song will -- there is no v1 bridge left here.
+export function previewInstr() {
   const fx = currentChannel().fx.slice();
   const cell = activeFxCell();
   if (cell && cell.cmd >= engine.PARAM) {
     const idx = cell.cmd - engine.PARAM;
     if (idx < engine.NUM_FX_PARAMS) fx[idx] = cell.val;
   }
-  return toV1(currentVoice(), fx);
+  return { voice: currentVoice().slice(), fx };
 }
 
 function iconGroupHTML(id, entries) {
@@ -280,38 +269,29 @@ function refreshArpNotes() {
   paintFill($('arp_note2'));
 }
 
-// The presets in presets.js are still SoundBox's 28-number v1 instruments, so
-// loading one splits it the way engine2.js's convertV1 splits a song's.
-//
-// The envelope cannot be split faithfully, and this is the honest compromise
-// until Milestone 7 re-voices the set by ear. v1's parameter 11 is a sustain
-// *time*; v2 has a sustain *level* and holds a note until it is released. A
-// preset carries no note-off, so mapping it to "hold at full level" would make
-// every loaded preset ring until the song ended. Instead the old hold time is
-// folded into the decay and the sustain level is set to 0, which gives a sound
-// that ends by itself. Percussive and plucked presets come out close; pads come
-// out shorter than they were, and are what Milestone 7 has to revisit.
-function loadPreset(src) {
-  const voice = currentVoice();
-  const v = [
-    src[0], src[1], src[2], src[3],
-    src[4], src[5], src[6], src[7], src[8],
-    src[9],
-    src[10],              // attack, unchanged
-    src[11] + src[12],    // old hold + old release, as a decay to silence
-    0,                    // no sustain level: it ends on its own
-    src[12],              // release, unchanged
-    src[13],              // exponential bend, unchanged
-    src[14], src[15],     // arpeggio
-  ];
-  for (let j = 0; j < voice.length; j++) voice[j] = v[j];
-  currentChannel().fx = src.slice(16, 29);
-}
+// The upstream presets, converted once at first use (presets2.js). Cached
+// because the conversion reads a global that never changes after boot.
+let presetCache = null;
+const presets = () => (presetCache || (presetCache = v2Presets()));
 
 function presetOptionsHTML() {
-  return '<option value="">(select a preset)</option>' + window.gInstrumentPresets.map((p, i) =>
-    p.i ? `<option value="${i}">${p.name}</option>` : `<option value="" disabled>${p.name}</option>`
+  return '<option value="">(select a preset)</option>' + presets().map((p, i) =>
+    p.voice ? `<option value="${i}">${p.name}</option>` : `<option value="" disabled>${p.name}</option>`
   ).join('');
+}
+
+// Load a converted preset into the voice being edited and the focused
+// channel's strip. Both halves, because a preset describes a whole sound and
+// several of them lean hard on their filter settings.
+function loadPreset(preset) {
+  const voice = currentVoice();
+  for (let j = 0; j < voice.length; j++) voice[j] = preset.voice[j];
+  currentChannel().fx = preset.fx.slice();
+  // Name the voice after the preset, unless it has been named already -- the
+  // pool is far easier to read that way and there is nothing else to call it.
+  if (!state.song.instrumentNames[state.selVoice]) {
+    state.song.instrumentNames[state.selVoice] = preset.name;
+  }
 }
 
 // Oscillators, noise+arpeggio and envelope+LFO are each two .instr-sub sections
@@ -323,15 +303,21 @@ export function initInstrumentPanel() {
   $('instrument-panel').classList.remove('wip');
   $('instrument-panel').innerHTML = `
     <div class="instr-header">
-      <h3 title="The sound this channel plays by default. The oscillator, noise, envelope and arpeggio settings are the voice, which a note can swap for another from the song's pool; the FX settings are the channel's mixer strip, which every note on the channel goes through.">Instrument</h3>
-      <label title="Which channel's instrument these controls edit. Clicking any cell in the tracker selects that channel too.">Channel <select id="instr-channel"></select></label>
-      <select id="instr-preset" title="Load one of SoundBox's ready-made instruments into this channel, as a starting point to tweak. Overwrites every setting below.">
+      <h3 title="A voice from the song's instrument pool, and the mixer strip of one channel. The two are separate in v2: a voice is snapshotted when a note starts, so several channels can play the same one and a note can name a different one; the strip belongs to the channel and every note on it goes through.">Instrument</h3>
+      <label title="Which channel's mixer strip these FX controls edit. Clicking any cell in the tracker selects that channel too.">Channel <select id="instr-channel"></select></label>
+      <label title="Which voice from the song's pool the Oscillator, Noise, Arpeggio and Envelope controls edit. Changing this does not change what the channel plays — use the button beside it for that.">Voice <select id="instr-pool"></select></label>
+      <input id="instr-name" type="text" maxlength="20" placeholder="name"
+             title="A name for this voice, so the pool is readable. Editor only: nothing in the player reads it, and a song whose voices are all unnamed costs no extra bytes when exported.">
+      <button id="instr-assign" type="button" title="Make this voice the one the focused channel plays by default. Notes can still name a different one in the tracker's Ins column.">Use</button>
+      <button id="instr-add" type="button" title="Add a copy of this voice to the pool, to edit into a variation">+</button>
+      <button id="instr-del" type="button" title="Remove this voice from the pool. Refused while any note or channel still names it.">−</button>
+      <select id="instr-preset" title="Load one of SoundBox's ready-made instruments into this voice and the focused channel's strip. Overwrites every setting below.">
       </select>
-      <button id="instr-copy" type="button" title="Copy this whole instrument, to paste onto another channel">${svgIcon('copy')}</button>
-      <button id="instr-paste" type="button" title="Overwrite this channel's instrument with the copied one">${svgIcon('paste')}</button>
+      <button id="instr-copy" type="button" title="Copy this voice and the channel's strip, to paste onto another channel">${svgIcon('copy')}</button>
+      <button id="instr-paste" type="button" title="Overwrite this voice and the channel's strip with the copied pair">${svgIcon('paste')}</button>
     </div>
     <div class="instr-grid">
-      <div class="instr-card">
+      <div class="instr-card instr-card-voice">
         <div class="instr-sub">
           <h4 title="The main tone generator. Oscillator 2 layers a second one on top; Noise adds hiss.">Oscillator 1</h4>
           <div class="ctl-row" title="Waveform: what shape this oscillator draws, which is what decides its timbre."><label>Wave</label>${iconGroupHTML('osc1-wave', WAVE_ICONS)}</div>
@@ -348,7 +334,7 @@ export function initInstrumentPanel() {
           ${sliderRow('osc2_xenv', 'X-Env', 'Envelope sweeps this oscillator down in pitch as the note decays, same as Oscillator 1.')}
         </div>
       </div>
-      <div class="instr-card">
+      <div class="instr-card instr-card-voice">
         <div class="instr-sub">
           <h4 title="White noise mixed in alongside the oscillators. Filtered noise is where the whole percussion section comes from — snares, hats, wind, surf.">Noise</h4>
           ${sliderRow('noise_vol', 'Vol', 'How much white noise is mixed in. Shape it with the envelope and the FX filter.')}
@@ -360,7 +346,7 @@ export function initInstrumentPanel() {
           ${sliderRow('arp_speed', 'Speed', 'How fast the cycle steps. 0 is four rows per step; every notch up halves that, so 7 is a blur.')}
         </div>
       </div>
-      <div class="instr-card">
+      <div class="instr-card instr-card-voice">
         <div class="instr-sub">
           <h4 title="The shape of a note's volume over time: fade in (Att), fall to the sustain level (Dec, Sus), then fade out when the note is released (Rel). A note with Sus above 0 holds until something releases it — a note-off, or a GAT command. A note with Sus at 0 dies away on its own, which is what a drum wants.">Envelope</h4>
           ${sliderRow('env_att', 'Att', 'Fade-in time. 0 starts instantly (percussive); high values swell in, for pads and strings.')}
@@ -369,6 +355,8 @@ export function initInstrumentPanel() {
           ${sliderRow('env_rel', 'Rel', 'Fade-out time after the note is released — the tail. This is what makes a sound short and dry or long and ringing.')}
           ${sliderRow('env_decay', 'Exp', 'Bends both the decay and the fade-out from a straight line into an exponential drop: plucky and front-loaded instead of an even fade.')}
         </div>
+      </div>
+      <div class="instr-card instr-card-strip">
         <div class="instr-sub">
           <h4 title="A slow oscillator that sweeps the FX filter cutoff up and down for wah and wobble. It does nothing until FX freq modulation below is ticked.">LFO</h4>
           <div class="ctl-row" title="Shape of the sweep: sine wobbles smoothly, square jumps between two cutoffs, saw ramps and snaps back."><label>Wave</label>${iconGroupHTML('lfo-wave', WAVE_ICONS)}</div>
@@ -377,8 +365,8 @@ export function initInstrumentPanel() {
           <label class="ctl-check" title="Route the LFO to the FX filter cutoff. Nothing the LFO is set to does anything until this is on — it is the LFO's on switch."><input id="lfo_fxfreq" type="checkbox"> FX freq modulation</label>
         </div>
       </div>
-      <div class="instr-card instr-card-fx">
-        <h4 title="Applied to the whole channel after the notes are mixed, in this order: filter, distortion, drive, panning, delay. The FX track can change any of these mid-pattern.">FX</h4>
+      <div class="instr-card instr-card-fx instr-card-strip">
+        <h4 title="Applied to the whole channel after the notes are mixed, in this order: filter, distortion, drive, panning, delay. An effect column in the tracker can change any of these mid-pattern with a PARAM command.">FX</h4>
         <div class="ctl-row" title="Filter type. This is the single biggest tone control in the synth — most of the difference between a bass and a hi-hat is here."><label>Filt</label>${iconGroupHTML('fx-filter', FILTER_ICONS)}</div>
         <div class="fx-sliders">
           ${sliderRow('fx_freq', 'Freq', 'Filter cutoff, roughly 43 Hz per step — 255 is wide open, low values are muffled. Finer at the low end of the slider.')}
@@ -406,7 +394,7 @@ export function initInstrumentPanel() {
   $('instr-preset').onchange = () => {
     const idx = $('instr-preset').value;
     if (idx === '') return;
-    loadPreset(window.gInstrumentPresets[+idx].i);
+    loadPreset(presets()[+idx]);
     refreshInstrumentPanel();
     $('instr-preset').blur();
   };
@@ -431,6 +419,82 @@ export function initInstrumentPanel() {
     refreshInstrumentPanel();
     $('instr-channel').blur();
   };
+
+  // --- the instrument pool -------------------------------------------------
+  $('instr-pool').onchange = () => {
+    state.selVoice = +$('instr-pool').value;
+    refreshInstrumentPanel();
+    $('instr-pool').blur();
+  };
+
+  // Named live rather than on blur, so the pool list reads back what is being
+  // typed. A name is not song content the player reads, so it deliberately
+  // does not go through setInstrProp's jammer resync.
+  $('instr-name').oninput = () => {
+    state.song.instrumentNames[state.selVoice] = $('instr-name').value;
+    refreshPoolList();
+    state.notify && state.notify();
+  };
+
+  $('instr-assign').onclick = () => {
+    currentChannel().ins = state.selVoice;
+    refreshInstrumentPanel();
+    state.notify && state.notify();
+  };
+
+  $('instr-add').onclick = () => {
+    // A copy of the voice on screen, not a blank one: a variation of what you
+    // are already hearing is what this button is nearly always for.
+    const name = state.song.instrumentNames[state.selVoice] || '';
+    const i = engine.addInstrument(state.song, currentVoice(), name ? name + ' 2' : '');
+    if (i < 0) { flashInstr(`The pool is full (${engine.MAX_INSTRUMENTS} voices)`); return; }
+    state.selVoice = i;
+    refreshInstrumentPanel();
+    state.notify && state.notify();
+  };
+
+  $('instr-del').onclick = () => {
+    // engine2 refuses while anything still names it, and renumbers the
+    // references above it when it does remove -- so the panel only has to
+    // report which of those happened.
+    if (!engine.removeInstrument(state.song, state.selVoice)) {
+      flashInstr(state.song.instruments.length < 2
+        ? 'A song needs at least one voice'
+        : 'Still in use by a note or a channel');
+      return;
+    }
+    state.selVoice = Math.min(state.selVoice, state.song.instruments.length - 1);
+    refreshInstrumentPanel();
+    state.notify && state.notify();
+  };
+}
+
+// A short-lived message beside the pool controls, for the two things that can
+// be refused. Same idea as the tracker's flashFeedback.
+function flashInstr(message) {
+  const el = $('instr-name');
+  if (!el) return;
+  const was = el.placeholder;
+  el.placeholder = message;
+  el.classList.add('refused');
+  setTimeout(() => { el.placeholder = was; el.classList.remove('refused'); }, 1600);
+}
+
+// The pool <select>, as "00 Name" rows. Rebuilt whenever the pool or a name
+// changes; kept separate from the full refresh so typing a name does not
+// rebuild every slider.
+function refreshPoolList() {
+  const sel = $('instr-pool');
+  if (!sel) return;
+  const playing = currentChannel().ins;
+  sel.innerHTML = state.song.instruments.map((_, i) => {
+    const name = state.song.instrumentNames[i] || '';
+    // The channel's own default is marked, so the two selectors can be read
+    // against each other at a glance.
+    const mark = i === playing ? ' ▸' : '';
+    return `<option value="${i}">${i.toString(16).toUpperCase().padStart(2, '0')}${mark} ${name}</option>`;
+  }).join('');
+  sel.value = state.selVoice;
 }
 
 export function refreshInstrumentPanel() {
@@ -440,6 +504,22 @@ export function refreshInstrumentPanel() {
   }
   if (state.selInstrument < 0 || state.selInstrument >= engine.MAX_CHANNELS) state.selInstrument = 0;
   sel.value = state.selInstrument;
+
+  // Focusing a different channel pulls the voice selector onto that channel's
+  // default, so clicking a pattern column lands on the sound it plays without
+  // a second click. Only on an actual change of channel: doing it on every
+  // refresh would fight a deliberate pick of another voice.
+  if (lastChannel !== state.selInstrument) {
+    lastChannel = state.selInstrument;
+    state.selVoice = currentChannel().ins;
+  }
+  if (state.selVoice < 0 || state.selVoice >= state.song.instruments.length) state.selVoice = 0;
+  refreshPoolList();
+  if (document.activeElement !== $('instr-name')) {
+    $('instr-name').value = state.song.instrumentNames[state.selVoice] || '';
+  }
+  // Assigning the voice a channel already plays would do nothing.
+  $('instr-assign').disabled = currentChannel().ins === state.selVoice;
 
   setActiveIcon('osc1-wave', getParam(V(engine.OSC1_WAVEFORM)));
   setActiveIcon('osc2-wave', getParam(V(engine.OSC2_WAVEFORM)));

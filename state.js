@@ -16,10 +16,16 @@ export const state = {
   song: makeNewSong(),
   songUnmodified: null,
   // Which channel the tracker and the instrument panel are focused on. The
-  // name is now a misnomer -- v2 has an instrument pool, so a channel and an
-  // instrument are different things -- but it is read by six modules and
-  // renaming it is Milestone 7's job, with the pool UI it belongs to.
+  // name is a misnomer -- v2 has an instrument pool, so a channel and an
+  // instrument are different things -- but it is read by six modules and every
+  // test, and renaming it would be churn for its own sake. Read it as
+  // "selected channel".
   selInstrument: 0,
+  // Which voice from song.instruments the instrument panel edits. Follows the
+  // focused channel's default whenever the focus moves, so the common case
+  // needs no second click; changing it by hand does *not* change what the
+  // channel plays (the panel's Use button does that).
+  selVoice: 0,
   selRow: 0,
   selCol: 0,
   octave: 5,

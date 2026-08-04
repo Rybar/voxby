@@ -12,6 +12,7 @@
 //   {
 //     rowLen, patternLen, endPattern, numChannels,
 //     instruments: [ [ ...17 numbers ], ... ],   // voices, a song-level pool
+//     instrumentNames: [ '...', ... ],           // one per instrument
 //     channels: [ {
 //       fx:  [ ...13 numbers ],   // the mixer strip
 //       ins: 0,                   // default instrument index
@@ -240,6 +241,10 @@ export const makeNewSong = function () {
     endPattern: 0,
     numChannels: 1,
     instruments: [defaultInstrument()],
+    // Parallel to `instruments`, one name each. Editor metadata rather than
+    // anything the player reads, and empty by default -- an unnamed pool costs
+    // nothing in the export (see songToJS).
+    instrumentNames: [''],
     channels: [],
   };
   for (var i = 0; i < MAX_CHANNELS; i++) song.channels.push(makeEmptyChannel(song.patternLen));
@@ -251,9 +256,10 @@ export const makeNewSong = function () {
 // The instrument pool
 //----------------------------------------------------------------------------
 
-export const addInstrument = function (song, params) {
+export const addInstrument = function (song, params, name) {
   if (song.instruments.length >= MAX_INSTRUMENTS) return -1;
   song.instruments.push(params ? params.slice() : defaultInstrument());
+  song.instrumentNames.push(name || '');
   return song.instruments.length - 1;
 };
 
@@ -287,6 +293,7 @@ export const removeInstrument = function (song, index) {
   eachInstrumentRef(song, function (ins) { if (ins === index) used = true; });
   if (used) return false;
   song.instruments.splice(index, 1);
+  song.instrumentNames.splice(index, 1);
   // Everything above it shifts down by one.
   eachInstrumentRef(song, function (ins, set) { if (ins > index) set(ins - 1); });
   return true;
@@ -343,6 +350,79 @@ const maxPatternOf = function (ch) {
 };
 
 //----------------------------------------------------------------------------
+// Row timing
+//
+// With TEMPO in the format, a row is no longer song.rowLen samples long, so
+// "how far into the song is this sample?" stops being a division. The player
+// answers it by walking the song once and building a table; the editor needs
+// the same answer to follow playback, so the walk lives here.
+//
+// player-worker.js deliberately does NOT call this: it is a classic script
+// loaded by `new Worker`, so it cannot import a module, and it keeps its own
+// copy. tests/soundbox/test-worker-parity.mjs is what stops the two drifting.
+//----------------------------------------------------------------------------
+
+// The row length a TEMPO sets on one global row, searching every channel. The
+// lowest channel index wins, then the lowest column. -1 for none.
+//
+// Every channel, not only the ones being played: a tempo change is global, so
+// a range that leaves out the channel carrying it must still run at its speed.
+export const tempoAt = function (song, p, row) {
+  for (var c = 0; c < song.numChannels; c++) {
+    var ch = song.channels[c], cp = ch.seq[p];
+    if (!cp) continue;
+    var pat = ch.pat[cp - 1];
+    if (!pat) continue;
+    for (var col = 0; col < 4; col++) {
+      var s = (row + col * song.patternLen) * 2;
+      if (pat.e[s] === TEMPO) return pat.e[s + 1];
+    }
+  }
+  return -1;
+};
+
+// Sample offsets for every row of sequence rows firstRow..lastRow, with
+// rowStart[i] the first sample of row i and one extra entry for the end.
+//
+// The scan starts at song row 0 even when the window does not, so a pattern
+// played on its own runs at the speed the song had reached by then rather than
+// snapping back to the opening tempo.
+export const rowTable = function (song, firstRow, lastRow) {
+  var patternLen = song.patternLen;
+  if (firstRow == null) firstRow = 0;
+  if (lastRow == null) lastRow = song.endPattern;
+  var total = patternLen * (lastRow - firstRow + 1);
+  var rowStart = new Int32Array(total + 1);
+  var rowLen = new Int32Array(total);
+  var len = song.rowLen, g, t;
+  for (g = 0; g < firstRow * patternLen; g++) {
+    t = tempoAt(song, (g / patternLen) | 0, g % patternLen);
+    if (t > 0) len = t;
+  }
+  for (g = 0; g < total; g++) {
+    var abs = firstRow * patternLen + g;
+    t = tempoAt(song, (abs / patternLen) | 0, abs % patternLen);
+    if (t > 0) len = t;
+    rowLen[g] = len;
+    rowStart[g + 1] = rowStart[g] + len;
+  }
+  return { rowStart: rowStart, rowLen: rowLen, rows: total, firstRow: firstRow };
+};
+
+// Which row of that table `sample` falls in, clamped to the table. A binary
+// search rather than a division, which is the whole point of the table.
+export const rowAtSample = function (table, sample) {
+  var lo = 0, hi = table.rows - 1;
+  if (sample <= 0) return 0;
+  if (sample >= table.rowStart[table.rows]) return hi;
+  while (lo < hi) {
+    var mid = (lo + hi + 1) >> 1;
+    if (table.rowStart[mid] <= sample) lo = mid; else hi = mid - 1;
+  }
+  return lo;
+};
+
+//----------------------------------------------------------------------------
 // Export
 //
 // Same discipline as engine.js's songToJS: trailing zeros are cut, unused
@@ -371,9 +451,20 @@ export const songToJS = function (song) {
 
   s += '  instruments: [\n';
   for (i = 0; i < song.instruments.length; i++) {
-    s += '    [' + song.instruments[i].join(',') + '],  // ' + i + '\n';
+    var nm = song.instrumentNames[i] || '';
+    s += '    [' + song.instruments[i].join(',') + '],  // ' + i + (nm ? '  ' + nm : '') + '\n';
   }
   s += '  ],\n';
+
+  // Names are editor metadata -- nothing in the player reads them -- so they
+  // are written only when at least one has been set. A song whose instruments
+  // were never named costs no bytes for the field, which matters because this
+  // export is also what ships inside a game.
+  if (song.instrumentNames.some(function (n) { return n; })) {
+    s += '  instrumentNames: [' + song.instrumentNames.map(function (n) {
+      return JSON.stringify(n || '');
+    }).join(',') + '],\n';
+  }
 
   s += '  channels: [\n';
   for (c = 0; c < song.numChannels; c++) {
@@ -427,6 +518,7 @@ export const normalizeSong = function (raw) {
     endPattern: raw.endPattern >= 0 ? raw.endPattern : 0,
     numChannels: raw.numChannels > 0 ? raw.numChannels : 1,
     instruments: [],
+    instrumentNames: [],
     channels: [],
   };
 
@@ -434,6 +526,10 @@ export const normalizeSong = function (raw) {
     song.instruments.push(inflate(raw.instruments[i], NUM_INSTR_PARAMS));
   }
   if (!song.instruments.length) song.instruments.push(defaultInstrument());
+  var rawNames = Array.isArray(raw.instrumentNames) ? raw.instrumentNames : [];
+  for (i = 0; i < song.instruments.length; i++) {
+    song.instrumentNames.push(typeof rawNames[i] === 'string' ? rawNames[i] : '');
+  }
 
   for (var c = 0; c < MAX_CHANNELS; c++) {
     var src = raw.channels[c];
@@ -532,6 +628,7 @@ export const songToURLData = function (song) {
     i: song.instruments,
     c: [],
   };
+  if (song.instrumentNames.some(function (n) { return n; })) out.m = song.instrumentNames;
   for (var c = 0; c < song.numChannels; c++) {
     var ch = song.channels[c], maxPat = maxPatternOf(ch), pat = [];
     for (var p = 0; p < maxPat; p++) {
@@ -555,6 +652,7 @@ export const urlDataToSong = function (str) {
   return normalizeSong({
     rowLen: raw.r, patternLen: raw.p, endPattern: raw.e, numChannels: raw.n,
     instruments: raw.i,
+    instrumentNames: raw.m,
     channels: raw.c.map(function (ch) {
       return {
         fx: ch[0], ins: ch[1], seq: ch[2],
@@ -593,6 +691,7 @@ export const convertV1 = function (old) {
     endPattern: old.endPattern,
     numChannels: old.numChannels,
     instruments: [],
+    instrumentNames: [],
     channels: [],
   };
   var dropped = { voiceAutomation: 0, noFreeSlot: 0 };
@@ -607,6 +706,9 @@ export const convertV1 = function (old) {
     // than padding the pool with copies of the default.
     if (!src) { song.channels.push(ch); continue; }
     ch.ins = song.instruments.length;
+    // v1 has no names, so each converted instrument is named for the channel
+    // it came from -- which is the only thing that distinguished them there.
+    song.instrumentNames.push('Ch ' + (c + 1));
     var i = src.i;
 
     // Voice half: the oscillators pass straight through; the envelope becomes

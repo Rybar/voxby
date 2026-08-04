@@ -277,18 +277,32 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
 .instr-header label { display: flex; align-items: center; gap: 4px; color: var(--text-dim); font-size: 10px; }
 .instr-header select { background: var(--bg2); color: inherit; border: 1px solid var(--border);
                         border-radius: 4px; padding: 2px 5px; font: inherit; font-size: 11px; }
+/* The voice name. Narrow on purpose: the pool <select> beside it is what the
+   name is read from, and this is only where it is typed. */
+.instr-header input[type=text] { background: var(--bg2); color: inherit; border: 1px solid var(--border);
+                        border-radius: 4px; padding: 2px 5px; font: inherit; font-size: 11px; width: 10ch; }
+/* A refused add or remove says why in the name field's placeholder, so the
+   message appears where the pool controls are rather than across the panel. */
+.instr-header input.refused { border-color: #ff4444; }
+.instr-header input.refused::placeholder { color: #ff6666; }
+.instr-header button:disabled { opacity: 0.4; cursor: default; }
 /* Grid, not flex-wrap: a flex row's items default to min-width: auto, which
    floors a shrinking <input type=range> at its native intrinsic width
    (~130px in Chromium) rather than the 100px this layout wants -- every
    card ended up stretched to fit that oversized row, so only 2 fit per
    line where 3+ should. Grid's minmax(…, 1fr) sizes columns from the track
    itself, sidestepping the per-item min-width floor entirely.
-   A flat repeat(4, 1fr) rather than auto-fill: there are exactly four
-   .instr-card elements (Osc, Noise/Arpeggio, Envelope/LFO, FX) and this
-   guarantees them one row of four equal columns, where auto-fill can wrap the
+   A flat repeat(5, 1fr) rather than auto-fill: there are exactly five
+   .instr-card elements (Osc, Noise/Arpeggio, Envelope, LFO, FX) and this
+   guarantees them one row of five equal columns, where auto-fill can wrap the
    last card onto a second row that overflows #bottom's fixed height.
-   #instrument-panel is sized to give each of the four room (see #bottom
+   #instrument-panel is sized to give each of the five room (see #bottom
    #instrument-panel below).
+
+   Five, not the four it had in v1: the LFO moved out of the Envelope card
+   when the panel was regrouped by which array a control writes (v2 splits the
+   voice from the channel strip). Stacked with FX in one strip card it made
+   that card 13 rows tall against the grid's 9, and it overflowed the row.
 
    flex: 1/min-height: 0 lets the grid claim leftover height in
    #instrument-panel rather than sizing to its content; grid-auto-rows:
@@ -296,11 +310,20 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
    blank below the grid; and align-items at its stretch default is what makes
    each .instr-card's background fill its row rather than hugging its own
    possibly-shorter content. */
-.instr-grid { display: grid; grid-template-columns: repeat(4, 1fr);
+.instr-grid { display: grid; grid-template-columns: repeat(5, 1fr);
               grid-auto-rows: minmax(min-content, 1fr); gap: 8px; align-content: start;
               overflow: auto; flex: 1; min-height: 0; }
 .instr-card { background: var(--bg2); border: 1px solid var(--border-dim); border-radius: 6px;
               padding: 6px 8px; min-width: 0; }
+/* v2 splits the 28 old parameters into a voice (17, from the song's pool) and
+   a channel strip (13, on the channel). Which array a card writes decides how
+   a control behaves -- a voice is snapshotted at note-on, a strip parameter is
+   read every row and can be swept by an effect command -- so the two are
+   marked rather than left to be inferred from the headings.
+   A left edge rather than a fill: the cards already carry a background, and a
+   second one per group made the panel read as four unrelated boxes. */
+.instr-card-voice { border-left: 2px solid var(--border); }
+.instr-card-strip { border-left: 2px solid var(--accent); }
 /* Osc1/Osc2, Noise/Arpeggio and Envelope/LFO each share one .instr-card as two
    stacked .instr-sub sections -- see instrument.js's comment above
    initInstrumentPanel(). */
