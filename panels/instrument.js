@@ -81,16 +81,60 @@ function currentInstr() {
   return state.song.songData[state.selInstrument];
 }
 
+// --- "which preset is this?" readout, beside the copy/paste buttons ---
+// Per channel, because the instrument itself is: switching channels has to
+// show that channel's provenance, not the last one loaded anywhere. Held here
+// rather than in the song, and never exported -- it is a note about where an
+// instrument came from, not part of the sound, and a song that travels to
+// someone else says nothing about which preset a channel was built from.
+//
+// Dropped wholesale when state.song is replaced (New/Open/share link/undo of
+// a whole song), since the channels it described are gone. Watching the object
+// identity keeps that self-contained here instead of needing a call from
+// main.js's loadSong.
+let presetLabels = new Map();
+let labelsSong = null;
+// The staged preset's name while the presets dialog previews one, so the
+// readout names what the sliders are actually showing.
+let previewPresetName = '';
+
+function syncLabelsToSong() {
+  if (labelsSong !== state.song) { labelsSong = state.song; presetLabels = new Map(); }
+}
+
+function setPresetLabel(name) {
+  syncLabelsToSong();
+  if (name) presetLabels.set(state.selInstrument, { name, modified: false });
+  else presetLabels.delete(state.selInstrument);
+}
+
 // If an FX-track cell is selected, mirror the write into that cell as well as
 // the live instrument property -- both, never one or the other.
 function setInstrProp(prop, value) {
   currentInstr().i[prop] = value;
   const cell = activeFxCell();
   if (cell) cell.set(prop, value);
+  // Any control on this panel reaches the instrument through here, so this is
+  // the one place that has to notice the loaded preset has been departed from.
+  syncLabelsToSong();
+  const label = presetLabels.get(state.selInstrument);
+  if (label && !label.modified) {
+    label.modified = true;
+    refreshPresetLabel();
+  }
   syncJammer();
   // The piano roll draws each note as wide as this envelope sounds, so an
   // envelope edit must repaint it. A no-op in the tracker view.
   if (prop === engine.ENV_ATTACK || prop === engine.ENV_SUSTAIN || prop === engine.ENV_RELEASE) renderPianoRoll();
+}
+
+function refreshPresetLabel() {
+  syncLabelsToSong();
+  const el = $('instr-preset-name');
+  if (!el) return;
+  if (previewPresetI) { el.textContent = previewPresetName; return; }
+  const label = presetLabels.get(state.selInstrument);
+  el.textContent = label ? label.name + (label.modified ? ' (modified)' : '') : '';
 }
 
 // Set by main.js's presets dialog while a preset is highlighted there:
@@ -106,30 +150,37 @@ let previewPresetI = null;
 // (main.js never clones it), and previewInstrI() below hands this straight
 // out to callers -- a copy is what keeps a downstream mutation from ever
 // reaching, and permanently corrupting, the built-in library.
-export function setPresetPreview(i) {
+export function setPresetPreview(i, name = '') {
   previewPresetI = i.slice();
+  previewPresetName = name;
   refreshInstrumentPanel();
   syncJammer();
 }
 
 // A no-op with nothing staged, so main.js can call it unconditionally on
 // every dialog-dismiss route (Escape, backdrop, or after a real commit)
-// without checking first.
+// without checking first. The readout falls back to whatever the channel was
+// last actually loaded from, which refreshInstrumentPanel re-derives.
 export function clearPresetPreview() {
   if (!previewPresetI) return;
   previewPresetI = null;
+  previewPresetName = '';
   refreshInstrumentPanel();
   syncJammer();
 }
 
 // Copies the previewed preset into the real channel instrument in place
 // (SoundBox's instrument arrays are always this fixed length, so index-by-
-// index is enough -- same as the preset-select handler this replaced).
-export function commitPresetPreview() {
+// index is enough -- same as the preset-select handler this replaced), and
+// records its name as this channel's provenance, unmodified until the first
+// control is touched.
+export function commitPresetPreview(name = '') {
   if (!previewPresetI) return;
   const dest = currentInstr().i;
   for (let j = 0; j < dest.length; j++) dest[j] = previewPresetI[j];
   previewPresetI = null;
+  previewPresetName = '';
+  setPresetLabel(name);
   refreshInstrumentPanel();
   syncJammer();
 }
@@ -271,6 +322,7 @@ export function initInstrumentPanel() {
       <button id="instr-presets-btn" type="button" title="Browse instrument presets — SoundBox's built-in library plus any you've saved — and load one into this channel, overwriting every setting below.">Presets…</button>
       <button id="instr-copy" type="button" title="Copy this whole instrument, to paste onto another channel">${svgIcon('copy')}</button>
       <button id="instr-paste" type="button" title="Overwrite this channel's instrument with the copied one">${svgIcon('paste')}</button>
+      <span id="instr-preset-name" class="preset-label" title="The preset this channel's instrument was loaded from. It reads (modified) once you change any control below — the sound is no longer that preset."></span>
     </div>
     <div class="instr-grid">
       <div class="instr-card">
@@ -345,10 +397,21 @@ export function initInstrumentPanel() {
 
   $('instr-presets-btn').onclick = () => { state.openPresets && state.openPresets(); };
 
-  $('instr-copy').onclick = () => { instrClipboard = currentInstr().i.slice(); };
+  // The provenance readout travels with the instrument: pasting a channel
+  // built from "Softy" onto another channel makes that one a Softy too, and
+  // an unnamed instrument pastes as unnamed rather than keeping the
+  // destination's old, now-wrong, name.
+  $('instr-copy').onclick = () => {
+    syncLabelsToSong();
+    instrClipboard = { i: currentInstr().i.slice(), label: presetLabels.get(state.selInstrument) };
+  };
   $('instr-paste').onclick = () => {
     if (!instrClipboard) return;
-    currentInstr().i = instrClipboard.slice();
+    currentInstr().i = instrClipboard.i.slice();
+    syncLabelsToSong();
+    const label = instrClipboard.label;
+    if (label) presetLabels.set(state.selInstrument, { name: label.name, modified: label.modified });
+    else presetLabels.delete(state.selInstrument);
     refreshInstrumentPanel();
   };
 
@@ -377,4 +440,5 @@ export function refreshInstrumentPanel() {
   refreshArpNotes(i);
 
   $('lfo_fxfreq').checked = !!i[engine.LFO_FX_FREQ];
+  refreshPresetLabel();
 }

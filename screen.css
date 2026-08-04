@@ -254,6 +254,13 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
 .instr-header label { display: flex; align-items: center; gap: 4px; color: var(--text-dim); font-size: 10px; }
 .instr-header select { background: var(--bg2); color: inherit; border: 1px solid var(--border);
                         border-radius: 4px; padding: 2px 5px; font: inherit; font-size: 11px; }
+/* Which preset this channel's instrument came from (instrument.js's
+   refreshPresetLabel), beside the copy/paste buttons. Dim and unboxed: it is a
+   caption on the panel, not a control. It ellipsizes rather than pushing the
+   header into a second wrapped row -- .instr-header is flex-wrap, and a long
+   preset name would otherwise cost the panel a whole line of height. */
+.preset-label { color: var(--text-dim); font-size: 10px; font-style: italic;
+                overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 /* Grid, not flex-wrap: a flex row's items default to min-width: auto, which
    floors a shrinking <input type=range> at its native intrinsic width
    (~130px in Chromium) rather than the 100px this layout wants -- every

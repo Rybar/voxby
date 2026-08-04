@@ -592,7 +592,7 @@ function openPresetsDialog() {
     () => { stagedIdx = -1; clearPresetPreview(); });
 
   stagedIdx = keepStaged >= 0 && lib.presets[keepStaged] ? keepStaged : -1;
-  if (stagedIdx >= 0) setPresetPreview(lib.presets[stagedIdx].i);
+  if (stagedIdx >= 0) setPresetPreview(lib.presets[stagedIdx].i, lib.presets[stagedIdx].name);
   else clearPresetPreview();
 
   const grid = $('picker-grid');
@@ -649,7 +649,8 @@ function openPresetsDialog() {
       stagedIdx = +row.dataset.idx;
       for (const el of grid.querySelectorAll('.preset-row.active')) el.classList.remove('active');
       row.classList.add('active');
-      setPresetPreview(ensureLibrary().presets[stagedIdx].i);
+      const staged = ensureLibrary().presets[stagedIdx];
+      setPresetPreview(staged.i, staged.name);
       auditionNote();
       $('preset-use').disabled = false;
     }
@@ -739,7 +740,9 @@ function openPresetsDialog() {
 
   // --- footer ---
   $('preset-use').onclick = () => {
-    commitPresetPreview();
+    // The name goes with it, for the instrument panel's provenance readout.
+    const staged = ensureLibrary().presets[stagedIdx];
+    commitPresetPreview(staged && staged.name);
     stagedIdx = -1;
     closeModal();
   };
