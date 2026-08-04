@@ -930,7 +930,11 @@ function onKeyDown(e) {
   if (e.ctrlKey && e.shiftKey && e.code === 'KeyZ') { redo(); e.preventDefault(); return; }
   if (e.ctrlKey && e.code === 'KeyZ' && !e.shiftKey) { undo(); e.preventDefault(); return; }
 
-  if (state.editMode === 'sequence') {
+  // Ctrl/Meta+digit is the browser's tab-switch shortcut (Ctrl+1..9), and
+  // Ctrl/Meta+letter covers other browser/OS chords (Ctrl+W, Cmd+Q, ...). Left
+  // unguarded, this handler both wrote the digit into the sequencer cell and
+  // preventDefault()'d the keypress, so the browser never got to act on it.
+  if (state.editMode === 'sequence' && !e.ctrlKey && !e.metaKey) {
     let code = null;
     if (/^Digit[0-9]$/.test(e.code)) code = +e.code.slice(5) + 1;
     else if (/^Key[A-Z]$/.test(e.code)) code = 11 + (e.code.charCodeAt(3) - 65);
