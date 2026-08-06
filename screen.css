@@ -123,10 +123,15 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
 .panel { background: var(--bg1); padding: 10px; overflow: auto; min-height: 0; }
 #tracks .panel { flex: 1; min-width: 0; }
 /* The sequencer always shows all engine.MAX_CHANNELS=16 columns (see
-   panels/tracker.js), with its own internal horizontal scroll (.trk-scroll
-   below) for anything past this width rather than growing further and starving
-   #patterns-panel. */
-#tracks #sequencer-panel { flex: 0 0 320px; display: flex; flex-direction: column; }
+   panels/tracker.js), and the panel is sized to hold every one of them without
+   an internal horizontal scroll. The 320px here is only the width used before
+   the first render: panels/tracker.js's sizeSequencerPanel() measures the table
+   it just built and sets flex-basis from that, since the real width depends on
+   the font, the browser zoom and how many digits the row numbers have. The
+   max-width is the guard that keeps a narrow window from handing the whole row
+   to the sequencer and starving #patterns-panel -- past that point .trk-scroll
+   scrolls horizontally again. */
+#tracks #sequencer-panel { flex: 0 0 320px; max-width: 50%; display: flex; flex-direction: column; }
 /* The panel itself doesn't scroll: its <h3> and each column's Ch/Pat header have
    to stay put while the pattern rows run under them, so the scroller is
    .pat-scroll inside it (the shape #sequencer-panel has with .trk-scroll).

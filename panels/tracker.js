@@ -1287,6 +1287,25 @@ function moveCursor(oldCol, oldRow, newCol, newRow) {
   }
 }
 
+// Widen the sequencer panel to whatever its 16 channel columns actually need,
+// so none of them sits behind a horizontal scrollbar. The width can't be a
+// constant in the stylesheet: a cell is sized in ch of the monospace font, the
+// row-number column grows a digit on a long song, and browser zoom scales all
+// of it. So the panel takes its width from the table render() just built, plus
+// the panel's own padding and the vertical scrollbar's gutter. No feedback
+// loop: the table is white-space: nowrap inside a scroller, so it renders at
+// its content width whatever the panel does. The stylesheet's max-width still
+// caps this on a narrow window.
+function sizeSequencerPanel() {
+  const panel = $('sequencer-panel'), scroll = panel.querySelector('.trk-scroll');
+  const table = $('seq-tbody') && $('seq-tbody').closest('table');
+  if (!scroll || !table) return;
+  const cs = getComputedStyle(panel);
+  const want = Math.ceil(table.offsetWidth + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)
+    + (scroll.offsetWidth - scroll.clientWidth)); // the vertical scrollbar's width
+  if (Math.round(parseFloat(panel.style.flexBasis) || 0) !== want) panel.style.flexBasis = want + 'px';
+}
+
 // The two grids sit in separate panels with headers of their own -- the
 // sequencer's BPM/Rows/Beat controls, which the patterns panel has no
 // equivalent of, and two different column-header elements (a sticky <thead>
@@ -1317,6 +1336,7 @@ function alignGridTops() {
 function render() {
   refreshSongControls();
   renderSequencer();
+  sizeSequencerPanel();
   if (state.viewMode === 'pianoroll') {
     // Only init if piano roll doesn't exist yet
     if (!$('pianoroll-canvas')) {
