@@ -75,6 +75,16 @@ function pitchName(pitch) {
   return name + octave;
 }
 
+// Canvas size for the current song and zoom. The +200 is slack to the right of
+// the last row, so the final notes aren't pinned against the edge.
+function gridPixelWidth() {
+  return PIANO_KEY_WIDTH + state.song.patternLen * CELL_WIDTH + 200;
+}
+
+function gridPixelHeight() {
+  return (OCTAVE_RANGE[1] - OCTAVE_RANGE[0] + 1) * 12 * cellHeight;
+}
+
 export function initPianoRoll() {
   const panel = $('patterns-panel');
   if (!panel) return;
@@ -97,14 +107,10 @@ export function initPianoRoll() {
     </div>`;
 
   const canvas = $('pianoroll-canvas');
-  const scroll = $('pianoroll-scroll');
 
   // Size canvas to grid dimensions (not viewport)
-  const numSemitones = (OCTAVE_RANGE[1] - OCTAVE_RANGE[0] + 1) * 12;
-  const gridHeight = numSemitones * cellHeight;
-  const patternLen = state.song.patternLen;
-  // Grid width: piano keys + pattern area, extend beyond viewport for scrolling
-  const gridWidth = PIANO_KEY_WIDTH + patternLen * CELL_WIDTH + 200; // +200px extra space
+  const gridHeight = gridPixelHeight();
+  const gridWidth = gridPixelWidth();
 
   canvas.width = gridWidth;
   canvas.height = gridHeight;
@@ -1140,6 +1146,18 @@ function getCurrentPatternNum() {
 export function render() {
   const canvas = $('pianoroll-canvas');
   if (!canvas) return;
+  // Pattern length can change while the panel stays up (the rows/pattern
+  // control, an undo, a song load). tracker.js's render() only repaints an
+  // existing canvas, so the grid is resized here instead of at init alone.
+  // Assigning width/height clears the canvas, which is why it is guarded --
+  // every path below repaints in full anyway.
+  const wantW = gridPixelWidth(), wantH = gridPixelHeight();
+  if (canvas.width !== wantW || canvas.height !== wantH) {
+    canvas.width = wantW;
+    canvas.height = wantH;
+    canvas.style.width = wantW + 'px';
+    canvas.style.height = wantH + 'px';
+  }
   const ctx = canvas.getContext('2d');
   const w = canvas.width, h = canvas.height;
 

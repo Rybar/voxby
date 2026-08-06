@@ -364,7 +364,9 @@ slider keeps just its own arrow keys.</p>
 
 <p><strong>Step</strong> is how many rows the cursor moves after each note. This is
 a tracker's edit step. 1 walks down a row at a time, 4 writes one note per beat,
-and 0 stays put so you can stack a chord by hand into the four note columns.</p>
+and 0 stays put so you can stack a chord by hand into the four note columns.
+The range is 0 to 256, the longest pattern. In the tracker a step longer than
+the pattern wraps around to the top.</p>
 
 <h3>Scale</h3>
 

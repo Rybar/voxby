@@ -80,6 +80,9 @@ function refresh() {
   const s = state.song;
   $('status').textContent =
     `${s.numChannels} channels · ${s.patternLen} rows/pattern · ${s.endPattern} sequence steps`;
+  // Here, not only at boot: the autosave restore below sets state.viewMode
+  // after the select was first populated, and loadSong() can change it too.
+  $('view-mode').value = state.viewMode;
   refreshInstrumentPanel();
   refreshTrackerPanel();
   refreshKeyboardPanel();

@@ -349,8 +349,8 @@ export function initKeyboardPanel() {
           `<label><input type="checkbox" class="kb-tone" data-tone="${i}"> ${label}</label>`).join('')}</span>
       <span class="mono kb-chord-name" id="kb-chord-name" title="The chord the last note you played spells out, given the scale and voicing set here"></span>
       <div class="spacer"></div>
-      <label title="Rows the pattern cursor moves after entering a note — a tracker's edit step. 1 = the next row, 0 = stay put, 4 = a beat at a time. Applies to typed notes and on-screen piano clicks alike.">Step
-        <input id="kb-step" type="number" min="0" max="16"></label>
+      <label title="Rows the pattern cursor moves after entering a note — a tracker's edit step. 1 = the next row, 0 = stay put, 4 = a beat at a time. Applies to typed notes and on-screen piano clicks alike. Range 0-256; a step longer than the pattern wraps.">Step
+        <input id="kb-step" type="number" min="0" max="256"></label>
       <button id="kb-oct-down" type="button" title="Move the playable key range down an octave (&lt; or -)">-</button>
       <span class="mono" id="kb-octave" title="Octave the bottom-left computer key (Z) currently plays"></span>
       <button id="kb-oct-up" type="button" title="Move the playable key range up an octave (&gt; or =)">+</button>
@@ -474,7 +474,11 @@ export function initKeyboardPanel() {
   // re-derive, and no notify() that would fight the field for focus.
   $('kb-step').oninput = () => {
     const n = +$('kb-step').value;
-    if (n >= 0 && n <= 16) { state.editStep = n; savePrefs(); }
+    // Capped at the largest pattern the rows-per-pattern control allows, so a
+    // step can always be as coarse as "one whole pattern". The tracker wraps
+    // the cursor modulo patternLen, so a step past the current length is
+    // harmless, just wrapped.
+    if (n >= 0 && n <= 256) { state.editStep = n; savePrefs(); }
   };
   for (const box of $('kb-voicing').querySelectorAll('.kb-tone')) {
     box.onchange = () => {

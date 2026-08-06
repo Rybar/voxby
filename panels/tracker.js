@@ -1597,6 +1597,10 @@ export function initTrackerPanel() {
       // past the resized n[]/f[] arrays on the next copy/delete.
       setCursor(pat, 0, 0);
       setCursor(fx, 0, 0);
+      // Same hazard for the piano roll's own cursor and selection, which hold
+      // row indices into the very arrays that were just resized.
+      state.pianoRoll.cursorRow = 0;
+      state.pianoRoll.selectedNotes = [];
       render(); notify();
     }
   };
