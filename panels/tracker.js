@@ -828,10 +828,12 @@ function handleNav(e, mode) {
     case 'Backspace': case 'Delete':
       if (mode !== 'sequence') pushUndo();
       forSelection(c, (col, row) => grid.clear(col, row));
-      // Single cell: advance the cursor past it. A range stays selected --
-      // freshly-cleared cells, still highlighted -- rather than collapsing onto
-      // one corner.
-      if (c.col1 === c.col2 && c.row1 === c.row2) row = row + 1;
+      // Single cell: move the cursor off it. Delete steps forward (down the
+      // song), Backspace steps back (up it, earlier in the song) -- the same
+      // split every text editor makes, and the direction each key is expected
+      // to work in. A range stays selected -- freshly-cleared cells, still
+      // highlighted -- rather than collapsing onto one corner.
+      if (c.col1 === c.col2 && c.row1 === c.row2) row = row + (e.code === 'Backspace' ? -1 : 1);
       break;
     default: return false;
   }
@@ -964,7 +966,10 @@ function onKeyDown(e) {
     if (state.editMode === 'pattern' && e.shiftKey && (e.code === 'Delete' || e.code === 'Backspace')) {
       pushUndo();
       writeChordRow(pat.row, []);
-      setCursor(pat, pat.col, (pat.row + 1) % patGrid.numrows());
+      // Same direction split as handleNav's single-cell case: Backspace up,
+      // Delete down.
+      const step = e.code === 'Backspace' ? patGrid.numrows() - 1 : 1;
+      setCursor(pat, pat.col, (pat.row + step) % patGrid.numrows());
       render(); notify();
       e.preventDefault();
       return;
@@ -1282,6 +1287,33 @@ function moveCursor(oldCol, oldRow, newCol, newRow) {
   }
 }
 
+// The two grids sit in separate panels with headers of their own -- the
+// sequencer's BPM/Rows/Beat controls, which the patterns panel has no
+// equivalent of, and two different column-header elements (a sticky <thead>
+// vs. .pat-col-head). So sequence row 0 and pattern row 0 landed at different
+// heights, and a pattern row read as belonging to the sequence row above it:
+// people started writing on row 1 because row 0 looked like the header.
+// Padding the shorter side by the measured difference keeps the two row grids
+// on the same baseline whatever the font or zoom does to those headers. Read
+// off the scroll containers and headers, never off a row, so it stays correct
+// with either grid scrolled anywhere.
+function alignGridTops() {
+  const trkScroll = $('sequencer-panel').querySelector('.trk-scroll');
+  const patScroll = $('pat-scroll');
+  if (!trkScroll) return;
+  if (!patScroll) { trkScroll.style.marginTop = ''; return; } // piano-roll view
+  const patHead = patScroll.querySelector('.pat-col-head');
+  if (!patHead) return;
+  const trkMargin = parseFloat(trkScroll.style.marginTop) || 0;
+  const patMargin = parseFloat(patScroll.style.marginTop) || 0;
+  const seqRowsTop = trkScroll.getBoundingClientRect().top - trkMargin + $('seq-thead').getBoundingClientRect().height;
+  const patRowsTop = patScroll.getBoundingClientRect().top - patMargin + patHead.getBoundingClientRect().height;
+  const delta = Math.round(seqRowsTop - patRowsTop);
+  const trkNext = delta < 0 ? -delta : 0, patNext = delta > 0 ? delta : 0;
+  if (trkNext !== trkMargin) trkScroll.style.marginTop = trkNext + 'px';
+  if (patNext !== patMargin) patScroll.style.marginTop = patNext + 'px';
+}
+
 function render() {
   refreshSongControls();
   renderSequencer();
@@ -1301,6 +1333,7 @@ function render() {
     renderPatterns();
     scrollCursorIntoView();
   }
+  alignGridTops();
 }
 
 function initTrackerPatternsPanel() {
@@ -1339,6 +1372,20 @@ let followSeq = -1, followPat = -1;
 // Populated by renderPatterns(), see its comment.
 let patRowEls = [];
 
+// Because following drives the *editing* cursors, a played song leaves them
+// wherever the last row it played was -- so after a play the next note key
+// wrote at that row, not at the cell that was selected before Play. Worse, a
+// song that ran to its end left the highlight at the bottom of the pattern
+// while the cursor state had already been reset elsewhere, so the note landed
+// on a row that wasn't even the highlighted one. The edit position is saved
+// when following starts and put back when it stops, so playing a song is a
+// read-only act as far as the editing cursor is concerned. selInstrument is
+// deliberately not part of the snapshot: following never moves it, so clicking
+// a channel while the song plays is a real edit that must survive the stop.
+let savedEdit = null;
+const snapCursor = c => ({ col: c.col, row: c.row, col1: c.col1, row1: c.row1, col2: c.col2, row2: c.row2 });
+function applyCursor(c, s) { c.col = s.col; c.row = s.row; c.col1 = s.col1; c.row1 = s.row1; c.col2 = s.col2; c.row2 = s.row2; }
+
 // Moves the curRow highlight (and, in pattern/fx edit mode, the live
 // cursor cell -- the same one the "selected" range doesn't move, since
 // followPlayback's setCursor calls always pass keepSelection=true) from
@@ -1376,6 +1423,9 @@ function moveFollowRow(oldRow, newRow) {
 let followRow0 = 0, followCol0 = 0, followCol1 = engine.MAX_CHANNELS - 1, followCols = null;
 export function setFollowRange(range) {
   followSeq = followPat = -1;
+  // main.js calls this once per Play, at the moment the audio actually starts,
+  // which is the last point before followPlayback() starts moving the cursors.
+  savedEdit = { seq: snapCursor(seq), pat: snapCursor(pat), fx: snapCursor(fx), selRow: state.selRow };
   followRow0 = range ? range.firstRow : 0;
   followCol0 = range ? range.firstCol : 0;
   followCol1 = range ? range.lastCol : engine.MAX_CHANNELS - 1;
@@ -1465,6 +1515,15 @@ export function followPlayback(t) {
 export function stopFollowingPlayback() {
   followSeq = followPat = -1;
   state.highlightNotes && state.highlightNotes([]);
+  // Put the pre-Play editing position back. render() is what makes the
+  // highlight and the cursor agree again: a stop can arrive between two
+  // moveFollowRow() fast paths, whose classes only ever move, never rebuild.
+  if (savedEdit) {
+    applyCursor(seq, savedEdit.seq); applyCursor(pat, savedEdit.pat); applyCursor(fx, savedEdit.fx);
+    state.selRow = savedEdit.selRow;
+    savedEdit = null;
+    render(); notify();
+  }
 }
 
 export function initTrackerPanel() {
