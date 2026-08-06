@@ -49,6 +49,16 @@ export const state = {
   // back -- main.js already imports panels/instrument.js to initialize it,
   // same cycle concern as notify/requestStop/previewNote/highlightNotes above.
   openPresets: null,
+  // Set to panels/keyboard.js's previewNoteAbsolute at boot, for panels/
+  // drums.js: a drum lane knows the exact note it writes, so it needs the
+  // preview that takes a note number rather than previewNote's offset from
+  // the current octave. Same cycle concern as previewNote above -- drums.js
+  // cannot import keyboard.js either.
+  previewAbs: null,
+  // Set to main.js's confirmModal at boot. Lets panels/drums.js ask before a
+  // Stamp replaces a beat someone has already written, using the editor's own
+  // themed dialog rather than a native confirm(). Returns a Promise<boolean>.
+  confirm: null,
   // Set to panels/tracker.js's noteKeys() at boot: the key -> semitone-offset
   // map in force, scale layout and chord-follow included. For panels/
   // pianoroll.js, which cannot import tracker.js (tracker.js imports it, to
@@ -89,8 +99,17 @@ export const state = {
   // transient UI feedback -- not persisted.
   chordName: '',
 
-  // --- view mode: tracker (traditional columns) or pianoroll (horizontal grid) ---
-  viewMode: 'tracker',  // 'tracker' | 'pianoroll'
+  // --- view mode: tracker (traditional columns), pianoroll (horizontal grid)
+  // or drums (step grid over a kit's channels) ---
+  viewMode: 'tracker',  // 'tracker' | 'pianoroll' | 'drums'
+  // Which channel plays which drum voice, for panels/drums.js:
+  // { kit, lanes: [{ role, label, note, channel }] }, or null for "no kit in
+  // this song". UI state, not song data: it says how to *read* the song, and
+  // every note it points at is an ordinary pattern note that the tracker and
+  // the piano roll show as well. So it is never exported, and a song that
+  // arrives without it (a shared link, a library song, a .json) gets it back
+  // from drums.js's findKit(), which recognises a kit by its instruments.
+  drumKit: null,
   // Draw each piano-roll note as wide as its instrument's envelope sounds
   // (panels/pianoroll.js noteLengthRows) instead of one cell. A view option,
   // not song data: it changes no note and no hit box.
@@ -168,6 +187,10 @@ export function saveAutosave() {
         selRow: state.selRow,
         octave: state.octave,
         viewMode: state.viewMode,
+        // Saved rather than rediscovered on restore so a kit whose sounds have
+        // since been edited (which findKit can no longer recognise) survives a
+        // reload of the same working session.
+        drumKit: state.drumKit,
         timestamp: Date.now(),
       };
       localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(data));

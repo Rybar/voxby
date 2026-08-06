@@ -40,6 +40,7 @@ import { padOf, rankNext } from '../chords.js';
 import { openMenu } from '../menu.js';
 import { keyHandledByFocus } from '../focus.js';
 import { initPianoRoll, render as renderPianoRoll } from './pianoroll.js';
+import { initDrumsPanel, render as renderDrums } from './drums.js';
 
 const $ = id => document.getElementById(id);
 const NOTE_NAMES = ['C-', 'C#', 'D-', 'D#', 'E-', 'F-', 'F#', 'G-', 'G#', 'A-', 'A#', 'B-'];
@@ -575,6 +576,8 @@ function transposeSelection(delta) {
 // dragged one -- primary() below keeps the right-click's own mousedown from
 // wiping it on the way here.
 function patternsContextMenu(e) {
+  // Same guard, same reason as patternsMouseDown's.
+  if (state.viewMode !== 'tracker') return;
   const t = cellTarget(e);
   // fx cells hold command/value pairs, not notes -- nothing here applies, so
   // the browser's own menu is left to it.
@@ -874,16 +877,17 @@ function onKeyDown(e) {
   if (e.code === 'Minus' || (e.code === 'Comma' && e.shiftKey)) { shiftOctave(-1); return; }
   if (e.code === 'Equal' || (e.code === 'Period' && e.shiftKey)) { shiftOctave(1); return; }
 
-  // In piano-roll view the piano roll replaces the pattern grid and installs its
-  // own document keydown handler, so everything below belongs to it instead --
-  // except when the sequencer itself has the cursor (editMode 'sequence', set
-  // only by clicking a sequencer cell; see seqMouseDown). Assigning, clearing or
-  // copying a pattern number is a sequencer operation wherever the sequencer is
-  // drawn, and pianoroll.js has no keyboard route of its own into seqGrid -- it
+  // The other two views replace the pattern grid, so everything below belongs
+  // to them instead -- except when the sequencer itself has the cursor
+  // (editMode 'sequence', set only by clicking a sequencer cell; see
+  // seqMouseDown). Assigning, clearing or copying a pattern number is a
+  // sequencer operation wherever the sequencer is drawn, and neither the piano
+  // roll nor the drum grid has a keyboard route of its own into seqGrid -- this
   // used to give up every key regardless, so a pattern number could only ever
   // be typed in tracker view. pianoroll.js's own guard is the exact mirror of
-  // this one, so the two handlers never both act on the same keypress.
-  if (state.viewMode === 'pianoroll' && state.editMode !== 'sequence') return;
+  // this one, so the two handlers never both act on the same keypress; the drum
+  // grid has no keyboard handler at all, being a mouse instrument.
+  if (state.viewMode !== 'tracker' && state.editMode !== 'sequence') return;
 
   // Escape leaves the sequencer for the pattern grid. Clicking a pattern cell
   // does the same, but a channel with no pattern refuses that click, so the
@@ -1066,6 +1070,13 @@ function seqMouseDown(e) {
   render(); notify();
 }
 function patternsMouseDown(e) {
+  // Both handlers are delegated from #patterns-panel, which is what the other
+  // two views draw into as well (see render()) -- and the drum grid's step
+  // cells carry data-row, so cellTarget() matches them and this would drive the
+  // pattern cursor from a click meant for a drum. The piano roll's canvas has
+  // no such elements and never needed the guard, but it belongs here for the
+  // same reason it does in onKeyDown.
+  if (state.viewMode !== 'tracker') return;
   const t = cellTarget(e);
   if (!t || !primary(e)) return;
   // A channel with no pattern assigned still takes the cursor. Every write goes
@@ -1345,6 +1356,12 @@ function render() {
       // Just repaint, don't rebuild/scroll
       renderPianoRoll();
     }
+  } else if (state.viewMode === 'drums') {
+    // Same shape as the piano roll above: the panel's markup is built once and
+    // only its grid is repainted afterwards, so switching views is the only
+    // thing that discards the header's selects.
+    if (!$('drum-scroll')) initDrumsPanel();
+    else renderDrums();
   } else {
     // Ensure tracker patterns panel structure exists
     if (!$('pat-scroll')) {

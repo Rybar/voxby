@@ -23,7 +23,8 @@ import { svgIcon } from './icons.js';
 import { initInstrumentPanel, refreshInstrumentPanel, setPresetPreview, clearPresetPreview, commitPresetPreview, previewInstrI } from './panels/instrument.js';
 import { initTrackerPanel, refreshTrackerPanel, followPlayback, stopFollowingPlayback, getPlayRange, setFollowRange, noteKeys } from './panels/tracker.js';
 import { followPlaybackPianoRoll, stopFollowingPianoRoll, refreshPianoRoll } from './panels/pianoroll.js';
-import { initKeyboardPanel, refreshKeyboardPanel, previewNote, syncJammer, highlightPlaybackNotes, getJammer, auditionNote } from './panels/keyboard.js';
+import { followPlaybackDrums, stopFollowingDrums, rediscoverKit } from './panels/drums.js';
+import { initKeyboardPanel, refreshKeyboardPanel, previewNote, previewNoteAbsolute, syncJammer, highlightPlaybackNotes, getJammer, auditionNote } from './panels/keyboard.js';
 import { initScopePanel, drawScope, getLastPeak } from './panels/scope.js';
 import { initLayout } from './panels/layout.js';
 import { initTheme } from './theme.js';
@@ -95,6 +96,8 @@ state.notify = refresh;
 // without importing keyboard.js (see state.js's comment on this field for why
 // that import would close a cycle).
 state.previewNote = previewNote;
+// Lets panels/drums.js audition a lane's own drum pitch (see state.js).
+state.previewAbs = previewNoteAbsolute;
 // Lets tracker.js's followPlayback() light up the on-screen keys currently
 // sounding during song playback -- a callback rather than a direct import, for
 // the same reason.
@@ -108,9 +111,17 @@ state.noteKeys = noteKeys;
 // Lets panels/instrument.js's Presets button open the shared #picker modal
 // without importing main.js back (see state.js's comment on this field).
 state.openPresets = openPresetsDialog;
+// Lets panels/drums.js ask before a Stamp replaces a beat (see state.js).
+state.confirm = confirmModal;
 
 function loadSong(song, skipAutosave = false) {
   state.song = song;
+  // The drum kit map describes the song that was open, so it cannot survive
+  // one being replaced. rediscoverKit() reads a new one back out of the
+  // instruments the incoming song actually uses, which is what lets a library
+  // song or a shared link open straight into the drums view (see
+  // panels/drums.js's findKit).
+  rediscoverKit();
   markClean();
   refresh();
   if (skipAutosave) clearAutosave();
@@ -968,6 +979,7 @@ function stopSong() {
   currentPlayer = null;
   stopFollowingPlayback();
   stopFollowingPianoRoll();
+  stopFollowingDrums();
   state.playing = false;
 }
 // `range` is undefined for a full-song Play, or a
@@ -1076,6 +1088,7 @@ function updateLevelMeter() {
     const totalRows = Math.floor(t * 44100 / rowLen);
     const currentRow = totalRows % patternLen;
     followPlaybackPianoRoll(currentRow);
+    followPlaybackDrums(currentRow);
   }
   drawScope([state.playing ? currentPlayer : null, getJammer()], t);
   updateLevelMeter();
@@ -1133,6 +1146,9 @@ if (sharedMatch && hasValidAutosave) {
       if (autosaved.selRow !== undefined) state.selRow = autosaved.selRow;
       if (autosaved.octave !== undefined) state.octave = autosaved.octave;
       if (autosaved.viewMode !== undefined) state.viewMode = autosaved.viewMode;
+      // Saved with the song rather than rediscovered, so a kit whose sounds
+      // have been edited since is still a kit after a reload.
+      state.drumKit = autosaved.drumKit || null;
       markClean();
       refresh();
       // Clear the hash so reloading doesn't re-prompt
@@ -1151,6 +1167,7 @@ if (sharedMatch && hasValidAutosave) {
   if (autosaved.selRow !== undefined) state.selRow = autosaved.selRow;
   if (autosaved.octave !== undefined) state.octave = autosaved.octave;
   if (autosaved.viewMode !== undefined) state.viewMode = autosaved.viewMode;
+  state.drumKit = autosaved.drumKit || null;
   markClean();
   refresh();
 }

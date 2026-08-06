@@ -31,6 +31,7 @@
     <li><a href="#sequencer">Sequencer</a></li>
     <li><a href="#patterns">Patterns</a></li>
     <li><a href="#pianoroll">Piano Roll</a></li>
+    <li><a href="#drums">Drums</a></li>
     <li><a href="#notes">Playing notes in</a>
       <ul><li><a href="#pads">Chord pads</a></li><li><a href="#follow">Follow</a></li></ul></li>
     <li><a href="#editing">Selecting and editing</a></li>
@@ -98,7 +99,9 @@ hundred bytes.</p>
   length.</li>
   <li><strong>Patterns</strong>: the notes in whatever each channel is playing
   at the sequencer's current row. Every channel is shown side by side. The
-  highlighted column is the one you are editing.</li>
+  highlighted column is the one you are editing. The <strong>View</strong>
+  dropdown swaps this panel for the piano roll or the drum step grid; all three
+  show the same notes.</li>
   <li><strong>Keyboard</strong>: note entry, and the scale/chord helpers.</li>
   <li><strong>Instrument</strong>: the sound the selected channel plays.</li>
   <li><strong>Scope</strong>: what the output actually looks like.</li>
@@ -263,6 +266,71 @@ or playback position visible.</p>
 <p>Rows where all four note columns are occupied show a subtle red tint. You cannot
 place a fifth note in a full row. The limit is four simultaneous notes per
 channel.</p>
+
+<h2 id="drums">Drums</h2>
+
+<p>The third setting of the <strong>View</strong> dropdown is a step grid: one
+lane per drum, one column per row of the pattern, and a click to switch a hit on
+or off. It is the same song data the other two views show. A beat drawn here can
+be edited in the tracker afterwards, and a drum note typed in the tracker
+appears here as a lit step.</p>
+
+<h3>Setting up a kit</h3>
+
+<p>A kit is four drum sounds — kick, snare, hat, open hat — on four channels. It
+has to be four channels, because a channel plays one instrument and a kit is
+four instruments. <strong>Set up kit</strong> takes the first four channels that
+nothing has been sequenced into, puts the kit's sounds in them, and gives each
+one a pattern at the sequence row you are on. It never writes to a channel that
+is already part of the arrangement, so it cannot damage work in progress. If
+there are not four spare channels, it says so and does nothing.</p>
+
+<p><strong>Kit</strong> picks which drum sounds are used. Changing it once a kit
+exists swaps the sounds and keeps every hit: the same beat played on a different
+kit. Every sound in a kit is an ordinary instrument preset, so clicking a lane's
+name puts that drum in the instrument panel where it can be tuned like anything
+else.</p>
+
+<div class="note">
+  <p>A song opened from the library, a file or a share link has no kit map
+  attached — the map is not part of the music. The editor recovers it by looking
+  at which channels play kit sounds. That works until you edit one of those
+  sounds, after which the lane is no longer recognisable and the view shows its
+  empty state again. The notes are untouched either way; they are still in the
+  tracker.</p>
+</div>
+
+<h3>Grooves</h3>
+
+<p><strong>Groove</strong> is a one-bar rhythm to start from: Rock, Four on the
+floor, Boom bap, Breakbeat, Shuffle, Waltz and a Fill, among others.
+<strong>Stamp</strong> writes it across the kit's lanes, repeating its bar until
+the pattern is full, and <strong>replaces</strong> whatever those lanes held —
+a groove is a starting point, not something to mix into an existing beat. You
+are asked first if there is anything to lose. <strong>Clear</strong> is the same
+walk with nothing written.</p>
+
+<p>Grooves are written in sixteenth notes, so where a step lands depends on the
+sequencer's <strong>Beat</strong> setting: at the default 4 rows per beat, one
+step is one row and a 4/4 groove fills 16 rows. At Beat 8 the same groove
+occupies 32 rows and has twice the resolution to be edited at. Below Beat 4, two
+steps can round onto the same row and the later one wins — there is no row for
+the other one to go on.</p>
+
+<p>Undo works lane by lane. A stamp touched four channels, so it takes four
+presses of <kbd>Ctrl</kbd>+<kbd>Z</kbd> to unwind, one lane at a time.</p>
+
+<h3>Playing and editing</h3>
+
+<p>Click a step to toggle it, and <strong>drag</strong> to paint the same value
+across a run of steps — this draws a bar of sixteenths in one gesture rather
+than toggling every other one back off. Every hit you switch on plays as you
+draw it. The circle by a lane's name mutes it, exactly like muting its channel
+in the sequencer. During playback the column being played is outlined.</p>
+
+<p>Beat and bar lines come from the sequencer's <strong>Beat</strong> setting, so
+the drum grid, the tracker's row highlight and the grooves all agree on where a
+beat is. The numbers along the top count beats within the bar, not rows.</p>
 
 <h2 id="notes">Playing notes in</h2>
 

@@ -237,6 +237,59 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
                 cursor: pointer; white-space: nowrap; }
 .pat-col.focused .pat-col-head { color: var(--accent); }
 
+/* drums (panels/drums.js). The step grid stands in for the pattern columns, so
+   it lives in the same #patterns-panel flex column: a fixed header row and one
+   scroller under it that takes the rest. */
+.drums-header { gap: 8px; padding-bottom: 4px; }
+.drums-header h3 { margin: 0; }
+.drum-pick { display: flex; align-items: center; gap: 4px; color: var(--text-dim); font-size: 10px; }
+.drum-pick select { background: var(--bg2); color: inherit; border: 1px solid var(--border);
+                    border-radius: 4px; padding: 2px 5px; font: inherit; font-size: 11px; }
+.drums-scroll { flex: 1; min-height: 0; overflow: auto; }
+/* The warning colour a refused action flashes in (drums.js's hint()); it
+   returns to the plain hint text by itself. */
+.drums-header .hint.warn { color: #ff6a5a; }
+
+.drum-table { border-collapse: collapse; font-size: 11px; }
+/* A step is square-ish and finger-sized rather than text-sized: it is a target
+   to click, and it holds no text at all. */
+.drum-table td { width: 17px; height: 22px; padding: 0; background: var(--bg2);
+                 border: 1px solid var(--bg1); cursor: pointer; }
+.drum-table td:hover { background: var(--bg3); }
+/* Beat and bar lines are the whole readability of the grid -- sixteen
+   identical cells say nothing about where beat 3 is. The beat cell is lighter;
+   the bar gets a hard left edge in the accent colour. */
+.drum-table td.beat, .drum-table th.beat { background: color-mix(in srgb, white 6%, var(--bg2)); }
+.drum-table td.bar, .drum-table th.bar { border-left: 2px solid var(--border); }
+.drum-table td.on { background: var(--accent); }
+.drum-table td.on:hover { background: color-mix(in srgb, var(--accent) 80%, white); }
+/* The playing column, moved a class at a time by followPlaybackDrums(). An
+   inset outline rather than a background so it stays visible over a lit step. */
+.drum-table td.playing { box-shadow: inset 0 0 0 2px var(--text); }
+.drum-table th.playing { color: var(--accent); }
+.drum-table thead th { font-weight: normal; font-size: 9px; color: var(--text-dim2);
+                       padding: 0 0 2px; background: var(--bg1); position: sticky; top: 0; z-index: 1; }
+/* The lane head is sticky against the horizontal scroll the way the beat
+   numbers are sticky against the vertical one: on a 64-row pattern you scroll
+   the grid sideways and still need to know which lane you are looking at. */
+.drum-table th.drum-lane-head { position: sticky; left: 0; z-index: 2; background: var(--bg1);
+                                text-align: left; font-weight: normal; padding: 0 8px 0 0;
+                                white-space: nowrap; cursor: pointer; min-width: 96px; }
+.drum-table thead th.drum-lane-head { z-index: 3; }
+.drum-lane-name { color: var(--text); font-size: 11px; }
+.drum-lane-ch { color: var(--text-dim2); font-size: 9px; margin-left: 5px; }
+.drum-table tr.focused .drum-lane-name { color: var(--accent); }
+.drum-table tr.muted td { opacity: 0.35; }
+.drum-table tr.muted .drum-lane-name { color: var(--text-dim2); }
+.drum-mute { background: none; border: 0; color: var(--text-dim); cursor: pointer;
+             font-size: 10px; padding: 0 4px 0 0; line-height: 1; }
+.drum-mute:hover { color: var(--accent); }
+/* The no-kit state. Centred prose plus the one button that resolves it -- the
+   panel is useless until a kit exists, so nothing else competes with it. */
+.drum-empty { max-width: 34em; margin: 24px auto; text-align: center; color: var(--text-dim); font-size: 12px; }
+.drum-empty p { margin: 0 0 8px; }
+.drum-empty button { margin-top: 6px; }
+
 /* piano roll */
 .pianoroll-header { display: flex; align-items: center; gap: 8px; padding-bottom: 4px; }
 .pianoroll-header h3 { margin: 0; }

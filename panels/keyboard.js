@@ -164,6 +164,16 @@ export function previewNote(offset) {
   return note;
 }
 
+// The same thing for a caller that already has an absolute note number and no
+// business with state.octave -- panels/drums.js, whose lanes each write one
+// fixed drum pitch. Registered on state.previewAbs by main.js, for the same
+// reason previewNote is: drums.js cannot import this module. Like every other
+// preview here it plays whatever instrument is currently selected, so the
+// caller must focus the lane's channel first.
+export function previewNoteAbsolute(note) {
+  ensureJammer().addNote(note);
+}
+
 // Fixed C5 (offset 0, this editor's own octave numbering -- the on-screen
 // piano's octave 5), deliberately not state.octave-relative: main.js's
 // presets dialog calls this to audition whatever preset was just staged with
