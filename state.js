@@ -49,6 +49,9 @@ export const state = {
   // back -- main.js already imports panels/instrument.js to initialize it,
   // same cycle concern as notify/requestStop/previewNote/highlightNotes above.
   openPresets: null,
+  // Set to main.js's openSfxDialog at boot, for the SFX button beside the
+  // Presets one. Same route and same reason as openPresets above.
+  openSfx: null,
   // Set to panels/keyboard.js's previewNoteAbsolute at boot, for panels/
   // drums.js: a drum lane knows the exact note it writes, so it needs the
   // preview that takes a note number rather than previewNote's offset from

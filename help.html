@@ -37,6 +37,7 @@
     <li><a href="#editing">Selecting and editing</a></li>
     <li><a href="#fx">The FX track</a></li>
     <li><a href="#instruments">Instruments</a></li>
+    <li><a href="#sfx">Sound effects</a></li>
     <li><a href="#playback">Playback</a></li>
     <li><a href="#files">Opening, saving, sharing</a></li>
     <li><a href="#ingame">Using a song in a game</a></li>
@@ -507,11 +508,37 @@ is keyboard-only.</p>
 
 <p>The narrow column on the right of each channel's pattern is its automation
 lane: one command per row, changing a single instrument parameter as the song
-plays. There is nothing to type. <strong>Click a row in the FX column, then
-move any control in the instrument panel</strong>, and that parameter and value
-are recorded on that row. The instrument panel shows the value stored in the
+plays. The quickest way in is to <strong>click a row in the FX column, then
+move any control in the instrument panel</strong>: that parameter and value are
+recorded on that row. The instrument panel shows the value stored in the
 selected FX cell rather than the instrument's own while such a row is
 selected, so you are always looking at what will happen there.</p>
+
+<h3>Typing a value</h3>
+
+<p>A cell reads as two hex bytes, <code>command:value</code> — <code>16:80</code>
+sets Filter freq to 128. <strong>Double-click a cell to type that pair
+directly</strong>, which is how you write an exact number rather than whatever a
+slider happened to land on. A separator is optional (<code>1680</code> works),
+<kbd>Enter</kbd> keeps what you typed, <kbd>Esc</kbd> leaves the cell as it was,
+and an empty field clears it.</p>
+
+<p>Anything that is not a hex digit is dropped as you type. A command past the
+last instrument parameter (<code>1D</code>) is refused rather than trimmed to
+fit: a trimmed command would write to a parameter you never named.</p>
+
+<h3>Ramps</h3>
+
+<p>To sweep a parameter across several rows, write only the two ends: put the
+command on the first row of the run and the same command on the last, each with
+the value you want there. Then <strong>select those rows and pick Interpolate
+from the right-click menu</strong>. Every row in between is filled with a
+straight line from one value to the other, and the two ends are left exactly as
+you wrote them.</p>
+
+<p>Both ends have to set the <em>same</em> parameter, and there has to be at
+least one row between them. When they don't, the menu item is greyed out and
+says which of those it is.</p>
 
 <div class="note">
   <p>FX commands are <strong>persistent</strong>. A change made in one pattern
@@ -615,6 +642,37 @@ one slider at a time and listen. Some things worth knowing:</p>
   <li>The <strong>LFO</strong> does nothing until <strong>FX freq
   modulation</strong> is on: that switch is what routes it to the filter.</li>
 </ul>
+
+<h2 id="sfx">Sound effects</h2>
+
+<p>The <strong>SFX…</strong> button beside Presets is for single sounds rather
+than music: a zap, a pickup, an explosion. Pick the kind of sound you want and
+press <strong>Roll</strong> until one of them is right.</p>
+
+<p>Rolling is not random across the whole instrument. Each kind fixes the
+settings that decide whether it is that sound at all — a zap is always short,
+always pitch-dropping, never noisy — and varies the rest. That is why the rolls
+are usable instead of being silence, noise, or a four-second wash.</p>
+
+<ul>
+  <li><strong>Roll</strong> makes a new sound. <strong>Mutate</strong> nudges
+  the one you have, for when it is nearly right.</li>
+  <li><strong>Keep</strong> locks a group of settings. Lock <em>Env</em> when
+  the length is right and roll again for a different tone at the same length.</li>
+  <li>Each roll is numbered underneath. Click a number to go back to it — the
+  one you liked eight rolls ago is still there.</li>
+  <li><strong>Note</strong> is the pitch it plays and exports at. Rolls play on
+  the selected channel without changing it: close the dialog and that channel
+  is exactly as you left it.</li>
+</ul>
+
+<p><strong>Save to presets</strong> files the sound in your preset library under
+Custom → SFX, so the Presets dialog can load it into a channel later.
+<strong>Export .js</strong> downloads it as a one-note, one-pattern song — the
+same shape as the song files described under
+<a href="#ingame">Using a song in a game</a>, and played back the same way. The
+pattern is made exactly long enough for the sound, delay tail included, so the
+file holds no silence and cuts nothing off.</p>
 
 <h2 id="playback">Playback</h2>
 

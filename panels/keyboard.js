@@ -174,15 +174,19 @@ export function previewNoteAbsolute(note) {
   ensureJammer().addNote(note);
 }
 
-// Fixed C5 (offset 0, this editor's own octave numbering -- the on-screen
+// C5 by default (offset 0, this editor's own octave numbering -- the on-screen
 // piano's octave 5), deliberately not state.octave-relative: main.js's
 // presets dialog calls this to audition whatever preset was just staged with
 // panels/instrument.js's setPresetPreview (which already called syncJammer,
 // so the jammer is already playing that instrument by the time this fires),
 // and the same key should always sound no matter what note entry is set to.
+//
+// The SFX dialog passes its own note instead. A sound effect is written for
+// one pitch, and hearing it at a different one than it will ship at is no
+// audition at all.
 const AUDITION_NOTE = 5 * 12 + engine.NOTE_OFFSET;
-export function auditionNote() {
-  ensureJammer().addNote(AUDITION_NOTE);
+export function auditionNote(note = AUDITION_NOTE) {
+  ensureJammer().addNote(note);
 }
 
 // On-screen full-piano key -> absolute note (the key's own octave, not

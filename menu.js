@@ -23,16 +23,23 @@ function onKey(e) {
   if (e.code === 'Escape') { e.stopPropagation(); e.preventDefault(); closeMenu(); }
 }
 
-// `items` entries are { label, hint, run } -- `hint` is the keyboard shortcut
-// shown right-aligned, `run` is called after the menu closes (so a handler is
-// free to open another one). A falsy entry becomes a separator, which is how a
-// caller groups items without knowing this module's markup.
+// `items` entries are { label, hint, run, disabled, title } -- `hint` is the
+// keyboard shortcut shown right-aligned, `run` is called after the menu closes
+// (so a handler is free to open another one). A falsy entry becomes a
+// separator, which is how a caller groups items without knowing this module's
+// markup.
+//
+// `disabled` greys an item out and makes it unclickable, and `title` is its
+// hover text: together they let a caller show an action that does not apply
+// right now *with the reason why*, instead of dropping it from the list and
+// leaving nothing to explain its absence.
 export function openMenu(x, y, items) {
   closeMenu();
   const el = document.createElement('div');
   el.className = 'menu-overlay';
   el.innerHTML = `<div class="menu">${items.map((it, i) => it
-    ? `<button class="menu-item" data-i="${i}" type="button">${it.label}<span class="menu-hint">${it.hint || ''}</span></button>`
+    ? `<button class="menu-item" data-i="${i}" type="button"${it.disabled ? ' disabled' : ''}`
+      + `${it.title ? ` title="${it.title}"` : ''}>${it.label}<span class="menu-hint">${it.hint || ''}</span></button>`
     : '<div class="menu-sep"></div>').join('')}</div>`;
   document.body.appendChild(el);
   openEl = el;

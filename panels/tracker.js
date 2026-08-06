@@ -18,11 +18,15 @@
 // channel. Only the focused channel's pattern/fx column draws a cursor and
 // selection, but the others stay clickable -- that is how focus moves.
 //
-// FX cells take no typed values. A selected FX cell captures whatever instrument
-// slider or icon you touch next (panels/instrument.js's
-// setInstrProp/bindIconGroup/bindArpNotes check activeFxCell() and route there
-// as well as to the live instrument), and selecting a cell that already holds a
-// value previews it in the sliders (instrument.js's previewInstrI()).
+// A selected FX cell captures whatever instrument slider or icon you touch next
+// (panels/instrument.js's setInstrProp/bindIconGroup/bindArpNotes check
+// activeFxCell() and route there as well as to the live instrument), and
+// selecting a cell that already holds a value previews it in the sliders
+// (instrument.js's previewInstrI()). Two things that cannot say are typed or
+// calculated instead: double-clicking a cell types its command and value as hex
+// (openFxCellEditor), and the FX column's right-click menu interpolates a ramp
+// across a selection whose two ends set the same parameter
+// (interpolateFxSelection).
 //
 // Note entry -- physical keyboard or panels/keyboard.js's on-screen piano --
 // live-previews through the jammer (state.previewNote) in either mode, and in
@@ -256,6 +260,157 @@ export function activeFxCell() {
       }
     },
   };
+}
+
+// --- FX cells by hand: typed hex, and interpolation across a selection.
+//
+// Capturing a slider write (activeFxCell above) is still the quickest way to
+// get *a* value into a cell, but it can only ever say "whatever the control is
+// set to now". These two cover what it can't: an exact byte, and a smooth ramp
+// between two of them.
+
+// One short label per instrument property, indexed exactly as engine.js's
+// OSC1_WAVEFORM..FX_DELAY_TIME constants are. Only used to name a command in
+// the FX menu and the typed-value tooltip -- the cell itself always shows the
+// raw hex, which is what the format stores.
+const FX_PARAM_NAMES = [
+  'Osc1 wave', 'Osc1 vol', 'Osc1 semi', 'Osc1 pitch env',
+  'Osc2 wave', 'Osc2 vol', 'Osc2 semi', 'Osc2 detune', 'Osc2 pitch env',
+  'Noise vol',
+  'Env attack', 'Env sustain', 'Env release', 'Env exp decay',
+  'Arp chord', 'Arp speed',
+  'LFO wave', 'LFO amount', 'LFO freq', 'LFO to FX freq',
+  'Filter type', 'Filter freq', 'Resonance', 'Distortion', 'Drive',
+  'Pan amount', 'Pan freq', 'Delay amount', 'Delay time',
+];
+// A command number is its property index plus one, so that 0 can mean "empty".
+const fxParamName = cmd => FX_PARAM_NAMES[cmd - 1] || 'command ' + toHex(cmd, 2);
+
+// Reads what someone typed into an FX cell. Returns { ok: true, cmd, val } or
+// { ok: false, why }, `why` being a sentence to flash at them.
+//
+// Accepted: "15:80", "15 80", "15-80", "1580" -- two hex bytes, with or
+// without a separator, case-insensitive. An empty string clears the cell.
+// Without a separator it must be exactly four digits: "180" could be 01:80 or
+// 18:00 with equal justification, and guessing between them would sometimes
+// write a parameter nobody asked for.
+//
+// An out-of-range command is refused rather than clamped, for the same reason:
+// clamping 3F to 1D writes to "Delay time" when "3F" was meant. The value needs
+// no such check -- two hex digits cannot leave 0-255, which is the whole range
+// the format stores.
+function parseFxInput(text) {
+  const s = text.trim().toUpperCase();
+  if (!s) return { ok: true, cmd: 0, val: 0 };
+  const m = /^([0-9A-F]{1,2})[\s:.-]([0-9A-F]{1,2})$/.exec(s) || /^([0-9A-F]{2})([0-9A-F]{2})$/.exec(s);
+  if (!m) return { ok: false, why: 'Type two hex bytes: a command and a value, like 15:80' };
+  const cmd = parseInt(m[1], 16), val = parseInt(m[2], 16);
+  if (!cmd) return { ok: true, cmd: 0, val: 0 };
+  if (cmd > engine.NUM_INSTR_PARAMS) {
+    return { ok: false, why: `Command must be 01-${toHex(engine.NUM_INSTR_PARAMS, 2)}: there are only ${engine.NUM_INSTR_PARAMS} instrument parameters` };
+  }
+  return { ok: true, cmd, val };
+}
+
+// The row whose FX cell currently holds a typing field, or null. Cleared before
+// any render(), which destroys the field -- see commitFxCellEditor().
+let fxEditRow = null;
+
+function fxCellEl(row) {
+  const rows = patRowEls[state.selInstrument];
+  return rows && rows[row] ? rows[row].children[4] : null; // FX is column 4
+}
+
+// Turns one FX cell into a text field. Opened by double-clicking the cell or
+// from its right-click menu; committed by Enter or by clicking away, abandoned
+// by Escape.
+function openFxCellEditor(row) {
+  if (!focusedPatternNum()) {
+    flashFeedback('No pattern at this sequence row — assign one in the sequencer');
+    return;
+  }
+  const td = fxCellEl(row);
+  if (!td) return;
+  fxEditRow = row;
+  const [cmd, val] = fxGrid.get(0, row);
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'fx-input';
+  input.spellcheck = false;
+  input.maxLength = 5; // "15:80"
+  input.value = cmd ? toHex(cmd, 2) + ':' + toHex(val, 2) : '';
+  input.title = 'Command and value in hex, like 15:80. Enter to keep it, Escape to leave the cell as it was, empty to clear it.';
+  td.textContent = '';
+  td.appendChild(input);
+  input.focus();
+  input.select();
+  // Sanitation while typing, so an unusable character never reaches the field:
+  // hex digits and the one separator, upper case, no longer than "15:80".
+  // parseFxInput still has the last word on what those characters *mean* --
+  // this only keeps the field showing something that could become a value.
+  input.oninput = () => {
+    const clean = input.value.toUpperCase().replace(/[^0-9A-F:. -]/g, '').slice(0, 5);
+    if (clean !== input.value) input.value = clean;
+  };
+  input.onkeydown = e => {
+    // The grid's own handler reads Escape, Enter and every letter as an editing
+    // command; focus.js already makes it stand down for a text field, and this
+    // keeps the keys from reaching anything else listening on the document.
+    e.stopPropagation();
+    if (e.code === 'Escape') { fxEditRow = null; render(); }
+    else if (e.code === 'Enter' || e.code === 'NumpadEnter') commitFxCellEditor();
+  };
+  input.onblur = () => commitFxCellEditor();
+}
+
+function commitFxCellEditor() {
+  if (fxEditRow === null) return;
+  const row = fxEditRow, td = fxCellEl(row);
+  const input = td && td.querySelector('.fx-input');
+  // Cleared before the render() below, which removes the field and so fires its
+  // own blur -- re-entering this function. The null is what stops that.
+  fxEditRow = null;
+  if (!input) return;
+  const parsed = parseFxInput(input.value);
+  if (!parsed.ok) flashFeedback(parsed.why);
+  else {
+    pushUndo();
+    fxGrid.set(0, row, [parsed.cmd, parsed.val]);
+  }
+  render(); notify();
+}
+
+// Whether the FX selection describes a ramp, and of what. Both ends must name
+// the same command, and there must be at least one row between them to fill --
+// otherwise there is nothing to interpolate, only two values already written.
+// Returns the reason when it doesn't, so the menu can say why it is greyed out.
+function fxLerpInfo() {
+  if (state.editMode !== 'fx') return { ok: false, why: 'Select rows in the FX column first' };
+  if (!focusedPatternNum()) return { ok: false, why: 'No pattern is assigned at this sequence row' };
+  const top = selTop(fx), bottom = selBottom(fx);
+  if (bottom - top < 2) return { ok: false, why: 'Select at least three rows: the two ends and a gap to fill' };
+  const [cmdTop, valTop] = fxGrid.get(0, top), [cmdBottom, valBottom] = fxGrid.get(0, bottom);
+  if (!cmdTop || !cmdBottom) return { ok: false, why: 'The first and last row of the selection must both hold a command' };
+  if (cmdTop !== cmdBottom) {
+    return { ok: false, why: `The ends set different parameters: ${fxParamName(cmdTop)} and ${fxParamName(cmdBottom)}` };
+  }
+  return { ok: true, cmd: cmdTop, top, bottom, from: valTop, to: valBottom };
+}
+
+// Fills every row between the two ends with a straight line from one value to
+// the other. The ends themselves are left exactly as typed -- they are the
+// statement being interpolated, and rounding them to their own value would be
+// the one way this could damage what it was given.
+function interpolateFxSelection() {
+  const info = fxLerpInfo();
+  if (!info.ok) { flashFeedback(info.why); return; }
+  pushUndo();
+  const span = info.bottom - info.top;
+  for (let row = info.top + 1; row < info.bottom; row++) {
+    const v = Math.round(info.from + (info.to - info.from) * (row - info.top) / span);
+    fxGrid.set(0, row, [info.cmd, v]);
+  }
+  render(); notify();
 }
 
 // Writes an already-computed SoundBox note number at the pattern cursor and
@@ -579,9 +734,10 @@ function patternsContextMenu(e) {
   // Same guard, same reason as patternsMouseDown's.
   if (state.viewMode !== 'tracker') return;
   const t = cellTarget(e);
-  // fx cells hold command/value pairs, not notes -- nothing here applies, so
-  // the browser's own menu is left to it.
-  if (!t || e.target.closest('.trk-fx')) return;
+  if (!t) return;
+  // fx cells hold command/value pairs, not notes: none of the items below
+  // applies to them, so they get a menu of their own.
+  if (e.target.closest('.trk-fx')) { fxContextMenu(e, t); return; }
   e.preventDefault();
   dragMode = null;
   if (state.editMode !== 'pattern' || t.channel !== state.selInstrument || !isSelected(pat, t.col, t.row)) {
@@ -608,6 +764,43 @@ function patternsContextMenu(e) {
     null,
     { label: 'Transpose +1 octave', hint: 'Alt+Shift+↑', run: () => transposeSelection(12) },
     { label: 'Transpose −1 octave', hint: 'Alt+Shift+↓', run: () => transposeSelection(-12) },
+  ]);
+}
+
+// The FX column's own menu. Same selection rule as the pattern menu above: a
+// right-click outside the current selection moves the cursor there first, one
+// inside it leaves the selection alone so the items can act on the block.
+function fxContextMenu(e, t) {
+  e.preventDefault();
+  dragMode = null;
+  if (state.editMode !== 'fx' || t.channel !== state.selInstrument || !isSelected(fx, 0, t.row)) {
+    state.selInstrument = t.channel;
+    state.editMode = 'fx';
+    setCursor(fx, 0, t.row);
+    render(); notify();
+  }
+  const lerp = fxLerpInfo();
+  openMenu(e.clientX, e.clientY, [
+    { label: 'Type value…', hint: 'Double-click', run: () => openFxCellEditor(t.row) },
+    null,
+    { label: 'Select all', hint: 'Ctrl+A', run: () => { selectAll(fx, fxGrid); render(); } },
+    { label: 'Copy', hint: 'Ctrl+C', run: () => copySelection('fx') },
+    { label: 'Paste', hint: 'Ctrl+V', run: () => doPaste('fx') },
+    null,
+    // Listed whether or not it applies, greyed with the reason as its hover
+    // text when it doesn't -- "select three rows with the same command at both
+    // ends" is not a rule anyone would guess from an item that simply isn't
+    // there. See openMenu()'s `disabled`/`title`.
+    {
+      label: lerp.ok
+        ? `Interpolate ${fxParamName(lerp.cmd)} ${toHex(lerp.from, 2)} → ${toHex(lerp.to, 2)}`
+        : 'Interpolate selection',
+      disabled: !lerp.ok,
+      title: lerp.ok
+        ? `Fill rows ${lerp.top + 1}-${lerp.bottom - 1} with a straight line between the two ends`
+        : lerp.why,
+      run: interpolateFxSelection,
+    },
   ]);
 }
 
@@ -1114,6 +1307,17 @@ function patternsMouseDown(e) {
     render(); notify();
   }
 }
+// Double-clicking an FX cell types into it. Only the FX column: a note cell is
+// written by playing the note, and there is no text form of one to type.
+// mousedown has already focused the channel and put the cursor on this row, so
+// there is nothing to move here.
+function patternsDblClick(e) {
+  if (state.viewMode !== 'tracker') return;
+  const t = cellTarget(e);
+  if (!t || !e.target.closest('.trk-fx') || t.channel !== state.selInstrument) return;
+  e.preventDefault();
+  openFxCellEditor(t.row);
+}
 function onMouseOver(e) {
   if (!dragMode) return;
   // A drag is only live while the button is genuinely still down.
@@ -1207,18 +1411,32 @@ function fxCellHTML(channel, pn, row) {
     text = fxGrid.toHTML([f[row], f[row + state.song.patternLen]]);
   }
   return `<td class="trk-fx ${cls}" data-channel="${channel}" data-col="0" data-row="${row}"`
-    + ` title="FX track: click a row here, then move any instrument control to record that change at this row. A command stays in effect until something else changes it, even into later patterns.">${text}</td>`;
+    + ` title="FX track: click a row here, then move any instrument control to record that change at this row. Double-click a cell to type the command and value as hex instead, and right-click for the rest — including a ramp between two rows that set the same parameter. A command stays in effect until something else changes it, even into later patterns.">${text}</td>`;
 }
 
 function renderPatterns() {
   const patternLen = state.song.patternLen;
-  let html = '';
+  // Row numbers down the left edge, matching the sequencer's own <th> column.
+  // Its own column rather than a cell inside every channel's table: each
+  // channel is a separate <table>, so a per-table number column would print
+  // the same digits sixteen times over. The cells carry no data-row, so
+  // cellTarget() ignores clicks on them -- these are labels, not grid cells.
+  let html = '<div class="pat-rownums"><div class="pat-col-head">Row</div>'
+    + '<table class="trk-table"><tbody>';
+  for (let row = 0; row < patternLen; row++) {
+    html += `<tr class="${isBeatRow(row) ? 'beat' : ''}${row === pat.row ? ' curRow' : ''}">`
+      + `<th>${row}</th></tr>`;
+  }
+  html += '</tbody></table></div>';
   for (let channel = 0; channel < engine.MAX_CHANNELS; channel++) {
     const pn = patternNumFor(channel);
     const classes = ['pat-col'];
     if (channel === state.selInstrument) classes.push('focused');
     if (!pn) classes.push('no-pattern');
-    html += `<div class="${classes.join(' ')}" title="${pn
+    // data-channel on the column itself, not just its head: it names the column
+    // without counting siblings, which the row-number column above would throw
+    // off (and any future leading column would again).
+    html += `<div class="${classes.join(' ')}" data-channel="${channel}" title="${pn
         ? 'Four note columns (four notes can sound at once) plus the narrow FX column. Play notes in with the piano or the computer keys. Alt+arrows transpose the selection; right-click for the rest.'
         : 'No pattern assigned — insert a pattern number in the sequencer above to edit notes here'
       }">`
@@ -1239,6 +1457,16 @@ function renderPatterns() {
   // of rebuilding the whole grid on every playback row -- that rebuild is the
   // real framerate cost during playback.
   patRowEls = [...$('pat-scroll').querySelectorAll('.pat-col')].map(col => [...col.querySelectorAll('tbody tr')]);
+  // Kept apart from patRowEls, whose indices *are* channel numbers -- the row
+  // numbers are no channel, and folding them in would shift every lookup.
+  rowNumEls = [...$('pat-scroll').querySelectorAll('.pat-rownums tbody tr')];
+}
+
+// Moves the curRow highlight in the row-number column, which the two fast
+// paths below repaint alongside the channel columns rather than re-rendering.
+function moveRowNumCur(oldRow, newRow) {
+  if (rowNumEls[oldRow]) rowNumEls[oldRow].classList.remove('curRow');
+  if (rowNumEls[newRow]) rowNumEls[newRow].classList.add('curRow');
 }
 
 function refreshSongControls() {
@@ -1283,6 +1511,7 @@ function moveCursor(oldCol, oldRow, newCol, newRow) {
   if (patRowEls.length === 0) { render(); return; }
   const rows = patRowEls[channel];
   if (!rows || !rows[oldRow] || !rows[newRow]) { render(); return; }
+  moveRowNumCur(oldRow, newRow);
   // Remove old cursor/curRow classes
   if (oldRow >= 0 && rows[oldRow]) {
     rows[oldRow].classList.remove('curRow');
@@ -1407,7 +1636,7 @@ function flashFeedback(message) {
 // envelope can end mid-row. ---
 let followSeq = -1, followPat = -1;
 // Populated by renderPatterns(), see its comment.
-let patRowEls = [];
+let patRowEls = [], rowNumEls = [];
 
 // Because following drives the *editing* cursors, a played song leaves them
 // wherever the last row it played was -- so after a play the next note key
@@ -1432,6 +1661,7 @@ function applyCursor(c, s) { c.col = s.col; c.row = s.row; c.col1 = s.col1; c.ro
 // shown actually changes (crossing a sequence step), not on every row.
 function moveFollowRow(oldRow, newRow) {
   const mode = state.editMode, cursorCol = mode === 'pattern' ? pat.col : mode === 'fx' ? 4 : -1;
+  moveRowNumCur(oldRow, newRow);
   for (let ch = 0; ch < patRowEls.length; ch++) {
     const rows = patRowEls[ch], focused = ch === state.selInstrument;
     if (oldRow >= 0 && rows[oldRow]) {
@@ -1630,6 +1860,7 @@ export function initTrackerPanel() {
   // number of trips through piano-roll view.
   $('patterns-panel').addEventListener('mousedown', patternsMouseDown);
   $('patterns-panel').addEventListener('contextmenu', patternsContextMenu);
+  $('patterns-panel').addEventListener('dblclick', patternsDblClick);
   document.addEventListener('mouseover', onMouseOver);
   document.addEventListener('mouseup', onMouseUp);
   document.addEventListener('keydown', onKeyDown);

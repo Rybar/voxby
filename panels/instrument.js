@@ -320,6 +320,7 @@ export function initInstrumentPanel() {
       <h3 title="The sound one channel plays. Every note in that channel's patterns uses these settings — one instrument per channel, all the way through the song.">Instrument</h3>
       <label title="Which channel's instrument these controls edit. Clicking any cell in the tracker selects that channel too.">Channel <select id="instr-channel"></select></label>
       <button id="instr-presets-btn" type="button" title="Browse instrument presets — SoundBox's built-in library plus any you've saved — and load one into this channel, overwriting every setting below.">Presets…</button>
+      <button id="instr-sfx-btn" type="button" title="Roll one-shot sound effects — zaps, pickups, explosions — from a recipe, hear them on this channel, and export one as a ready-to-import .js file.">SFX…</button>
       <button id="instr-copy" type="button" title="Copy this whole instrument, to paste onto another channel">${svgIcon('copy')}</button>
       <button id="instr-paste" type="button" title="Overwrite this channel's instrument with the copied one">${svgIcon('paste')}</button>
       <span id="instr-preset-name" class="preset-label" title="The preset this channel's instrument was loaded from. It reads (modified) once you change any control below — the sound is no longer that preset."></span>
@@ -396,6 +397,7 @@ export function initInstrumentPanel() {
   $('lfo_fxfreq').onchange = () => setInstrProp(engine.LFO_FX_FREQ, $('lfo_fxfreq').checked ? 1 : 0);
 
   $('instr-presets-btn').onclick = () => { state.openPresets && state.openPresets(); };
+  $('instr-sfx-btn').onclick = () => { state.openSfx && state.openSfx(); };
 
   // The provenance readout travels with the instrument: pasting a channel
   // built from "Softy" onto another channel makes that one a Softy too, and

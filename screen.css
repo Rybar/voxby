@@ -219,6 +219,12 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
    half of a row flush with the bottom edge. Both selectors because the two
    callers scroll a <td> and a <tr> respectively. */
 #pat-scroll .trk-table tr, #pat-scroll .trk-table td { scroll-margin: 18px 0 20px; }
+/* The typing field an FX cell turns into (tracker.js's openFxCellEditor). Sized
+   and styled to sit exactly where the text it replaces was, so committing it
+   doesn't make the column jump: same monospace font, no chrome of its own, and
+   a width in ch of the "15:80" it holds. */
+.fx-input { width: 5ch; padding: 0; border: none; background: var(--bg0);
+            color: var(--text); font: inherit; text-align: center; outline: 1px solid var(--accent); }
 #pat-scroll .trk-table td:not(.trk-fx) { min-width: 3ch; }
 #pat-scroll .trk-table td.trk-fx { min-width: 5ch; }
 
@@ -236,6 +242,16 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
                 font-size: 10px; color: var(--text-dim); padding-bottom: 2px;
                 cursor: pointer; white-space: nowrap; }
 .pat-col.focused .pat-col-head { color: var(--accent); }
+
+/* The row-number column (renderPatterns'). Sticky at the scroller's left edge
+   so the row a cell is on stays readable however far right the channels are
+   scrolled -- the horizontal counterpart of .pat-col-head's sticky top. Not a
+   .pat-col: those are indexed by channel number in patRowEls. z-index 3 beats
+   the cells sliding under it and the channel heads (z-index 2) it crosses at
+   the corner; the background stops both showing through. */
+.pat-rownums { flex: 0 0 auto; position: sticky; left: 0; z-index: 3; background: var(--bg1); }
+.pat-rownums .pat-col-head { z-index: 4; cursor: default; }
+#pat-scroll .pat-rownums th { min-width: 3ch; }
 
 /* drums (panels/drums.js). The step grid stands in for the pattern columns, so
    it lives in the same #patterns-panel flex column: a fixed header row and one
@@ -622,6 +638,29 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
              font-family: monospace; font-size: 10px; line-height: 1.4;
              resize: vertical; word-break: break-all; }
 
+/* SFX dialog (main.js's openSfxDialog). Rows of controls rather than the
+   presets dialog's grid: it has no library to lay out, only a handful of
+   choices to make in order -- kind, locks, roll, note, name -- and reading
+   downward is the order you make them in. Width is fixed so the row of lock
+   checkboxes doesn't reflow into a different shape as recipe names change
+   the row above it. */
+.sfx-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+           width: 560px; max-width: 86vw; min-height: 26px; }
+.sfx-row > span { color: var(--text-dim); font-size: 11px; }
+/* Tighter than a .row's default gap: these seven read as one control, not as
+   seven, which is what a "keep this much of it" choice actually is. */
+.sfx-lock { display: flex; align-items: center; gap: 3px; font-size: 11px; color: var(--text-dim); }
+.sfx-lock input { margin: 0; }
+/* The roll history. Numbered oldest-first so the count means "how many rolls
+   in", which is how you remember one -- the newest chip is the highest number
+   and the one already playing. */
+.sfx-chip { min-width: 24px; padding: 2px 6px; font-size: 11px; font-family: monospace;
+            background: var(--bg2); color: var(--text-dim); border: 1px solid var(--border-dim);
+            border-radius: 4px; }
+.sfx-chip:hover { color: var(--text); border-color: var(--accent); }
+.sfx-chip.active { color: var(--accent-text); background: var(--accent); border-color: var(--accent); }
+#sfx-status { color: var(--accent); }
+
 /* Drag-and-drop overlay -- see index.html's #drop-hint. Tops the
    stack (above #picker, since a song can be dropped while the open dialog is
    up, and above #audio-gate, since importing needs no audio). `pointer-
@@ -646,6 +685,12 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
              border-radius: 4px; padding: 5px 8px; font-size: 12px; text-align: left;
              color: var(--text); }
 .menu-item:hover { background: var(--bg3); border-color: transparent; }
+/* An item that doesn't apply right now stays listed, greyed, with its `title`
+   giving the reason -- see openMenu()'s comment. cursor: default rather than
+   not-allowed: the hover text is the point, and the barred cursor reads as an
+   error where this is only "not yet". */
+.menu-item[disabled] { color: var(--text-dim2); cursor: default; }
+.menu-item[disabled]:hover { background: none; }
 .menu-hint { color: var(--text-dim2); font-size: 10px; font-family: monospace; }
 .menu-item:hover .menu-hint { color: var(--text-dim); }
 .menu-sep { height: 1px; margin: 4px 2px; background: var(--border-dim); }
