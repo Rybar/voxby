@@ -638,28 +638,204 @@ input[type=range]::-moz-range-track { height: 6px; background: transparent; bord
              font-family: monospace; font-size: 10px; line-height: 1.4;
              resize: vertical; word-break: break-all; }
 
-/* SFX dialog (main.js's openSfxDialog). Rows of controls rather than the
-   presets dialog's grid: it has no library to lay out, only a handful of
-   choices to make in order -- kind, locks, roll, note, name -- and reading
-   downward is the order you make them in. Width is fixed so the row of lock
-   checkboxes doesn't reflow into a different shape as recipe names change
-   the row above it. */
-.sfx-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
-           width: 560px; max-width: 86vw; min-height: 26px; }
-.sfx-row > span { color: var(--text-dim); font-size: 11px; }
+/* SFX view (panels/sfx-view.js). Three columns across the whole tracks row --
+   the sequencer is hidden here, since a sound effect is not part of the song
+   (panels/tracker.js's render sets .sfx-view). Left is what to roll, middle is
+   what it plays, right is what you leave with, which is the order the work
+   actually goes in. */
+#tracks.sfx-view #sequencer-panel { display: none; }
+
+.sfx-header { gap: 8px; padding-bottom: 4px; }
+.sfx-header h3 { margin: 0; }
+.sfx-toggle { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-dim); }
+.sfx-toggle input { margin: 0; }
+#sfx-status { color: var(--accent); font-size: 11px; }
+
+/* The columns scroll independently: the instrument panel below is the tall
+   thing on this screen, so this row is often short, and a recipe rail that
+   pushed the export buttons off the bottom would be the one part of the view
+   you cannot reach. */
+.sfx-body { flex: 1; min-height: 0; display: flex; gap: 1px; background: var(--border-dim); }
+.sfx-col { flex: 1; min-width: 0; overflow: auto; padding: 8px 10px; background: var(--bg1);
+           display: flex; flex-direction: column; gap: 6px; }
+.sfx-col h4 { margin: 0; font-size: 10px; font-weight: normal; text-transform: uppercase;
+              letter-spacing: 0.6px; color: var(--text-dim2); }
+/* The column supplies the spacing between its sections, so a paragraph's own
+   default margins are two more gaps than were asked for -- and this row is
+   short enough that they cost the keyboard hint its last line. */
+.sfx-col p { margin: 0; }
+/* The recipe rail gets this column to itself, and Roll/Mutate/Keep sit across
+   the top of the wide middle one instead. The tracks row is short -- the
+   instrument row below it is the tall thing on this screen -- and stacking
+   rail, buttons and seven lock checkboxes in one 190px column left room for
+   two recipes and pushed the locks off the bottom, where nobody would find
+   them because the rail above looked complete. */
+.sfx-col-recipes { flex: 0 0 190px; overflow: hidden; }
+/* Variations take whatever the lane leaves; the shelf/history column is a
+   fixed list width. */
+.sfx-col-vars { flex: 1 1 280px; min-width: 190px; max-width: 380px; overflow: hidden; }
+.sfx-col-out { flex: 0 0 250px; overflow: hidden; }
+.sfx-col-head { display: flex; align-items: center; gap: 6px; }
+.sfx-col-head h4 { margin: 0; }
+/* The lane is the column that gives up width when the window narrows -- the
+   other three are lists at their natural size, and squeezing them only makes
+   them wrap. */
+.sfx-col-lane { flex: 2 1 440px; min-width: 380px; }
+
+
+/* Roll, Mutate, the nudge amount and the seven locks, across the top of the
+   lane column. Wraps rather than scrolls: at a narrow window the locks drop to
+   a second line under the buttons, which still reads as one row of roll
+   controls. */
+.sfx-roll-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sfx-keep-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px;
+                  color: var(--text-dim2); }
+/* The two sliders that share a row with other controls need a basis of their
+   own: .sfx-slider's input is flex: 1, so without one it eats the whole row
+   and pushes everything after it onto the next line. */
+.sfx-slider-narrow { flex: 0 1 150px; }
+.sfx-slider-wide { flex: 0 1 190px; }
+
+/* Recipe rail. A list of buttons rather than a <select>: seventeen archetypes
+   with a line of description each are the one piece of teaching in this view,
+   and a dropdown hides sixteen of them plus every hint. */
+.sfx-rail { flex: 1; min-height: 60px; overflow: auto; display: flex; flex-direction: column; gap: 2px; }
+.sfx-recipe { display: block; width: 100%; text-align: left; padding: 4px 6px; font-size: 11px;
+              background: var(--bg2); color: var(--text-dim); border: 1px solid transparent;
+              border-radius: 4px; cursor: pointer; }
+.sfx-recipe b { display: block; color: var(--text); font-weight: 600; }
+/* One line, clipped: the hint is a reminder of what the recipe is for, and a
+   four-line one turns the rail into a document that shows two recipes. The
+   full text is in the button's title. */
+.sfx-recipe span { display: block; font-size: 9px; line-height: 1.3; color: var(--text-dim2);
+                   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sfx-recipe:hover { border-color: var(--accent); }
+.sfx-recipe.active { background: var(--accent); border-color: var(--accent); }
+.sfx-recipe.active b, .sfx-recipe.active span { color: var(--accent-text); }
+
+.sfx-actions { display: flex; gap: 4px; flex-wrap: wrap; }
+.sfx-actions button { flex: 1 1 auto; justify-content: center; font-size: 11px; padding: 3px 6px; }
+.sfx-field, .sfx-slider { display: flex; align-items: center; gap: 6px;
+                          font-size: 11px; color: var(--text-dim); }
+.sfx-field input, .sfx-slider input { flex: 1; min-width: 0; }
+.sfx-slider .mono { flex: 0 0 auto; min-width: 5ch; text-align: right; color: var(--text); }
+.sfx-field input[type=text] { background: var(--bg2); color: var(--text); border: 1px solid var(--border-dim);
+                              border-radius: 4px; padding: 2px 5px; font: inherit; font-size: 11px; }
+
 /* Tighter than a .row's default gap: these seven read as one control, not as
    seven, which is what a "keep this much of it" choice actually is. */
+.sfx-locks { display: flex; flex-wrap: wrap; gap: 4px 10px; }
 .sfx-lock { display: flex; align-items: center; gap: 3px; font-size: 11px; color: var(--text-dim); }
 .sfx-lock input { margin: 0; }
+
+/* The variations grid (panels/sfx-view.js's renderVariations). Cards, not
+   chips: each is a picture you judge, a couple of numbers that say whether it
+   is worth hearing, and the one action you want on a batch of twelve -- put
+   this one on the shelf and carry on down the row. auto-fill so the column can
+   be dragged narrower without the cards reflowing into something unreadable. */
+.sfx-vars { flex: 1; min-height: 40px; overflow-y: auto; display: grid; gap: 4px;
+            grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+            /* min-content, not the default auto: this grid has a definite
+               height (it is a flex: 1 item in the column) and twelve cards
+               that do not fit in it. With auto tracks the browser divided that
+               height between the six rows instead of letting them size to
+               their contents -- 23px rows against 57px cards, every card
+               clipped to its top third by the overflow: hidden below. */
+            grid-auto-rows: min-content; align-content: start; }
+.sfx-var { background: var(--bg2); border: 1px solid var(--border-dim); border-radius: 4px;
+           overflow: hidden; cursor: pointer; }
+.sfx-var:hover { border-color: var(--accent); }
+/* The trace fills the card's width and is tall enough to read a shape off,
+   which a 20px strip is not: this is the whole reason to roll twelve. */
+.sfx-var canvas { display: block; width: 100%; height: 42px; }
+.sfx-var-foot { display: flex; align-items: center; gap: 5px; padding: 1px 3px;
+                font-size: 9px; color: var(--text-dim2); }
+.sfx-var-foot .spacer { align-self: stretch; }
+.sfx-var-n { color: var(--text-dim); }
+.sfx-var-notes { color: var(--text-dim); }
+/* A card that clips is worth marking before it is played -- the trace shows it
+   too, but a flat top is easy to miss at this size. */
+.sfx-var.hot { border-color: #ff6a5a; }
+.sfx-var-shelve { background: none; border: 0; color: var(--text-dim2); cursor: pointer;
+                  font-size: 13px; line-height: 1; padding: 0 3px; }
+.sfx-var-shelve:hover { color: var(--accent); }
+
+/* The shelf/history tabs and their shared list. Both are lists of sounds with
+   a thumbnail each, and only one is ever in the DOM -- the tab decides which,
+   and one delegated handler serves both. */
+.sfx-tabs { display: flex; gap: 3px; }
+.sfx-tabs button { flex: 1; justify-content: center; padding: 2px 6px; font-size: 10px;
+                   text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim2); }
+.sfx-tabs button.active { color: var(--accent-text); background: var(--accent); border-color: var(--accent); }
+.sfx-list { flex: 1; min-height: 40px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.sfx-row { display: flex; align-items: center; gap: 4px; padding: 1px 2px; border-radius: 4px;
+           border: 1px solid transparent; cursor: pointer; }
+.sfx-row:hover { border-color: var(--accent); }
+.sfx-row.active { background: var(--bg-selected); }
+.sfx-row canvas { display: block; width: 84px; height: 20px; border-radius: 3px; flex: 0 0 auto; }
+.sfx-row-meta { font-size: 9px; color: var(--text-dim2); }
+/* The star is the whole point of the history being longer than a strip: an
+   hour in, the roll you want back is not the one you just left. A liked entry
+   survives the cap (see pushHistory), so the marker has to read as permanent
+   rather than as a hover state. */
+.sfx-like { background: none; border: 0; padding: 0 1px; font-size: 12px; line-height: 1;
+            color: var(--text-dim2); cursor: pointer; }
+.sfx-like:hover { color: var(--accent); }
+.sfx-row.liked .sfx-like { color: var(--accent); }
+.sfx-shelf-name { flex: 1; min-width: 0; background: var(--bg2); color: var(--text);
+                  border: 1px solid var(--border-dim); border-radius: 3px; padding: 1px 4px;
+                  font: inherit; font-size: 10px; }
+.sfx-shelf-del { background: none; border: 0; color: var(--text-dim2); cursor: pointer;
+                 font-size: 12px; line-height: 1; padding: 0 2px; }
+.sfx-shelf-del:hover { color: #ff6a5a; }
+
+/* The step lane. Wraps rather than scrolls: sixteen steps at this width fit
+   two rows in the narrowest sensible window, and a lane you have to scroll
+   sideways stops reading as one figure. */
+/* A grid of exactly sixteen, not a wrapping flex row: the lane is one figure
+   read left to right, and at a narrow column a flex row broke it over two
+   lines -- which reads as two bars of music, and cost the waveform below it
+   the height it needed. minmax(0, 1fr) lets them shrink instead. */
+.sfx-steps { display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 3px; }
+.sfx-step { min-width: 0; padding: 4px 0; background: var(--bg2); color: var(--text-dim2);
+            border: 1px solid var(--border-dim); border-radius: 4px; cursor: pointer;
+            display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.sfx-step:hover { border-color: var(--accent); }
+.sfx-step-n { font-size: 8px; color: var(--text-dim2); }
+.sfx-step-note { font-family: monospace; font-size: 11px; }
+.sfx-step.on { background: color-mix(in srgb, var(--accent) 22%, var(--bg2)); }
+.sfx-step.on .sfx-step-note { color: var(--text); }
+/* The selected step is where a played note lands, so it needs to be findable
+   at a glance -- a border alone is lost among sixteen of them. */
+.sfx-step.sel { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.sfx-lane-controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+                     font-size: 11px; color: var(--text-dim); }
+
+/* The rendered sound (panels/sfx-view.js's drawWave). Takes whatever height
+   the column has left over, floored so it stays a readable trace rather than a
+   line when the tracks row is dragged short. */
+/* The readout sits *above* the trace, and the trace is the only thing in the
+   column that flexes: at a short tracks row the picture gives up its height
+   first, and the line that says "clipping" is never the thing that scrolls
+   out of sight. */
+#sfx-wave { flex: 1 1 auto; width: 100%; min-height: 40px; display: block;
+            border: 1px solid var(--border-dim); border-radius: 4px; }
+
+/* Length, row count, note count and measured peak, plus the one warning that
+   matters at the time: silent, clipping, or a tail the export will cut short. */
+.sfx-readout { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--text-dim); }
+.sfx-readout .mono { color: var(--text); }
+.sfx-warn { color: #ff6a5a; }
+
 /* The roll history. Numbered oldest-first so the count means "how many rolls
    in", which is how you remember one -- the newest chip is the highest number
    and the one already playing. */
+.sfx-history { display: flex; flex-wrap: wrap; gap: 3px; }
 .sfx-chip { min-width: 24px; padding: 2px 6px; font-size: 11px; font-family: monospace;
             background: var(--bg2); color: var(--text-dim); border: 1px solid var(--border-dim);
             border-radius: 4px; }
 .sfx-chip:hover { color: var(--text); border-color: var(--accent); }
 .sfx-chip.active { color: var(--accent-text); background: var(--accent); border-color: var(--accent); }
-#sfx-status { color: var(--accent); }
 
 /* Drag-and-drop overlay -- see index.html's #drop-hint. Tops the
    stack (above #picker, since a song can be dropped while the open dialog is

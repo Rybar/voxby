@@ -23,6 +23,7 @@ import { audioContext, masterGain } from './audio.js';
 import { svgIcon } from './icons.js';
 import { initInstrumentPanel, refreshInstrumentPanel, setPresetPreview, clearPresetPreview, commitPresetPreview, previewInstrI } from './panels/instrument.js';
 import { initTrackerPanel, refreshTrackerPanel, followPlayback, stopFollowingPlayback, getPlayRange, setFollowRange, noteKeys } from './panels/tracker.js';
+import { sfxHook } from './panels/sfx-view.js';
 import { followPlaybackPianoRoll, stopFollowingPianoRoll, refreshPianoRoll } from './panels/pianoroll.js';
 import { followPlaybackDrums, stopFollowingDrums, rediscoverKit } from './panels/drums.js';
 import { initKeyboardPanel, refreshKeyboardPanel, previewNote, previewNoteAbsolute, syncJammer, highlightPlaybackNotes, getJammer, auditionNote } from './panels/keyboard.js';
@@ -46,7 +47,7 @@ import { DEMO_SONGS, SECTIONS } from './songs/index.js';
 // refreshInstrument is exposed for the same reason as refreshPianoRoll: a
 // script that writes an instrument byte into state directly needs a way to
 // ask the panel to re-derive itself, since nothing repaints it on a timer.
-window.soundbox = { state, engine, scales, sfx, loadSong, loadDemoSong, DEMO_SONGS, importSongFile, getJammer, getPlayRange, refreshPianoRoll, refreshInstrument: refreshInstrumentPanel, previewInstrumentI: previewInstrI, buildSfxSong, getAudioState: () => audioContext.state };
+window.soundbox = { state, engine, scales, sfx, loadSong, loadDemoSong, DEMO_SONGS, importSongFile, getJammer, getPlayRange, refreshPianoRoll, refreshInstrument: refreshInstrumentPanel, previewInstrumentI: previewInstrI, sfxView: sfxHook, getAudioState: () => audioContext.state };
 
 const $ = id => document.getElementById(id);
 
@@ -115,7 +116,20 @@ state.noteKeys = noteKeys;
 // Lets panels/instrument.js's Presets button open the shared #picker modal
 // without importing main.js back (see state.js's comment on this field).
 state.openPresets = openPresetsDialog;
-state.openSfx = openSfxDialog;
+// The SFX button in that same panel header switches view rather than opening a
+// dialog -- see panels/sfx-view.js for why a sound effect cannot be built
+// behind a modal that covers the controls it is built with.
+state.openSfx = () => {
+  state.viewMode = 'sfx';
+  refresh();
+};
+// The two things panels/sfx-view.js cannot do for itself: write the preset
+// library (state.js owns it, but the categories and the dialog that reads them
+// are here) and put a file on disk.
+state.sfxSavePreset = (name, i) => {
+  saveIntoLibrary(lib => { lib.presets.push({ name, i, set: DEFAULT_SET, category: SFX_CATEGORY }); });
+};
+state.sfxDownload = downloadFile;
 // Lets panels/drums.js ask before a Stamp replaces a beat (see state.js).
 state.confirm = confirmModal;
 
@@ -818,217 +832,10 @@ function openPresetsDialog() {
   }
 }
 
-// --- SFX helper ---
-// A workshop for single sounds rather than music: pick an archetype, roll it,
-// listen, roll again, and leave with either a preset or a one-note .js file.
-//
-// It writes nothing into the open song. Each roll is auditioned through the
-// same staged preview the presets dialog uses (panels/instrument.js's
-// setPresetPreview) -- the sliders show what you are hearing and the keyboard
-// plays it, but the channel's real instrument is untouched and comes back when
-// the dialog closes. That is what makes rolling forty times cost nothing.
-//
-// The recipes and the rolling live in sfx.js; read the comment at the top of
-// that file for why a uniform roll of all 29 parameters is not worth building.
+// The SFX category the SFX view files its saved presets under (see
+// state.sfxSavePreset above). The view itself lives in panels/sfx-view.js;
+// this is all that is left here of the modal it replaced.
 const SFX_CATEGORY = 'SFX';
-const SFX_HISTORY_MAX = 8;
-
-// The lowest and highest octaves the note picker offers, matching the
-// on-screen keyboard's own range in panels/keyboard.js.
-const SFX_OCT_MIN = 1, SFX_OCT_MAX = 8;
-const SFX_NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-
-// The dialog's own state, module-level for the same reason stagedIdx above is:
-// a roll has to survive the dialog rebuilding itself around it.
-let sfxRecipe = 0, sfxNote = 5 * 12 + engine.NOTE_OFFSET; // C-5, the audition pitch
-let sfxLocked = new Set(), sfxCurrent = null, sfxHistory = [];
-
-// A filename, not a display name: the same shape every other tool in this repo
-// writes into src/js/, so the download drops straight in beside tada.js.
-function sfxFileName(name) {
-  const clean = String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-  return (clean || 'sfx') + '.js';
-}
-
-// The exported song: one channel, one pattern, one note at row 0.
-//
-// patternLen is computed rather than left at 32 because it is the one thing
-// that can make the file sound different from the tool. Too short and the
-// render cuts the tail off (sfx.js's soundLengthSamples explains the delay
-// half); too long and every consumer of the file pays for silence, since
-// core/utils.js renders the whole thing to a buffer at load.
-function buildSfxSong(instrument, note) {
-  const rowLen = state.song.rowLen;
-  const rows = Math.ceil(sfx.soundLengthSamples(instrument, rowLen) / rowLen);
-  const song = engine.makeNewSong();
-  song.rowLen = rowLen;
-  song.patternLen = Math.max(1, Math.min(32, rows));
-  song.numChannels = 1;
-  song.endPattern = 0;
-  const ch = engine.makeEmptyChannel(song.patternLen);
-  ch.i = instrument.slice();
-  ch.p[0] = 1;
-  ch.c[0].n[0] = note;
-  song.songData = [ch];
-  return song;
-}
-
-function sfxNoteOptions() {
-  let html = '';
-  for (let oct = SFX_OCT_MIN; oct <= SFX_OCT_MAX; oct++) {
-    for (let s = 0; s < 12; s++) {
-      const note = oct * 12 + s + engine.NOTE_OFFSET;
-      html += `<option value="${note}"${note === sfxNote ? ' selected' : ''}>${SFX_NOTE_NAMES[s]}${oct}</option>`;
-    }
-  }
-  return html;
-}
-
-// Show a rolled instrument: preview it on the selected channel and play it.
-// Every route into a new sound goes through here, so none of them can forget
-// to make a noise -- the whole point of the dialog is the listening.
-function sfxShow(i, { remember = true } = {}) {
-  sfxCurrent = i;
-  if (remember) {
-    sfxHistory.unshift(i.slice());
-    sfxHistory = sfxHistory.slice(0, SFX_HISTORY_MAX);
-    sfxRenderHistory();
-  }
-  setPresetPreview(i, sfx.RECIPES[sfxRecipe].name);
-  auditionNote(sfxNote);
-  const save = $('sfx-save'), exp = $('sfx-export');
-  if (save) save.disabled = false;
-  if (exp) exp.disabled = false;
-}
-
-// A line of feedback inside the dialog, cleared after a moment. Same idea as
-// panels/tracker.js's flashFeedback, and here for the same reason: what it has
-// to say is smaller than a dialog of its own.
-let sfxSayTimer = null;
-function sfxSay(message) {
-  const el = $('sfx-status');
-  if (!el) return;
-  el.textContent = message;
-  clearTimeout(sfxSayTimer);
-  sfxSayTimer = setTimeout(() => { if ($('sfx-status')) $('sfx-status').textContent = ''; }, 4000);
-}
-
-function sfxRenderHistory() {
-  const el = $('sfx-history');
-  if (!el) return;
-  el.innerHTML = sfxHistory.length
-    ? sfxHistory.map((_, n) => `<button class="sfx-chip${n === 0 ? ' active' : ''}" type="button"
-        data-n="${n}" title="Go back to this roll">${sfxHistory.length - n}</button>`).join('')
-    : '<span class="hint">Rolls you make appear here — click one to go back to it.</span>';
-}
-
-function openSfxDialog() {
-  const recipe = sfx.RECIPES[sfxRecipe];
-  openModal(`<h3>Sound effects</h3>
-    <p class="hint">Pick the kind of sound you want, then roll until one of them is right.
-      Each roll plays on this channel without changing it — close this dialog and the
-      channel is exactly as you left it.</p>
-    <div class="sfx-row">
-      <label title="What kind of sound to roll. Each one fixes the parameters that decide whether it is that sound at all, and varies the rest.">Kind
-        <select id="sfx-recipe">${sfx.RECIPES.map((r, n) =>
-          `<option value="${n}"${n === sfxRecipe ? ' selected' : ''}>${escapeHtml(r.name)}</option>`).join('')}</select></label>
-      <button id="sfx-roll" type="button" title="Roll every unlocked group again from scratch">Roll</button>
-      <button id="sfx-mutate" type="button" disabled title="Nudge the current sound instead of replacing it — same sound, slightly different">Mutate</button>
-      <span class="hint" id="sfx-hint">${escapeHtml(recipe.hint)}</span>
-    </div>
-    <div class="sfx-row" title="A locked group keeps what it has through the next roll. Lock what already works and roll the rest.">
-      <span>Keep:</span>
-      ${sfx.GROUPS.map(([label]) =>
-        `<label class="sfx-lock"><input type="checkbox" class="sfx-lock-box" data-group="${escapeHtml(label)}"
-          ${sfxLocked.has(label) ? 'checked' : ''}> ${escapeHtml(label)}</label>`).join('')}
-    </div>
-    <div class="sfx-row" id="sfx-history"></div>
-    <div class="sfx-row">
-      <label title="The pitch the effect plays at. It is auditioned at this note and exported at it too.">Note
-        <select id="sfx-note">${sfxNoteOptions()}</select></label>
-      <label title="Names the preset and the exported file.">Name
-        <input id="sfx-name" type="text" maxlength="40" value="${escapeHtml(recipe.name)}"></label>
-    </div>
-    <div class="row">
-      <button id="sfx-save" disabled title="Save this sound into the preset library, under an SFX category, so the Presets dialog can load it into any channel later">Save to presets</button>
-      <button id="sfx-export" disabled title="Download this sound as a one-note, one-pattern song — the same shape as src/js/sounds/tada.js, ready to import into a game">Export .js</button>
-      <button id="picker-cancel" title="Close. The channel goes back to the instrument it had.">Close</button>
-      <span class="hint" id="sfx-status"></span>
-    </div>`,
-    () => { sfxCurrent = null; clearPresetPreview(); });
-
-  sfxRenderHistory();
-  // A dialog reopened in the same session keeps its last roll, so the sound is
-  // still there to save or export after a trip through the presets dialog.
-  if (sfxCurrent) sfxShow(sfxCurrent, { remember: false });
-
-  $('sfx-recipe').onchange = () => {
-    sfxRecipe = +$('sfx-recipe').value;
-    const r = sfx.RECIPES[sfxRecipe];
-    $('sfx-hint').textContent = r.hint;
-    // The name follows the recipe only while it is still the recipe's own --
-    // a name someone typed is theirs, and switching kind must not eat it.
-    const nameEl = $('sfx-name');
-    if (sfx.RECIPES.some(x => x.name === nameEl.value)) nameEl.value = r.name;
-  };
-
-  for (const box of $('picker-body').querySelectorAll('.sfx-lock-box')) {
-    box.onchange = () => {
-      box.checked ? sfxLocked.add(box.dataset.group) : sfxLocked.delete(box.dataset.group);
-    };
-  }
-
-  $('sfx-roll').onclick = () => {
-    // Rolled over the *current* sound, not over the channel's instrument, so a
-    // locked group keeps what the last roll gave it rather than snapping back
-    // to whatever the channel happened to be playing.
-    const base = sfxCurrent || state.song.songData[state.selInstrument].i;
-    sfxShow(sfx.rollInstrument(sfx.RECIPES[sfxRecipe], base, sfxLocked));
-    $('sfx-mutate').disabled = false;
-  };
-  $('sfx-mutate').onclick = () => {
-    if (!sfxCurrent) return;
-    sfxShow(sfx.mutateInstrument(sfx.RECIPES[sfxRecipe], sfxCurrent, sfxLocked));
-  };
-  $('sfx-mutate').disabled = !sfxCurrent;
-
-  $('sfx-history').onclick = e => {
-    const chip = e.target.closest('.sfx-chip');
-    if (!chip) return;
-    for (const el of $('sfx-history').querySelectorAll('.sfx-chip.active')) el.classList.remove('active');
-    chip.classList.add('active');
-    sfxShow(sfxHistory[+chip.dataset.n], { remember: false });
-    $('sfx-mutate').disabled = false;
-  };
-
-  $('sfx-note').onchange = () => {
-    sfxNote = +$('sfx-note').value;
-    if (sfxCurrent) auditionNote(sfxNote);
-  };
-
-  $('sfx-save').onclick = () => {
-    if (!sfxCurrent) return;
-    const name = $('sfx-name').value.trim().slice(0, 40) || sfx.RECIPES[sfxRecipe].name;
-    saveIntoLibrary(lib => {
-      lib.presets.push({ name, i: sfxCurrent.slice(), set: DEFAULT_SET, category: SFX_CATEGORY });
-    });
-    // Said in the dialog, not in a notice modal: openModal treats a dialog
-    // opened over another as a dismissal of it, so a notice here would run this
-    // dialog's onClose, drop the preview, and leave the sound you just saved
-    // unreachable for the export button beside it.
-    sfxSay(`Saved "${name}" under ${DEFAULT_SET} → ${SFX_CATEGORY}.`);
-  };
-
-  $('sfx-export').onclick = () => {
-    if (!sfxCurrent) return;
-    const name = $('sfx-name').value.trim() || sfx.RECIPES[sfxRecipe].name;
-    const song = buildSfxSong(sfxCurrent, sfxNote);
-    downloadFile(new Blob([engine.songToJS(song)], { type: 'text/plain' }), sfxFileName(name));
-    sfxSay(`Exported ${sfxFileName(name)} — one note over ${song.patternLen} rows.`);
-  };
-
-  $('picker-cancel').onclick = closeModal;
-}
 
 // --- about ---
 // The synth, the song format, the instrument presets and both players are Marcus

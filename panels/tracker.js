@@ -45,6 +45,7 @@ import { openMenu } from '../menu.js';
 import { keyHandledByFocus } from '../focus.js';
 import { initPianoRoll, render as renderPianoRoll } from './pianoroll.js';
 import { initDrumsPanel, render as renderDrums } from './drums.js';
+import { initSfxPanel, render as renderSfx, enterSfxView, leaveSfxView } from './sfx-view.js';
 
 const $ = id => document.getElementById(id);
 const NOTE_NAMES = ['C-', 'C#', 'D-', 'D#', 'E-', 'F-', 'F#', 'G-', 'G#', 'A-', 'A#', 'B-'];
@@ -1575,6 +1576,21 @@ function alignGridTops() {
 
 function render() {
   refreshSongControls();
+  // The SFX view is the only one that is not a view *of the song*, so it is
+  // the only one the sequencer has no business beside -- see panels/
+  // sfx-view.js. Hiding it here rather than in that module keeps every
+  // decision about what the tracks row contains in this one function.
+  const sfxView = state.viewMode === 'sfx';
+  $('tracks').classList.toggle('sfx-view', sfxView);
+  if (sfxView) {
+    enterSfxView();
+    if (!$('sfx-body')) initSfxPanel();
+    else renderSfx();
+    return;
+  }
+  // A no-op unless that view was open, so every other path can call it
+  // unconditionally and none of them can forget to give the channel back.
+  leaveSfxView();
   renderSequencer();
   sizeSequencerPanel();
   if (state.viewMode === 'pianoroll') {

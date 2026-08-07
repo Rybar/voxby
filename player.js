@@ -31,7 +31,10 @@ var CPlayer = function () {
 
     var mGeneratedBuffer;
 
-    var mWorker = new Worker("player-worker.js");
+    // A module worker: the renderer lives in player-core.js now, so the main
+    // thread can use it as well (panels/sfx-view.js renders one short sound
+    // and draws it), and player-worker.js imports it.
+    var mWorker = new Worker("player-worker.js", { type: "module" });
 
     mWorker.onmessage = function (event) {
         if (event.data.cmd === "progress") {

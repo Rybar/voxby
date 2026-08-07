@@ -645,34 +645,154 @@ one slider at a time and listen. Some things worth knowing:</p>
 
 <h2 id="sfx">Sound effects</h2>
 
-<p>The <strong>SFX…</strong> button beside Presets is for single sounds rather
-than music: a zap, a pickup, an explosion. Pick the kind of sound you want and
-press <strong>Roll</strong> until one of them is right.</p>
+<p>The fourth setting of the <strong>View</strong> dropdown — and the
+<strong>SFX</strong> button beside Presets — is for single sounds rather than
+music: a zap, a pickup, an explosion. Pick the kind of sound you want and press
+<strong>Roll</strong> until one of them is right.</p>
 
 <p>Rolling is not random across the whole instrument. Each kind fixes the
 settings that decide whether it is that sound at all — a zap is always short,
 always pitch-dropping, never noisy — and varies the rest. That is why the rolls
 are usable instead of being silence, noise, or a four-second wash.</p>
 
+<p>Seventeen kinds ship, in four families:</p>
+
 <ul>
-  <li><strong>Roll</strong> makes a new sound. <strong>Mutate</strong> nudges
-  the one you have, for when it is nearly right.</li>
-  <li><strong>Keep</strong> locks a group of settings. Lock <em>Env</em> when
-  the length is right and roll again for a different tone at the same length.</li>
-  <li>Each roll is numbered underneath. Click a number to go back to it — the
-  one you liked eight rolls ago is still there.</li>
-  <li><strong>Note</strong> is the pitch it plays and exports at. Rolls play on
-  the selected channel without changing it: close the dialog and that channel
-  is exactly as you left it.</li>
+  <li><strong>Effects</strong> — Zap, Laser, Explosion, Pickup, Powerup, Jump,
+  Hurt, Thud, Blip, Alarm. The everyday game noises.</li>
+  <li><strong>Long ones</strong> — Warp and Drone. Sweeping machine noise and
+  slow wide texture, measured in seconds rather than in tenths of one.</li>
+  <li><strong>Instruments</strong> — Bell, Pluck, Pad, Bass. These are meant to
+  be played rather than triggered: their oscillators stay tuned to the note as
+  written, so a melody played on the keyboard comes out as the melody you
+  played. Save one to presets and put it on a channel.</li>
+  <li><strong>Chaos</strong> — every one of the 29 settings rolled at once. The
+  ranges do nothing except rule out the ways a roll comes out inaudible, so it
+  will hand you things no other kind would. Press it until something surprises
+  you.</li>
 </ul>
 
+<p>The instrument panel stays in front of you, and while this view is open every
+control in it edits <em>the sound effect</em> rather than the channel. Rolling
+gets you the archetype; the last part — a shorter tail, less resonance, a
+semitone lower — is knob work, and this is where you do it. Each change plays
+the sound again, so you hear what the knob did without reaching for anything.
+The song is untouched throughout: leave the view and the channel is exactly as
+you found it.</p>
+
+<ul>
+  <li><strong>Roll</strong> makes a new sound (<kbd>R</kbd>).
+  <strong>Mutate</strong> nudges the one you have, for when it is nearly right
+  (<kbd>M</kbd>); <strong>Nudge</strong> sets how far.</li>
+  <li><strong>Keep</strong> locks a group of settings through the next roll.
+  Lock <em>Env</em> when the length is right and roll again for a different tone
+  at the same length. Any control you move by hand locks its own group for you,
+  so rolling again keeps the work you just did.</li>
+  <li>Each roll is numbered under <strong>History</strong>. Click a number to go
+  back to it — the one you liked eight rolls ago is still there.</li>
+</ul>
+
+<h3>Steps</h3>
+
+<p>A sound effect is not always one note. A pickup is two notes in quick
+succession, a fanfare three or four, an alarm a pair a fifth apart. The
+<strong>Steps</strong> lane is where those go: one note per step, played in
+order. Most sounds use step 1 alone, and nothing about that case gets harder.</p>
+
+<p><strong>Fill</strong> rolls a whole figure for you (<kbd>F</kbd>): how many
+notes, what shape they make, which intervals they use, what rhythm they land
+on, and how fast they run.
+The shape suits the kind — a pickup climbs, an alarm alternates, a warp falls
+away in widening drops, an explosion stays a single note — and the intervals
+come from a small musical set rather than from all twelve semitones, so what
+you get is a figure and not a scatter. It is rooted on the note already in the
+selected step, so pressing it repeatedly explores shapes around the pitch you
+settled on. Fill rolls the notes only; <strong>Roll</strong> rolls the sound.
+They are separate presses because they are separate decisions.</p>
+
+<ul>
+  <li>Click an empty step to fill it, click a filled one again to clear it.</li>
+  <li>Play a key — on the piano or the computer keyboard — to write the selected
+  step and move to the next.</li>
+  <li>Scroll the wheel over a step, or use <kbd>↑</kbd>/<kbd>↓</kbd>, to change
+  its pitch; hold <kbd>Shift</kbd> for octaves. The whole figure plays at each
+  new value, so you tune the interval by ear rather than the note alone.</li>
+  <li><strong>Step</strong> is the gap between steps, in milliseconds. It is the
+  sound's own timing, not the song's tempo — the game this ships in has no
+  tempo, and the gap between two notes is part of the effect.</li>
+</ul>
+
+<h3>Variations</h3>
+
+<p><strong>Roll 12</strong> (<kbd>V</kbd>) rolls twelve sounds at once, each
+with its own figure, and draws each one. That is the fastest way through the
+part of this job that is otherwise slowest: most rolls are wrong, and until
+now the only way to know was to hear them one at a time. A silent one and a
+clipping one are visible in the pictures, so the ear only has to judge the
+few that are left. The locks apply, so a batch rolled with <em>Env</em> locked
+is twelve versions of your envelope rather than twelve unrelated sounds.
+Clicking one takes it, and files it in the history so rolling the batch again
+cannot lose it. The <strong>+</strong> on a card puts that sound straight on
+the shelf without taking it into the editor first, which is how you keep the
+two or three good ones out of a batch of twelve without losing your place in
+the rest.</p>
+
+<h3>History and likes</h3>
+
+<p>Every roll, mutation and taken variation lands in the <strong>History</strong>
+list, newest first, each drawn as a small waveform. Click one to go back to it.
+Click its star (or press <kbd>L</kbd>) to <strong>like</strong> it: the list is
+capped, but a liked entry is never dropped, so the one you thought was
+promising an hour ago is still there when you have finished exploring.</p>
+
+<h3>The shelf, and packs</h3>
+
+<p><strong>+ Shelf</strong> sets the current sound aside under the name in the
+Name field. Build up a set — jump, hurt, coin, explode — and
+<strong>Export pack .js</strong> writes all of them to one file. A game wants
+those four together, not four downloads.</p>
+
+<p>A pack is loaded with <code>core/sfxpack.js</code>:</p>
+
+<pre><code>import pack, { JUMP, COIN } from './sounds/mysounds.js';
+import { expandPack } from './core/sfxpack.js';
+import { initAudio, playSound } from './core/utils.js';
+
+const sfx = initAudio(expandPack(pack));
+playSound(sfx[JUMP]);</code></pre>
+
+<p>The names come out as exported constants rather than object keys, and the
+pack itself is an array. That is deliberate: a game's minifier renames a static
+property but not a string stored next to it, so a name used as a key is a
+silent failure waiting to happen, while a constant is renamed consistently
+everywhere or not at all.</p>
+
+<h3>The trace</h3>
+
+<p>Under the lane is the sound itself, rendered through the same synth that
+will render the exported file — so the picture is not an impression of the
+sound, it is the sound. Beside it: how long it really runs, in seconds and in
+rows, and its measured peak.</p>
+
+<p>The faint lines across the trace are full scale. A trace that reaches them
+is clipping, and the readout says so; a trace that barely leaves the middle is
+a sound that will be lost under the music. The vertical marks are where each
+step falls. Three of the four ways a sound effect turns out unusable — silent,
+clipping, four seconds long when you meant half of one — are visible here and
+nowhere else.</p>
+
+<h3>Leaving with it</h3>
+
 <p><strong>Save to presets</strong> files the sound in your preset library under
-Custom → SFX, so the Presets dialog can load it into a channel later.
-<strong>Export .js</strong> downloads it as a one-note, one-pattern song — the
-same shape as the song files described under
+Custom → SFX, so the Presets dialog can load it into a channel later. A preset
+is one instrument, so the steps are not part of it.
+<strong>Export .js</strong> downloads the whole thing — instrument and steps —
+as a one-channel song, the same shape as the song files described under
 <a href="#ingame">Using a song in a game</a>, and played back the same way. The
 pattern is made exactly long enough for the sound, delay tail included, so the
-file holds no silence and cuts nothing off.</p>
+file holds no silence and cuts nothing off.
+<strong>Use on channel</strong> copies the sound onto the channel the instrument
+panel names, for when the effect belongs in the song you have open.</p>
 
 <h2 id="playback">Playback</h2>
 

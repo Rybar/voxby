@@ -49,9 +49,16 @@ export const state = {
   // back -- main.js already imports panels/instrument.js to initialize it,
   // same cycle concern as notify/requestStop/previewNote/highlightNotes above.
   openPresets: null,
-  // Set to main.js's openSfxDialog at boot, for the SFX button beside the
-  // Presets one. Same route and same reason as openPresets above.
+  // Set at boot for the SFX button beside the Presets one. Same route and same
+  // reason as openPresets above, though what it does now is switch to the SFX
+  // view rather than open a dialog.
   openSfx: null,
+  // Set at boot for panels/sfx-view.js: the two things that view cannot do for
+  // itself, since both live in main.js. sfxSavePreset(name, i) files a sound in
+  // the preset library under the SFX category; sfxDownload(blob, filename) puts
+  // the exported .js on disk. Same cycle concern as openPresets above.
+  sfxSavePreset: null,
+  sfxDownload: null,
   // Set to panels/keyboard.js's previewNoteAbsolute at boot, for panels/
   // drums.js: a drum lane knows the exact note it writes, so it needs the
   // preview that takes a note number rather than previewNote's offset from
@@ -102,9 +109,11 @@ export const state = {
   // transient UI feedback -- not persisted.
   chordName: '',
 
-  // --- view mode: tracker (traditional columns), pianoroll (horizontal grid)
-  // or drums (step grid over a kit's channels) ---
-  viewMode: 'tracker',  // 'tracker' | 'pianoroll' | 'drums'
+  // --- view mode: tracker (traditional columns), pianoroll (horizontal grid),
+  // drums (step grid over a kit's channels), or sfx (the sound-effect workshop,
+  // the one view that draws something other than the song -- see
+  // panels/sfx-view.js) ---
+  viewMode: 'tracker',  // 'tracker' | 'pianoroll' | 'drums' | 'sfx'
   // Which channel plays which drum voice, for panels/drums.js:
   // { kit, lanes: [{ role, label, note, channel }] }, or null for "no kit in
   // this song". UI state, not song data: it says how to *read* the song, and

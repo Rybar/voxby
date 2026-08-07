@@ -17,6 +17,9 @@
 // value on top of the instrument's (see previewInstrI, which panels/keyboard.js
 // also reads so the jammer previews exactly what is on screen).
 //
+// The SFX view (panels/sfx-view.js) redirects this panel at the sound effect
+// being built instead of the song -- see the comment on sfxWorking below.
+//
 // Instrument copy/paste uses a module-local clipboard, leaving state.clipboard
 // to the pattern/fx-cell clipboard so the two can't collide.
 
@@ -108,10 +111,33 @@ function setPresetLabel(name) {
   else presetLabels.delete(state.selInstrument);
 }
 
+// The array a control writes into: the sound effect under construction while
+// the SFX view is open, else this channel's real instrument. See the comment on
+// sfxWorking below for why the SFX view redirects the whole panel this way.
+function editTarget() {
+  return sfxWorking ? sfxWorking.i : currentInstr().i;
+}
+
 // If an FX-track cell is selected, mirror the write into that cell as well as
 // the live instrument property -- both, never one or the other.
 function setInstrProp(prop, value) {
-  currentInstr().i[prop] = value;
+  // A control moved while a preset is staged means "take this preset, then
+  // change it", so the staged value is committed before the change lands on
+  // top of it. See the comment on presetPreview below.
+  const staged = !!presetPreview;
+  if (staged) commitPresetPreview(previewPresetName);
+
+  editTarget()[prop] = value;
+
+  if (sfxWorking) {
+    // No FX cell and no preset provenance here: neither describes a sound
+    // effect, and the channel this panel names is not what is being edited.
+    sfxWorking.onWrite(prop);
+    syncJammer();
+    if (staged) refreshInstrumentPanel();
+    return;
+  }
+
   const cell = activeFxCell();
   if (cell) cell.set(prop, value);
   // Any control on this panel reaches the instrument through here, so this is
@@ -123,6 +149,10 @@ function setInstrProp(prop, value) {
     refreshPresetLabel();
   }
   syncJammer();
+  // Every other control shows the committed preset's value now, and the one
+  // just moved shows the value it was moved to -- which is why this runs after
+  // the write rather than inside commitPresetPreview.
+  if (staged) refreshInstrumentPanel();
   // The piano roll draws each note as wide as this envelope sounds, so an
   // envelope edit must repaint it. A no-op in the tracker view.
   if (prop === engine.ENV_ATTACK || prop === engine.ENV_SUSTAIN || prop === engine.ENV_RELEASE) renderPianoRoll();
@@ -132,18 +162,39 @@ function refreshPresetLabel() {
   syncLabelsToSong();
   const el = $('instr-preset-name');
   if (!el) return;
-  if (previewPresetI) { el.textContent = previewPresetName; return; }
+  if (presetPreview) { el.textContent = previewPresetName; return; }
+  // The channel selector still reads whatever channel it read before, and the
+  // sliders no longer describe it -- so say so, rather than let the panel look
+  // like it is editing the song.
+  if (sfxWorking) { el.textContent = 'editing a sound effect'; return; }
   const label = presetLabels.get(state.selInstrument);
   el.textContent = label ? label.name + (label.modified ? ' (modified)' : '') : '';
 }
 
-// Set by main.js's presets dialog while a preset is highlighted there:
-// previewInstrI() (and so the sliders and the jammer) show this instrument
-// instead of the channel's real one, without touching real song data until
-// commitPresetPreview() applies it. Takes priority over the FX-cell preview
-// below -- the two dialogs that use them never open at once. null is the
-// normal case, nothing being previewed.
-let previewPresetI = null;
+// --- what these controls read, and what they write ---
+//
+// Two things can stand between this panel and the channel's real instrument,
+// and they are not the same kind of thing.
+//
+// `sfxWorking` is an *edit target*. panels/sfx-view.js hands over the sound
+// effect being built, and every control here then reads and writes that array
+// instead of the song. The channel is untouched for as long as that view is
+// open, which is what makes an hour of rolling and tweaking cost nothing. Each
+// write calls back into the view so it can play the sound again.
+//
+// `presetPreview` is a *staged value*. The presets dialog highlights a preset
+// and the controls show it, with nothing committed until "Use this preset".
+// Moving a control while one is staged is handled in setInstrProp above: the
+// preview commits first and the change lands on top. Before that was spelled
+// out, such a write went to the channel while the panel went on showing the
+// preview -- the edit was invisible, and it landed somewhere nobody was
+// looking.
+//
+// The two nest, in that order: the presets dialog can be opened from inside
+// the SFX view, and committing there loads the preset into the sound effect
+// rather than into the song. Both take priority over the FX-cell preview.
+let sfxWorking = null;
+let presetPreview = null;
 
 // Copies rather than keeps `i` itself: a built-in preset's array is the same
 // shared object every time presets.js's window.gInstrumentPresets is read
@@ -151,8 +202,43 @@ let previewPresetI = null;
 // out to callers -- a copy is what keeps a downstream mutation from ever
 // reaching, and permanently corrupting, the built-in library.
 export function setPresetPreview(i, name = '') {
-  previewPresetI = i.slice();
+  presetPreview = i.slice();
   previewPresetName = name;
+  refreshInstrumentPanel();
+  syncJammer();
+}
+
+// The SFX view claiming this panel, and giving it back. `i` is kept by
+// reference, not copied: the view holds the same array and reads it back to
+// audition, save and export, so both sides must see one sound. `onWrite(prop)`
+// fires after every control change, prop -1 meaning "all of them" (a paste).
+export function setSfxTarget(i, onWrite) {
+  sfxWorking = { i, onWrite };
+  refreshInstrumentPanel();
+  syncJammer();
+}
+
+// The SFX view rewriting its own array in place -- a roll, a mutation, a step
+// back through the history. No control on this panel was touched, so nothing
+// here noticed, and both halves have to be told: the sliders redraw, and the
+// jammer is handed the new instrument.
+//
+// The jammer half is the one that bites. It keeps a deepCopy of whatever it
+// was last given (jammer.js's updateInstr), not a reference, so without this
+// a roll repainted every slider and then auditioned the sound the last hand
+// edit had left behind -- the panel showed one sound and the speaker played
+// another.
+export function sfxTargetChanged() {
+  if (!sfxWorking) return;
+  refreshInstrumentPanel();
+  syncJammer();
+}
+
+// A no-op when the SFX view was never open, so tracker.js's render() can call
+// it on every other view without asking first.
+export function clearSfxTarget() {
+  if (!sfxWorking) return;
+  sfxWorking = null;
   refreshInstrumentPanel();
   syncJammer();
 }
@@ -162,36 +248,44 @@ export function setPresetPreview(i, name = '') {
 // without checking first. The readout falls back to whatever the channel was
 // last actually loaded from, which refreshInstrumentPanel re-derives.
 export function clearPresetPreview() {
-  if (!previewPresetI) return;
-  previewPresetI = null;
+  if (!presetPreview) return;
+  presetPreview = null;
   previewPresetName = '';
   refreshInstrumentPanel();
   syncJammer();
 }
 
-// Copies the previewed preset into the real channel instrument in place
+// Copies the previewed preset into the current edit target in place
 // (SoundBox's instrument arrays are always this fixed length, so index-by-
 // index is enough -- same as the preset-select handler this replaced), and
 // records its name as this channel's provenance, unmodified until the first
 // control is touched.
+//
+// The edit target, not the channel: inside the SFX view this loads the preset
+// into the sound effect being built, which is what "use this preset" has to
+// mean while the song is not what is on screen. A sound effect has no preset
+// provenance to record, so the label is only set for a real channel.
 export function commitPresetPreview(name = '') {
-  if (!previewPresetI) return;
-  const dest = currentInstr().i;
-  for (let j = 0; j < dest.length; j++) dest[j] = previewPresetI[j];
-  previewPresetI = null;
+  if (!presetPreview) return;
+  const dest = editTarget();
+  for (let j = 0; j < dest.length; j++) dest[j] = presetPreview[j];
+  presetPreview = null;
   previewPresetName = '';
-  setPresetLabel(name);
+  if (sfxWorking) sfxWorking.onWrite(-1);
+  else setPresetLabel(name);
   refreshInstrumentPanel();
   syncJammer();
 }
 
 // The instrument array to *display*: a staged preset preview if one is set,
-// else the real instrument, unless an FX cell is selected, in which case
-// that cell's stored value previews on top of whichever one property it
-// targets. panels/keyboard.js reads this too, so the jammer's live preview
-// hears the same instrument these controls show.
+// then the SFX view's working sound if that view is open, else the real
+// instrument, unless an FX cell is selected, in which case that cell's stored
+// value previews on top of whichever one property it targets.
+// panels/keyboard.js reads this too, so the jammer's live preview hears the
+// same instrument these controls show.
 export function previewInstrI() {
-  if (previewPresetI) return previewPresetI;
+  if (presetPreview) return presetPreview;
+  if (sfxWorking) return sfxWorking.i;
   const i = currentInstr().i.slice();
   const cell = activeFxCell();
   if (cell && cell.cmd > 0) i[cell.cmd - 1] = cell.val;
@@ -281,18 +375,24 @@ function refreshSlider(id, def, i) {
 // The arpeggio's two notes share one byte (ARP_CHORD: high nibble = note 1, low
 // nibble = note 2), so they can't go through SLIDERS' one-slider-one-property
 // mapping and are bound as a special case.
+//
+// The other nibble is read back through previewInstrI(), not from the channel:
+// these are the only two controls on the panel that have to read a value in
+// order to write one, so they are the only two that can send an edit to the
+// wrong instrument. Read the channel while the SFX view or a staged preset is
+// showing something else, and each slider wipes out the other one's note.
 function bindArpNotes() {
   $('arp_note1').min = $('arp_note2').min = 0;
   $('arp_note1').max = $('arp_note2').max = 12;
   $('arp_note1').oninput = () => {
     const v = +$('arp_note1').value;
-    setInstrProp(engine.ARP_CHORD, (currentInstr().i[engine.ARP_CHORD] & 15) | (v << 4));
+    setInstrProp(engine.ARP_CHORD, (previewInstrI()[engine.ARP_CHORD] & 15) | (v << 4));
     $('arp_note1').nextElementSibling.textContent = v;
     paintFill($('arp_note1'));
   };
   $('arp_note2').oninput = () => {
     const v = +$('arp_note2').value;
-    setInstrProp(engine.ARP_CHORD, (currentInstr().i[engine.ARP_CHORD] & 240) | v);
+    setInstrProp(engine.ARP_CHORD, (previewInstrI()[engine.ARP_CHORD] & 240) | v);
     $('arp_note2').nextElementSibling.textContent = v;
     paintFill($('arp_note2'));
   };
@@ -320,7 +420,7 @@ export function initInstrumentPanel() {
       <h3 title="The sound one channel plays. Every note in that channel's patterns uses these settings — one instrument per channel, all the way through the song.">Instrument</h3>
       <label title="Which channel's instrument these controls edit. Clicking any cell in the tracker selects that channel too.">Channel <select id="instr-channel"></select></label>
       <button id="instr-presets-btn" type="button" title="Browse instrument presets — SoundBox's built-in library plus any you've saved — and load one into this channel, overwriting every setting below.">Presets…</button>
-      <button id="instr-sfx-btn" type="button" title="Roll one-shot sound effects — zaps, pickups, explosions — from a recipe, hear them on this channel, and export one as a ready-to-import .js file.">SFX…</button>
+      <button id="instr-sfx-btn" type="button" title="Switch to the SFX view: roll one-shot sound effects — zaps, pickups, explosions — from a recipe, tune them with these same controls, and export one as a ready-to-import .js file. No ellipsis, because it opens no dialog: the point of that view is that these controls stay in front of you.">SFX</button>
       <button id="instr-copy" type="button" title="Copy this whole instrument, to paste onto another channel">${svgIcon('copy')}</button>
       <button id="instr-paste" type="button" title="Overwrite this channel's instrument with the copied one">${svgIcon('paste')}</button>
       <span id="instr-preset-name" class="preset-label" title="The preset this channel's instrument was loaded from. It reads (modified) once you change any control below — the sound is no longer that preset."></span>
@@ -405,16 +505,31 @@ export function initInstrumentPanel() {
   // destination's old, now-wrong, name.
   $('instr-copy').onclick = () => {
     syncLabelsToSong();
-    instrClipboard = { i: currentInstr().i.slice(), label: presetLabels.get(state.selInstrument) };
+    // Whatever the panel is showing, which inside the SFX view is the sound
+    // effect -- copying a rolled zap onto a channel is worth having.
+    instrClipboard = { i: previewInstrI().slice(), label: sfxWorking ? null : presetLabels.get(state.selInstrument) };
   };
   $('instr-paste').onclick = () => {
     if (!instrClipboard) return;
-    currentInstr().i = instrClipboard.i.slice();
+    // In place rather than by assignment: the SFX view holds a reference to
+    // the array it handed over, so replacing it would leave the two sides
+    // editing different sounds.
+    const dest = editTarget();
+    for (let j = 0; j < dest.length; j++) dest[j] = instrClipboard.i[j];
+    if (sfxWorking) {
+      sfxWorking.onWrite(-1);
+      refreshInstrumentPanel();
+      syncJammer();
+      return;
+    }
     syncLabelsToSong();
     const label = instrClipboard.label;
     if (label) presetLabels.set(state.selInstrument, { name: label.name, modified: label.modified });
     else presetLabels.delete(state.selInstrument);
     refreshInstrumentPanel();
+    // A paste changes the sound, so the live keyboard has to hear it -- the
+    // panel used to repaint and leave the jammer on the old instrument.
+    syncJammer();
   };
 
   $('instr-channel').onchange = () => {
