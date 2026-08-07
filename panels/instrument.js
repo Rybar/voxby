@@ -28,7 +28,7 @@ import { state } from '../state.js';
 import { svgIcon } from '../icons.js';
 import { activeFxCell } from './tracker.js';
 import { syncJammer } from './keyboard.js';
-import { getAccent } from '../theme.js';
+import { getAccent, getShade } from '../theme.js';
 import { render as renderPianoRoll } from './pianoroll.js';
 
 const $ = id => document.getElementById(id);
@@ -325,16 +325,14 @@ function sliderRow(id, label, title = '') {
 // the thumb" rendering, so this paints an equivalent gradient by hand on every
 // value change, in the live accent color.
 //
-// TRACK_BG is --bg0, the page background, not .instr-card's own --bg2: an unlit
-// track the same color as the card it sits on reads as no track at all. It is
-// copied as a literal because a gradient stop built in JS can't read a CSS
-// variable (panels/scope.js copies its canvas background for the same reason) --
-// keep it in sync with screen.css's input[type=range] rule.
-const TRACK_BG = '#0d0e11';
+// The unlit part of the track is --bg0, the page background, not .instr-card's
+// own --bg2: an unlit track the same colour as the card it sits on reads as no
+// track at all. Read live, because a gradient stop can't reference a CSS
+// variable and --bg0 now follows theme.js's tint picker.
 
 function paintFill(el) {
   const pct = (el.value - el.min) / (el.max - el.min) * 100;
-  el.style.background = `linear-gradient(to right, ${getAccent()} ${pct}%, ${TRACK_BG} ${pct}%)`;
+  el.style.background = `linear-gradient(to right, ${getAccent()} ${pct}%, ${getShade('--bg0')} ${pct}%)`;
 }
 
 // paintFill() bakes the accent into each slider's inline style at paint time

@@ -484,7 +484,9 @@ export const RECIPES = [
       [engine.ENV_RELEASE]: [60, 135],
       [engine.ENV_EXP_DECAY]: [0, 35],
       [engine.ARP_CHORD]: ARP_MAJOR,
-      [engine.ARP_SPEED]: [4, 6],
+      // Slow, for the same reason as Pickup above: a fanfare wants its steps
+      // heard as notes, and the speed doubles every notch.
+      [engine.ARP_SPEED]: [2, 4],
       [engine.FX_FREQ]: [140, 255],
       [engine.FX_RESONANCE]: [0, 120],
       [engine.FX_DRIVE]: [10, 22],

@@ -41,7 +41,7 @@ import * as sfx from '../sfx.js';
 import { setSfxTarget, clearSfxTarget, sfxTargetChanged } from './instrument.js';
 import { keyHandledByFocus } from '../focus.js';
 import { renderOneShot, waveformBands } from '../oneshot.js';
-import { getAccent } from '../theme.js';
+import { getAccent, getShade } from '../theme.js';
 
 const $ = id => document.getElementById(id);
 
@@ -142,10 +142,6 @@ function applySound(s) {
 // everything else in this view put together.
 
 const THUMB_W = 84, THUMB_H = 20;
-// Matches screen.css's --bg0. A canvas draws its own pixels and cannot read a
-// CSS variable -- panels/scope.js copies it for the same reason.
-const WAVE_BG = '#0d0e11';
-
 function analyse(sound) {
   const r = renderOneShot(sfx.buildSfxSong(sound.i, sound.steps, sfx.msToRowLen(sound.stepMs)));
   return { ...sound, bands: waveformBands(r.samples, THUMB_W), peak: r.peak, clipped: r.clipped, seconds: r.seconds };
@@ -154,7 +150,7 @@ function analyse(sound) {
 function drawBands(canvas, bands, w, h) {
   const ctx = canvas.getContext('2d');
   const mid = h / 2;
-  ctx.fillStyle = WAVE_BG;
+  ctx.fillStyle = getShade('--bg0');
   ctx.fillRect(0, 0, w, h);
   ctx.fillStyle = getAccent();
   const cols = bands.length / 2;

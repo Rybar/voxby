@@ -9,6 +9,7 @@
 // Future phases: cursor, note entry, dragging, selection, clipboard.
 
 import * as engine from '../engine.js';
+import { getShade } from '../theme.js';
 import { state, savePrefs } from '../state.js';
 import { keyHandledByFocus } from '../focus.js';
 
@@ -1162,7 +1163,7 @@ export function render() {
   const w = canvas.width, h = canvas.height;
 
   // Clear
-  ctx.fillStyle = '#0d0e11'; // --bg0
+  ctx.fillStyle = getShade('--bg0');
   ctx.fillRect(0, 0, w, h);
 
   // Calculate grid dimensions
@@ -1361,7 +1362,7 @@ function drawGrid(ctx, w, h, patternLen, numSemitones, lowestPitch) {
     ctx.fillRect(gridX, y, activeWidth, cellHeight);
 
     // Beyond pattern area (darker)
-    ctx.fillStyle = isBlackKey(pitch) ? '#0a0b0d' : '#0d0e11';
+    ctx.fillStyle = getShade(isBlackKey(pitch) ? '--key-black' : '--bg0');
     ctx.fillRect(gridX + activeWidth, y, gridWidth - activeWidth, cellHeight);
   }
 

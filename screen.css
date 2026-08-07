@@ -3,13 +3,25 @@
    shell. */
 
 /* Every color below is a var(--xxx) against this palette rather than a literal
-   hex, so the whole UI recolors from one place. --accent is the one the user can
-   change (theme.js's #theme-accent input in #top); the rest is a fixed, high-
-   contrast dark palette. --bg-selected/--bg-currow are color-mix()es of --accent,
-   so a picked-cell or current-row tint follows a new accent for free rather than
-   needing a second set of hardcoded colors. panels/scope.js draws canvas pixels,
-   which can't inherit a CSS variable -- it reads theme.js's getAccent() and
-   mirrors --bg0 as a literal for its background fill. */
+   hex, so the whole UI recolors from one place.
+
+   Two of them are the user's, both in #top: --accent (cursors, selections,
+   sliders, the scope) and the tint, which sets the hue and strength of every
+   shade from --bg0 to --text. --bg-selected/--bg-currow are color-mix()es of
+   --accent, so a picked-cell or current-row tint follows a new accent for free
+   rather than needing a second set of hardcoded colors.
+
+   The shade values written here are *defaults*, and only their lightness
+   survives: theme.js recomputes each one from the tint at boot and writes it
+   back as an inline custom property on :root. Their hue and saturation here
+   are the default tint's, so the two agree until the picker is touched --
+   change one and change the other, or the page will flash the wrong greys
+   before the module loads. theme.js's comment explains why the tint moves hue
+   and saturation but never lightness.
+
+   The canvases (scope, piano roll, the SFX waveforms) can't read a custom
+   property; they call theme.js's getShade() rather than copying a hex, which
+   is what keeps them from staying neutral on a tinted page. */
 :root {
   --bg0: #0d0e11;    /* page background */
   --bg1: #1c1f25;    /* panel background */
@@ -20,6 +32,7 @@
   --text: #f3f5f8;
   --text-dim: #b0b8c4;
   --text-dim2: #7d8492;
+  --key-black: #0a0b0d;  /* piano-roll black-key lane */
   --accent: #ff8a3d;
   --accent-text: #1a0f04;
   --bg-selected: color-mix(in srgb, var(--accent) 24%, var(--bg1));

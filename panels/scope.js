@@ -13,7 +13,7 @@
 // trivial at 60fps) rather than a real FFT, whose complexity wouldn't earn its
 // keep at this size.
 
-import { getAccent } from '../theme.js';
+import { getAccent, getShade } from '../theme.js';
 
 const $ = id => document.getElementById(id);
 
@@ -21,12 +21,11 @@ const MODES = ['oscilloscope', 'spectrometer', 'spectrogram'];
 const MODE_LABEL = { oscilloscope: 'Osc', spectrometer: 'Spec', spectrogram: 'Wfall' };
 let modeIndex = 0;
 
-// Matches screen.css's --bg0 -- the canvas draws its own pixels rather than
-// being styled, so it can't just inherit the CSS variable.
-const BG = '#0d0e11';
-
+// --bg0, read live rather than copied: it is not a fixed colour any more, it
+// follows the tint picker (see theme.js). A hardcoded copy here would leave
+// this canvas neutral grey on a tinted page.
 function fillBg(ctx, w, h) {
-  ctx.fillStyle = BG;
+  ctx.fillStyle = getShade('--bg0');
   ctx.fillRect(0, 0, w, h);
 }
 
