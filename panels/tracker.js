@@ -1058,6 +1058,12 @@ function onKeyDown(e) {
   // octave, clipboard -- still reaches the grids.
   if (keyHandledByFocus(e)) return;
 
+  // Typing gestures -- octave, pattern numbers, chord pads, notes -- are plain
+  // keypresses. A Ctrl/Meta/Alt chord belongs to the browser or the OS (Ctrl+R
+  // reload, Ctrl+Minus zoom, Ctrl+1 tab switch, ...) or to one of the explicit
+  // chords handled further down, and must never be read as input.
+  const chord = e.ctrlKey || e.metaKey || e.altKey;
+
   // Octave: Minus, or Shift+Comma ("<"); Equal, or Shift+Period (">"). Matched
   // on e.code, like note entry, not on the printed character: e.key reflects
   // what the OS layout prints on a key, and on German/Swiss QWERTZ that is "-"
@@ -1068,8 +1074,8 @@ function onKeyDown(e) {
   // highlighter is already code-based, so only this half of the pair broke).
   // Minus/Equal are never note keys, so they always mean octave; Comma/Period
   // need Shift, since unshifted they are notes.
-  if (e.code === 'Minus' || (e.code === 'Comma' && e.shiftKey)) { shiftOctave(-1); return; }
-  if (e.code === 'Equal' || (e.code === 'Period' && e.shiftKey)) { shiftOctave(1); return; }
+  if (!chord && (e.code === 'Minus' || (e.code === 'Comma' && e.shiftKey))) { shiftOctave(-1); return; }
+  if (!chord && (e.code === 'Equal' || (e.code === 'Period' && e.shiftKey))) { shiftOctave(1); return; }
 
   // The other two views replace the pattern grid, so everything below belongs
   // to them instead -- except when the sequencer itself has the cursor
@@ -1135,7 +1141,7 @@ function onKeyDown(e) {
   // browser/OS chords (Ctrl+W, Cmd+Q, Alt+D, ...). Left unguarded, this handler
   // both wrote the digit into the sequencer cell and preventDefault()'d the
   // keypress, so the browser never got to act on it.
-  if (state.editMode === 'sequence' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+  if (state.editMode === 'sequence' && !chord) {
     let code = null;
     if (/^Digit[0-9]$/.test(e.code)) code = +e.code.slice(5) + 1;
     else if (/^Key[A-Z]$/.test(e.code)) code = 11 + (e.code.charCodeAt(3) - 65);
@@ -1148,7 +1154,7 @@ function onKeyDown(e) {
       return;
     }
   } else if (state.editMode === 'pattern' || state.editMode === 'fx') {
-    if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+    if (!chord && (e.code === 'Enter' || e.code === 'NumpadEnter')) {
       insertRowAtCursor(state.editMode === 'pattern' ? pat.row : fx.row);
       render(); notify();
       e.preventDefault();
@@ -1161,7 +1167,7 @@ function onKeyDown(e) {
     // values are entered by an entirely different mechanism. Checked before
     // handleNav, whose Delete case would otherwise read the shift key as
     // "extend the selection".
-    if (state.editMode === 'pattern' && e.shiftKey && (e.code === 'Delete' || e.code === 'Backspace')) {
+    if (state.editMode === 'pattern' && !chord && e.shiftKey && (e.code === 'Delete' || e.code === 'Backspace')) {
       pushUndo();
       writeChordRow(pat.row, []);
       // Same direction split as handleNav's single-cell case: Backspace up,
@@ -1186,7 +1192,7 @@ function onKeyDown(e) {
     // the note lookup below because the digit row doubles as sharps in the
     // chromatic layout. A digit past the end of the pad set falls through and
     // stays a sharp (see PAD_KEYS).
-    if (state.flavor > 0 && PAD_KEYS[e.code] !== undefined && enterPadAtCursor(PAD_KEYS[e.code])) {
+    if (!chord && state.flavor > 0 && PAD_KEYS[e.code] !== undefined && enterPadAtCursor(PAD_KEYS[e.code])) {
       e.preventDefault();
       return;
     }
@@ -1196,7 +1202,7 @@ function onKeyDown(e) {
     // pattern grid when a pattern is actually focused. previewNote does the raw-
     // key-offset -> note-number math (octave + NOTE_OFFSET) and hands the result
     // back, so both sides agree on the exact value.
-    const n = noteKeys()[e.code];
+    const n = chord ? undefined : noteKeys()[e.code];
     if (n !== undefined) {
       const note = state.previewNote ? state.previewNote(n) : n + state.octave * 12 + engine.NOTE_OFFSET;
       enterNoteAtCursor(note);
